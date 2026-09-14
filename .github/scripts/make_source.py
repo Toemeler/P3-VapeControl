@@ -106,6 +106,14 @@ def main(out_dir):
     print(f"source URL (Pages): {source_url}")
     print(f"source URL (raw):   {raw_url}")
 
+    # Single source of truth for the URL: the release notes read it back here
+    # instead of rebuilding it from the repository name a second time.
+    step_output = os.environ.get("GITHUB_OUTPUT")
+    if step_output:
+        with open(step_output, "a") as fh:
+            fh.write(f"source_url={source_url}\n")
+            fh.write(f"raw_url={raw_url}\n")
+
 
 LANDING = """<!doctype html>
 <html lang="en">

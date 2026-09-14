@@ -2,7 +2,10 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = PaxDeviceViewModel()
-    @State private var selectedTab = 0
+    // Launch arguments land in UserDefaults' argument domain, so the screenshot
+    // workflow can open a specific tab with `simctl launch ... -uiTab 1`.
+    // Without the argument this reads back as 0, the normal first tab.
+    @State private var selectedTab = UserDefaults.standard.integer(forKey: "uiTab")
 
     var body: some View {
         TabView(selection: $selectedTab) {

@@ -16,8 +16,14 @@ permissions:
   contents: write
 
 jobs:
+  screenshots:
+    # Every release ships a current preview, so this runs on each build rather
+    # than only when the app sources change.
+    uses: ./.github/workflows/simulator-screenshots.yml
+
   build-ipa:
     name: Build PaxController for iOS
+    needs: screenshots
     runs-on: macos-15
     timeout-minutes: 30
 
@@ -92,6 +98,12 @@ jobs:
           echo "size=$(stat -f%z PaxController.ipa)" >> "$GITHUB_OUTPUT"
           echo "sha256=$(shasum -a 256 PaxController.ipa | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
+      - name: Fetch screenshots for the release
+        uses: actions/download-artifact@v4
+        with:
+          name: simulator-screenshots
+          path: screenshots
+
       - name: Determine release tag
         id: tag
         run: |
@@ -114,27 +126,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Publish IPA as a GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # printf, not a heredoc: inside a YAML block scalar the EOF terminator
-          # cannot sit at column 0, so a quoted heredoc would never close.
-          NOTES=$(printf '%s\n' \
-            'Unsigned IPA of version ${{ steps.version.outputs.version }}, requires iOS 16 or later.' \
-            '' \
-            '**Easiest install:** add the SideStore source and install from there -' \
-            'updates then show up automatically.' \
-            '' \
-            'Otherwise sideload this file with SideStore, AltStore or Sideloadly.' \
-            'The build is ad-hoc signed only; the sideloader re-signs it with your' \
-            'Apple ID. With a free Apple ID the app expires after 7 days.')
-          gh release create "${{ steps.tag.outputs.tag }}" PaxController.ipa \
-            --repo "${{ github.repository }}" \
-            --title "${{ steps.tag.outputs.title }}" \
-            --notes "$NOTES"
-
       - name: Build SideStore source feed
+        id: feed
         env:
           VERSION: ${{ steps.version.outputs.version }}
           SIZE: ${{ steps.package.outputs.size }}
@@ -147,6 +140,22 @@ jobs:
           echo "--- source feed ---"
           cat s.json
 
+      - name: Publish IPA as a GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SOURCE_URL: ${{ steps.feed.outputs.source_url }}
+          SHORTCUT_URL: ${{ vars.SHORTCUT_URL }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/render_notes.py notes.md
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            PaxController.ipa \
+            screenshots/*.png \
+            --repo "${{ github.repository }}" \
+            --title "${{ steps.tag.outputs.title }}" \
+            --notes-file notes.md
+
       - name: Commit source feed
         # Committed rather than deployed with actions/deploy-pages: the Actions
         # token is not allowed to create the Pages site itself. This makes the
@@ -154,6 +163,10 @@ jobs:
         # Pages as soon as Pages is switched on for the branch.
         run: |
           set -euo pipefail
+          # The screenshots were downloaded from the other job purely to attach
+          # them to the release; that job commits them itself. Leaving them here
+          # untracked makes the rebase below refuse to overwrite them.
+          rm -rf screenshots
           # The plist was version-stamped for the build; keep that out of the commit.
           git checkout -- PaxController/Resources/Info.plist
           git config user.name "${{ github.actor }}"
