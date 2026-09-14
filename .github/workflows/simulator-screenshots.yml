@@ -53,18 +53,50 @@ jobs:
 
       - name: Boot simulator
         id: boot
+        timeout-minutes: 10
         run: |
           set -euo pipefail
-          UDID=$(xcrun simctl create "ci-screenshots" \
-            "${{ steps.sim.outputs.device_type }}" "${{ steps.sim.outputs.runtime }}")
+          NAME="${{ steps.sim.outputs.device_name }}"
+          # Reuse a device the runner image already created - creating a fresh one
+          # and booting it is what stalls, and a preinstalled device is warm.
+          UDID="${{ steps.sim.outputs.existing_udid }}"
+          if [ -z "$UDID" ]; then
+            echo "No preinstalled $NAME; creating one."
+            UDID=$(xcrun simctl create "ci-screenshots" \
+              "${{ steps.sim.outputs.device_type }}" "${{ steps.sim.outputs.runtime }}")
+          fi
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
-          xcrun simctl bootstatus "$UDID" -b
-          # Freeze the status bar so screenshots do not churn on clock and battery.
+          echo "Using simulator $UDID"
+
+          # simctl bootstatus -b hangs indefinitely on these runners, so boot
+          # without blocking and poll for the state ourselves.
+          xcrun simctl boot "$UDID" || true
+          STATE=Unknown
+          for _ in $(seq 1 90); do
+            STATE=$(python3 .github/scripts/simctl_helper.py state "$UDID")
+            [ "$STATE" = "Booted" ] && break
+            sleep 5
+          done
+          if [ "$STATE" != "Booted" ]; then
+            echo "::error::simulator never reached Booted (last state: $STATE)"
+            exit 1
+          fi
+
+          # Booted is not the same as ready: wait until the system container
+          # answers, otherwise install races SpringBoard coming up.
+          for _ in $(seq 1 60); do
+            if xcrun simctl spawn "$UDID" launchctl print system >/dev/null 2>&1; then
+              break
+            fi
+            sleep 5
+          done
+
           xcrun simctl status_bar "$UDID" override \
             --time "09:41" --batteryState charged --batteryLevel 100 \
-            --cellularMode active --cellularBars 4 --wifiMode active --wifiBars 3
+            --cellularMode active --cellularBars 4 --wifiMode active --wifiBars 3 || true
 
       - name: Install and launch
+        timeout-minutes: 8
         env:
           UDID: ${{ steps.boot.outputs.udid }}
         run: |
