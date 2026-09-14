@@ -1,5 +1,18 @@
 # P3 VapeControl
 
+<!-- screenshots:start -->
+
+<div align="center">
+
+<table>
+<tr><td align="center"><b>Scan</b></td><td align="center"><b>Device</b></td></tr>
+<tr><td align="center"><img src="screenshots/01-scan.png" width="230" alt="scan screen"></td><td align="center"><img src="screenshots/02-device.png" width="230" alt="device screen"></td></tr>
+</table>
+
+</div>
+
+<!-- screenshots:end -->
+
 A personal-use iOS app to monitor and control a PAX 3 vaporizer over Bluetooth. Built with SwiftUI + CoreBluetooth.
 
 > **Disclaimer**: Independent personal tool. Not affiliated with, endorsed by, or connected to PAX Labs. PAX® is a registered trademark of PAX Labs. This app contains no PAX branding, logos, or proprietary assets.
