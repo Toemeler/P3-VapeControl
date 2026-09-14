@@ -5,6 +5,10 @@ simctl cannot tap, so tabs are not reachable by driving the UI. The app reads
 its initial tab from the `uiTab` launch argument instead, and this script
 relaunches once per tab.
 
+`-uiDemo YES` fills the app with a plausible connected PAX 3: the simulator
+has no Bluetooth radio, so without it every screenshot shows an empty
+disconnected state.
+
 Every simctl call runs with a deadline, and the ones that race the simulator
 coming up are retried: simctl blocks indefinitely when the simulator is
 wedged, and macOS ships no coreutils `timeout` to bound it with.
@@ -79,7 +83,7 @@ def launch(udid, bundle_id, tab, attempts=3):
         result = run(
             [
                 "xcrun", "simctl", "launch", "--terminate-running-process",
-                udid, bundle_id, "-uiTab", str(tab),
+                udid, bundle_id, "-uiTab", str(tab), "-uiDemo", "YES",
             ],
             timeout=120,
             fatal=False,
