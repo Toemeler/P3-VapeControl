@@ -61,15 +61,21 @@ def main(out_path):
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     sha = os.environ.get("SCREENSHOT_SHA") or "main"
     base = f"https://raw.githubusercontent.com/{repo}/{sha}"
+    source_url = os.environ["SOURCE_URL"]
     shortcut_url = os.environ.get("SHORTCUT_URL", "").strip() or f"{base}/{SHORTCUT_PATH}"
 
     with open(os.path.join(".github", "release-notes-template.md")) as fh:
         template = fh.read()
 
+    # The landing page carries the one-tap "Add to SideStore" button, so the
+    # notes link that rather than spelling out the feed URL.
+    pages_url = source_url.rsplit("/", 1)[0] + "/"
+
     notes = template.format(
         version=os.environ["VERSION"],
         size=os.environ.get("IPA_SIZE", ""),
-        source_url=os.environ["SOURCE_URL"],
+        source_url=source_url,
+        pages_url=pages_url,
         icon_url=f"{base}/icon.png",
         gallery=gallery(f"{base}/screenshots", "screenshots"),
         shortcut_url=shortcut_url,
