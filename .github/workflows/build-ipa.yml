@@ -50,53 +50,29 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building version $VERSION"
 
-      - name: Build (unsigned, device SDK)
+      - name: Build both variants
         run: |
           set -o pipefail
-          # The project pins CODE_SIGN_STYLE=Automatic and a DEVELOPMENT_TEAM, which
-          # cannot resolve on a runner with no Apple ID. Override signing off entirely
-          # and build with -target: the project ships no shared .xcscheme, so -scheme
-          # would fail on a fresh checkout. -derivedDataPath is scheme-only, so the
-          # product location is pinned with SYMROOT instead.
-          xcodebuild \
-            -project PaxController.xcodeproj \
-            -target PaxController \
-            -configuration Release \
-            -sdk iphoneos \
-            SYMROOT="$GITHUB_WORKSPACE/build" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGN_ENTITLEMENTS="" \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="" \
-            ONLY_ACTIVE_ARCH=NO \
-            build 2>&1 | tee build.log
+          # Release: no log console, normal name and bundle id.
+          .github/scripts/build_app.sh Release iphoneos \
+            de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee build.log
+          mv build/Release-iphoneos/PaxController.app build/release.app
+          # Debug: log console included, distinct name and bundle id so it can
+          # sit next to the release build on the same device.
+          .github/scripts/build_app.sh Debug iphoneos \
+            de.marcomeissner.PaxController.debug "PAX Debug" 2>&1 | tee -a build.log
 
-      - name: Package IPA
+      - name: Package both IPAs
         id: package
         run: |
           set -euo pipefail
-          APP="build/Release-iphoneos/PaxController.app"
-          ls -la "$APP"
-          file "$APP/PaxController"
-
-          # Ad-hoc signature: Sideloadly/AltStore/SideStore re-sign with the user's
-          # Apple ID anyway, but an unsigned Mach-O upsets some of those tools.
-          codesign --force --deep --sign - "$APP" || true
-
-          mkdir -p Payload
-          cp -R "$APP" Payload/
-          # Drop dangling symlinks, then zip while DEREFERENCING the rest (no -y)
-          # so the IPA contains zero symlink entries - Windows signing tools
-          # otherwise fail with "os error 1314 / A required privilege is not held".
-          find Payload -type l ! -exec test -e {} \; -delete || true
-          echo "Symlinks left in Payload: $(find Payload -type l | wc -l | tr -d ' ')"
-          zip -qr PaxController.ipa Payload
-          ls -lh PaxController.ipa
+          .github/scripts/package_ipa.sh build/release.app PaxController.ipa
+          .github/scripts/package_ipa.sh \
+            build/Debug-iphoneos/PaxController.app PaxController-DEBUG.ipa
 
           echo "size=$(stat -f%z PaxController.ipa)" >> "$GITHUB_OUTPUT"
           echo "sha256=$(shasum -a 256 PaxController.ipa | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "human_size=$(ls -lh PaxController.ipa | awk '{print $5}')" >> "$GITHUB_OUTPUT"
 
       - name: Fetch screenshots for the release
         uses: actions/download-artifact@v4
@@ -122,7 +98,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PaxController-ipa
-          path: PaxController.ipa
+          path: |
+            PaxController.ipa
+            PaxController-DEBUG.ipa
           if-no-files-found: error
           retention-days: 7
 
@@ -146,12 +124,14 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           SOURCE_URL: ${{ steps.feed.outputs.source_url }}
           SHORTCUT_URL: ${{ vars.SHORTCUT_URL }}
+          SCREENSHOT_SHA: ${{ needs.screenshots.outputs.screenshots_sha }}
+          IPA_SIZE: ${{ steps.package.outputs.human_size }}
         run: |
           set -euo pipefail
           python3 .github/scripts/render_notes.py notes.md
           gh release create "${{ steps.tag.outputs.tag }}" \
             PaxController.ipa \
-            screenshots/*.png \
+            PaxController-DEBUG.ipa \
             --repo "${{ github.repository }}" \
             --title "${{ steps.tag.outputs.title }}" \
             --notes-file notes.md

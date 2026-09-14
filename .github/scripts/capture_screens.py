@@ -8,14 +8,18 @@ relaunches once per tab.
 Every simctl call runs with a deadline: simctl blocks indefinitely when the
 simulator is wedged, and macOS ships no coreutils `timeout` to bound it with.
 
-Usage: capture_screens.py <udid> <app path> <bundle id> <output dir>
+Usage:
+  capture_screens.py <udid> <app> <bundle id> <out dir> <start index> <name:tab>...
+
+The tab list is explicit because the release and debug builds do not have the
+same screens: the log console is compiled out of release builds, so it is
+captured from the debug app in a second pass.
 """
 import os
 import subprocess
 import sys
 import time
 
-TABS = [("scan", 0), ("device", 1), ("log", 2)]
 APPEARANCES = ["light", "dark"]
 SPRINGBOARD_TIMEOUT = 180
 
@@ -81,14 +85,21 @@ def launch(udid, bundle_id, tab):
 
 
 def main():
-    udid, app_path, bundle_id, out_dir = sys.argv[1:5]
+    udid, app_path, bundle_id, out_dir, start_index = sys.argv[1:6]
+    tabs = []
+    for spec in sys.argv[6:]:
+        name, _, tab = spec.partition(":")
+        tabs.append((name, int(tab)))
+    if not tabs:
+        sys.exit("::error::no tabs requested")
+
     os.makedirs(out_dir, exist_ok=True)
 
     wait_for_springboard(udid)
     run(["xcrun", "simctl", "install", udid, app_path], timeout=180)
 
-    index = 0
-    for name, tab in TABS:
+    index = int(start_index)
+    for name, tab in tabs:
         launch(udid, bundle_id, tab)
         for appearance in APPEARANCES:
             index += 1
@@ -98,7 +109,7 @@ def main():
             run(["xcrun", "simctl", "io", udid, "screenshot", path], timeout=90)
             print(f"captured {path}", flush=True)
 
-    print(f"{index} screenshots written to {out_dir}", flush=True)
+    print(f"screenshots written up to index {index}", flush=True)
 
 
 if __name__ == "__main__":

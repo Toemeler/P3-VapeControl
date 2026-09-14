@@ -8,6 +8,10 @@ name: Simulator screenshots
 
 on:
   workflow_call:
+    outputs:
+      screenshots_sha:
+        description: "Commit the screenshots were pushed in, for pinning image URLs"
+        value: ${{ jobs.screenshots.outputs.screenshots_sha }}
   workflow_dispatch:
   push:
     branches:
@@ -27,6 +31,8 @@ jobs:
     name: Launch in simulator and screenshot
     runs-on: macos-15
     timeout-minutes: 40
+    outputs:
+      screenshots_sha: ${{ steps.commit.outputs.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -36,21 +42,18 @@ jobs:
           sw_vers
           xcodebuild -version
 
-      - name: Build for the simulator
+      - name: Build both variants for the simulator
         run: |
           set -o pipefail
-          xcodebuild \
-            -project PaxController.xcodeproj \
-            -target PaxController \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            SYMROOT="$GITHUB_WORKSPACE/build" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="" \
-            build 2>&1 | tee simbuild.log
+          # Release has no log console; the debug build is what the log
+          # screenshot comes from, under its own bundle id so both can be
+          # installed on the same simulator.
+          .github/scripts/build_app.sh Release iphonesimulator \
+            de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee simbuild.log
+          mv build/Release-iphonesimulator/PaxController.app build/release.app
+          .github/scripts/build_app.sh Debug iphonesimulator \
+            de.marcomeissner.PaxController.debug "PAX Debug" 2>&1 | tee -a simbuild.log
+          git checkout -- PaxController/Resources/Info.plist
 
       - name: Pick a simulator
         id: sim
@@ -88,15 +91,22 @@ jobs:
             --time "09:41" --batteryState charged --batteryLevel 100 \
             --cellularMode active --cellularBars 4 --wifiMode active --wifiBars 3 || true
 
-      - name: Capture every tab
-        timeout-minutes: 15
+      - name: Capture every screen
+        timeout-minutes: 20
+        env:
+          UDID: ${{ steps.boot.outputs.udid }}
         run: |
           set -euo pipefail
+          rm -rf screenshots
+          # Screens the released app actually has...
           python3 .github/scripts/capture_screens.py \
-            "${{ steps.boot.outputs.udid }}" \
-            build/Debug-iphonesimulator/PaxController.app \
-            de.marcomeissner.PaxController \
-            screenshots
+            "$UDID" build/release.app de.marcomeissner.PaxController \
+            screenshots 0 scan:0 device:1
+          # ...then the log console, which only exists in the debug build.
+          python3 .github/scripts/capture_screens.py \
+            "$UDID" build/Debug-iphonesimulator/PaxController.app \
+            de.marcomeissner.PaxController.debug \
+            screenshots 4 log:2
           ls -lh screenshots
 
       - name: Record what the screenshots show
@@ -119,6 +129,7 @@ jobs:
             > screenshots/README.md
 
       - name: Commit screenshots
+        id: commit
         run: |
           set -euo pipefail
           git config user.name "${{ github.actor }}"
@@ -126,12 +137,15 @@ jobs:
           git add screenshots
           if git diff --cached --quiet; then
             echo "screenshots unchanged"
-            exit 0
+          else
+            git commit -m "Update simulator screenshots (run ${{ github.run_id }})"
+            # Another run may have landed first; rebase rather than fail the job.
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
-          git commit -m "Update simulator screenshots (run ${{ github.run_id }})"
-          # Another run may have landed first; rebase rather than fail the job.
-          git pull --rebase origin main
-          git push origin HEAD:main
+          # Release notes embed the images by raw URL pinned to this commit, so
+          # old releases keep showing the screenshots they shipped with.
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Upload screenshots as artifact
         uses: actions/upload-artifact@v4
