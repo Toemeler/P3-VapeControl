@@ -100,13 +100,16 @@ final class PaxDeviceViewModel: ObservableObject {
     private var pendingCommands: [() throws -> Void] = []
     private var pollTimer: AnyCancellable?
 
+    /// Screenshot fixture switch. Launch arguments land in UserDefaults'
+    /// argument domain, so this is unreachable in normal use - nothing in the
+    /// UI sets the key.
+    private let demoMode = UserDefaults.standard.bool(forKey: "uiDemo")
+
     init() {
         bluetooth.delegate = self
         // The simulator has no Bluetooth radio, so the screenshot workflow
         // launches with `-uiDemo YES` to fill in a plausible connected device.
-        // Launch arguments land in UserDefaults' argument domain, so this is
-        // unreachable in normal use - nothing in the UI sets the key.
-        if UserDefaults.standard.bool(forKey: "uiDemo") {
+        if demoMode {
             loadDemoFixture()
         }
     }
@@ -377,6 +380,9 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
 
     func bluetoothDidUpdatePower(available: Bool) {
         log("Bluetooth power: \(available ? "ON" : "OFF")", level: .ble)
+        // The simulator reports the radio as unavailable immediately, which
+        // would wipe the fixture straight after init.
+        guard !demoMode else { return }
         if !available {
             connectionState = .idle
             resetDeviceState()
