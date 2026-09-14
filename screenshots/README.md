@@ -1,10 +1,10 @@
 # Simulator screenshots
 
-Captured automatically by the `Simulator screenshots` workflow.
+Captured automatically by the `Build` workflow.
 
 - Device: iPhone 14
 - Runtime: iOS 26.2
-- Run: 34880389631
+- Run: 34882647094
 
 The simulator has no Bluetooth radio, so the app shows its
 disconnected state. These confirm the app builds, launches and
