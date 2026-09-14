@@ -16,24 +16,27 @@
       "iconURL": "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/icon.png",
       "tintColor": "FF7A1A",
       "category": "utilities",
-      "screenshots": [],
+      "screenshots": [
+        "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/screenshots/01-scan.png",
+        "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/screenshots/02-device.png"
+      ],
       "versions": [
         {
-          "version": "1.0.4",
-          "buildVersion": "4",
-          "date": "2026-09-14T16:01:42Z",
-          "localizedDescription": "Automated build build-4.",
-          "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/build-4/PaxController.ipa",
-          "size": 225393,
-          "sha256": "e402949d66d5de6b0794af7c069129cd64a433caaf83cfab6f29f7dfa60b0e10",
+          "version": "1.0.13",
+          "buildVersion": "13",
+          "date": "2026-09-14T17:18:47Z",
+          "localizedDescription": "Automated build build-13.",
+          "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/build-13/PaxController.ipa",
+          "size": 197339,
+          "sha256": "073aa7cacdec70aa5962b48b20e90ee5a29913945110a0cd918059e3aa75b620",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "1.0.4",
-      "versionDate": "2026-09-14T16:01:42Z",
-      "versionDescription": "Automated build build-4.",
-      "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/build-4/PaxController.ipa",
-      "size": 225393
+      "version": "1.0.13",
+      "versionDate": "2026-09-14T17:18:47Z",
+      "versionDescription": "Automated build build-13.",
+      "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/build-13/PaxController.ipa",
+      "size": 197339
     }
   ],
   "news": []
