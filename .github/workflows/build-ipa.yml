@@ -184,13 +184,24 @@ jobs:
             "renders; they do not exercise the PAX connection." \
             > screenshots/README.md
 
-          # The README shows the same shots by relative path, so it moves with them.
-          python3 .github/scripts/update_readme.py
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           .github/scripts/commit_generated.sh \
             "Update simulator screenshots (run ${{ github.run_id }})" \
-            screenshots README.md
+            screenshots
+
+      - name: Keep the README's screenshot block current
+        # Deliberately ungated. The block is rendered from whatever screenshots
+        # are committed, so a change to the renderer alone has to reach the
+        # README without paying for a simulator run. Commits nothing when the
+        # rendered block is identical.
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/update_readme.py
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          .github/scripts/commit_generated.sh \
+            "Update the README's screenshot block" README.md
 
       - name: Report the commit the screenshots live in
         id: result
