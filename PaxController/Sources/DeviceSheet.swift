@@ -98,9 +98,9 @@ struct DeviceSheet: View {
         }
     }
 
-    @ViewBuilder
+    // Shipped in release, not just debug: a sideloaded app's only support
+    // channel is the user reading the log back to you.
     private var diagnosticsSection: some View {
-        #if DEBUG
         Section {
             NavigationLink("Diagnostics") {
                 DebugConsoleView().environmentObject(viewModel)
@@ -108,7 +108,6 @@ struct DeviceSheet: View {
         } footer: {
             Text("Connection state, PAX service characteristics and the raw packet log.")
         }
-        #endif
     }
 
     // MARK: - Helpers

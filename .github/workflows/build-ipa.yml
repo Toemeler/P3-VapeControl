@@ -1,6 +1,5 @@
-# Builds PaxController into sideloadable (unsigned) IPAs - a release build and
-# a debug build with the log console - screenshots the app in a simulator, and
-# publishes both as a GitHub Release with an inline preview.
+# Builds PaxController into a sideloadable (unsigned) IPA, screenshots the app
+# in a simulator, and publishes it as a GitHub Release with an inline preview.
 #
 # Also commits a SideStore/AltStore source feed so the build can be installed
 # and updated from inside the sideloader.
@@ -92,8 +91,8 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         run: |
           set -o pipefail
-          # Release configuration only: the screenshots show what a normal
-          # install looks like, and the log console is a debug-build screen.
+          # Release configuration: the screenshots should show exactly what a
+          # normal install looks like.
           .github/scripts/build_app.sh Release iphonesimulator \
             de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee simbuild.log
           mkdir -p build/release && mv build/Release-iphonesimulator/PaxController.app build/release/
@@ -269,27 +268,20 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building version $VERSION"
 
-      - name: Build both variants
+      - name: Build the app
         if: steps.appcheck.outputs.skip != 'true'
         run: |
           set -o pipefail
-          # Release: no log console, normal name and bundle id.
           .github/scripts/build_app.sh Release iphoneos \
             de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee build.log
           mkdir -p build/release && mv build/Release-iphoneos/PaxController.app build/release/
-          # Debug: log console included, distinct name and bundle id so it can
-          # sit next to the release build on the same device.
-          .github/scripts/build_app.sh Debug iphoneos \
-            de.marcomeissner.PaxController.debug "PAX Debug" 2>&1 | tee -a build.log
 
-      - name: Package both IPAs
+      - name: Package the IPA
         if: steps.appcheck.outputs.skip != 'true'
         id: package
         run: |
           set -euo pipefail
           .github/scripts/package_ipa.sh build/release/PaxController.app PaxController.ipa
-          .github/scripts/package_ipa.sh \
-            build/Debug-iphoneos/PaxController.app PaxController-DEBUG.ipa
 
           echo "size=$(stat -f%z PaxController.ipa)" >> "$GITHUB_OUTPUT"
           echo "sha256=$(shasum -a 256 PaxController.ipa | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
@@ -321,9 +313,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PaxController-ipa
-          path: |
-            PaxController.ipa
-            PaxController-DEBUG.ipa
+          path: PaxController.ipa
           if-no-files-found: error
           retention-days: 7
 
@@ -335,6 +325,7 @@ jobs:
           SIZE: ${{ steps.package.outputs.size }}
           SHA256: ${{ steps.package.outputs.sha256 }}
           TAG: ${{ steps.tag.outputs.tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           python3 .github/scripts/make_icon.py icon.png
@@ -356,7 +347,6 @@ jobs:
           python3 .github/scripts/render_notes.py notes.md
           gh release create "${{ steps.tag.outputs.tag }}" \
             PaxController.ipa \
-            PaxController-DEBUG.ipa \
             --repo "${{ github.repository }}" \
             --title "${{ steps.tag.outputs.title }}" \
             --notes-file notes.md

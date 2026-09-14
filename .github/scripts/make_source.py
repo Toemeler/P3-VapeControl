@@ -27,8 +27,11 @@ def main(out_dir):
     size = int(os.environ["SIZE"])
     sha256 = os.environ["SHA256"]
 
+    # Pages serves the default branch, and that is where the workflow commits
+    # the feed and the screenshots, so every asset URL hangs off it.
+    branch = os.environ.get("DEFAULT_BRANCH") or "main"
     pages_base = f"https://{owner.lower()}.github.io/{name}"
-    raw_base = f"https://raw.githubusercontent.com/{repo}/main"
+    raw_base = f"https://raw.githubusercontent.com/{repo}/{branch}"
     # Assets are referenced over raw.githubusercontent.com so the feed works
     # before GitHub Pages is switched on for the repository.
     icon_url = f"{raw_base}/icon.png"
@@ -41,9 +44,7 @@ def main(out_dir):
     if os.path.isdir("screenshots"):
         for filename in sorted(os.listdir("screenshots")):
             if filename.endswith(".png"):
-                shots.append(
-                    f"https://raw.githubusercontent.com/{repo}/main/screenshots/{filename}"
-                )
+                shots.append(f"{raw_base}/screenshots/{filename}")
 
     version_entry = {
         "version": version,

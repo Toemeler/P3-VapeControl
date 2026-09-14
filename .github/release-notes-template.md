@@ -17,7 +17,7 @@ Unsigned · iOS 16+ · {size}
 
 <br>
 
-Free Apple ID is enough. Apps signed with one expire after 7 days — see **AutoRefreshApps** below.
+A free Apple ID is enough — see **AutoRefreshApps** below for what that means after seven days.
 
 1. Install **iLoader** on a computer, connect the device — [docs](https://docs.sidestore.io/docs/installation/prerequisites).
 2. iLoader → *Add Account*, pick your device, install **SideStore (Stable)**.
@@ -50,18 +50,5 @@ Add [**AutoRefreshApps.shortcut**]({shortcut_url}).
 - Needs **iOS 27 or later**. Older iOS: refresh by hand in SideStore.
 
 </details>
-
-<details>
-<summary><b>Which file?</b></summary>
-
-<br>
-
-| File | For |
-|---|---|
-| `PaxController.ipa` | Normal install — what the source installs. |
-| `PaxController-DEBUG.ipa` | Troubleshooting. Adds a **Log** tab, installs as *PAX Debug* next to the normal app. |
-
-</details>
-
 
 <sub>Not affiliated with PAX Labs.</sub>

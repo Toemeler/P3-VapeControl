@@ -119,6 +119,11 @@ def main():
         sys.exit("::error::no screens requested")
 
     os.makedirs(out_dir, exist_ok=True)
+    # Captures are named after the screen, so renaming one leaves the old file
+    # behind and the README gallery picks up both. Clear them first.
+    for stale in os.listdir(out_dir):
+        if stale.endswith(".png"):
+            os.remove(os.path.join(out_dir, stale))
 
     install(udid, app_path)
 

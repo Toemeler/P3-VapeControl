@@ -2,28 +2,7 @@
 
 <!-- screenshots:start -->
 
-<div align="center">
 
-<table>
-<tr><td align="center"><b>Scan</b></td><td align="center"><b>Device</b></td></tr>
-<tr><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/01-scan-dark.png"><img src="screenshots/01-scan.png" width="230" alt="scan screen"></picture></td><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/02-device-dark.png"><img src="screenshots/02-device.png" width="230" alt="device screen"></picture></td></tr>
-</table>
-
-</div>
-
-<details>
-<summary align="center"><b>The other appearance</b></summary>
-
-<div align="center">
-
-<table>
-<tr><td align="center"><b>Scan</b></td><td align="center"><b>Device</b></td></tr>
-<tr><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/01-scan.png"><img src="screenshots/01-scan-dark.png" width="230" alt="scan screen, other appearance"></picture></td><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/02-device.png"><img src="screenshots/02-device-dark.png" width="230" alt="device screen, other appearance"></picture></td></tr>
-</table>
-
-</div>
-
-</details>
 
 <!-- screenshots:end -->
 
