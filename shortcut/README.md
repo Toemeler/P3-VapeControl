@@ -9,6 +9,9 @@ revoked - Apple has invalidated old Shortcut links before.
 
 It is the **signed** copy: iOS refuses to import unsigned shortcut files.
 
+**Requires iOS 27 or later.** On earlier versions it will not work; refresh
+manually in SideStore instead.
+
 To add it, open the file on the device. If the import is refused, turn on
 *Settings → Shortcuts → Allow Untrusted Shortcuts* once and try again.
 

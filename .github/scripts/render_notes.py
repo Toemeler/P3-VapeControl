@@ -28,9 +28,11 @@ SHORTCUT_PATH = "shortcut/AutoRefreshApps.shortcut"
 THUMB_WIDTH = 230
 
 SHORTCUT_SECTION = """
-**8.** Open [**AutoRefreshApps.shortcut**]({url}) on the device to add it, then let
-it run daily via *Shortcuts → Automation*. It calls SideStore's refresh before
-the 7 days run out, so the app does not stop working.
+**8.** *(iOS 27 or later)* Open [**AutoRefreshApps.shortcut**]({url}) on the
+device to add it, then let it run daily via *Shortcuts → Automation*. It calls
+SideStore's refresh before the 7 days run out, so the app does not stop working.
+On earlier iOS versions this Shortcut does not work — refresh manually in
+SideStore instead, by tapping the **7 DAYS** counter next to the app.
 """
 
 
