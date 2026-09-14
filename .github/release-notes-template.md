@@ -10,8 +10,6 @@ Unsigned · iOS 16+ · {size}
 
 {gallery}
 
-Add this source in SideStore → *Sources* → **+**
-
 ```
 {source_url}
 ```
@@ -28,7 +26,7 @@ Free Apple ID is enough. Apps signed with one expire after 7 days — see **Auto
 3. On the device: *Settings → General → VPN & Device Management → your account → Trust*.
 4. Install **LocalDevVPN**, tap **Connect**.
 5. Open **SideStore**, sign in with the same account, *My Apps* → tap the **7 DAYS** counter.
-6. *Sources* → **+** → paste the URL above.
+6. *Sources* → **+** → paste the source URL from the top of this page.
 7. Install **PAX Controller**, open it, tap *Scan*.
 
 <details>
