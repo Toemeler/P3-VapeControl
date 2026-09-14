@@ -58,6 +58,9 @@ and tap the **7 DAYS** counter next to SideStore to finish setup.
 - **Install or refresh fails** — in iLoader use *Manage Pairing File* → *Place*
   next to SideStore, and pick
   `On My iPhone/iPad → SideStore → ALTPairingFile.mobiledevicepairing`.
+- **The Shortcut will not import** — shared shortcuts count as untrusted:
+  turn on *Settings → Shortcuts → Allow Untrusted Shortcuts* once, then open
+  the file again.
 - **App opens but finds nothing** — Bluetooth permission is asked on the first
   scan, allow it, and make sure the PAX is awake.
 
