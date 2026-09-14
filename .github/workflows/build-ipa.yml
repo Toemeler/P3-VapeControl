@@ -329,7 +329,7 @@ jobs:
         run: |
           python3 .github/scripts/fetch_shortcut.py \
             "${{ inputs.shortcut_url }}" \
-            shortcut/RefreshApps.shortcut
+            shortcut/AutoRefreshApps.shortcut
 
       - name: Commit source feed
         # Committed rather than deployed with actions/deploy-pages: the Actions

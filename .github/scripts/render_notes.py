@@ -24,11 +24,11 @@ TAB_TITLES = {"scan": "Scan", "device": "Device"}
 # The Shortcut that refreshes sideloaded apps before their 7-day signature
 # expires. It is committed to the repo rather than only linked, so it keeps
 # working if the iCloud share link is revoked.
-SHORTCUT_PATH = "shortcut/RefreshApps.shortcut"
+SHORTCUT_PATH = "shortcut/AutoRefreshApps.shortcut"
 THUMB_WIDTH = 230
 
 SHORTCUT_SECTION = """
-**8.** Open [**RefreshApps.shortcut**]({url}) on the device to add it, then let
+**8.** Open [**AutoRefreshApps.shortcut**]({url}) on the device to add it, then let
 it run daily via *Shortcuts → Automation*. It calls SideStore's refresh before
 the 7 days run out, so the app does not stop working.
 """

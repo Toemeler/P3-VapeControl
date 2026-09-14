@@ -1,10 +1,17 @@
-# Auto-refresh Shortcut
+# AutoRefreshApps
 
-Refreshes sideloaded apps before their 7-day signature expires.
+Archived copy of the Shortcut that refreshes sideloaded apps before their
+7-day signature expires. It calls SideStore's own "refresh all" action.
 
-- Name: Refresh SideStore Apps 05 0
-- Downloaded from: https://www.icloud.com/shortcuts/3357ecb0d7fd47208271bbe4b3df71ac
+Downloaded from the author's iCloud share link by the `Build` workflow
+(`refresh_shortcut` input) and kept here so it survives that link being
+revoked - Apple has invalidated old Shortcut links before.
 
-Open `RefreshApps.shortcut` on the device to add it, or use the
-link above. The file is kept here so the shortcut survives the
-link being revoked.
+It is the **signed** copy: iOS refuses to import unsigned shortcut files.
+
+To add it, open the file on the device. If the import is refused, turn on
+*Settings → Shortcuts → Allow Untrusted Shortcuts* once and try again.
+
+The name shown inside the Shortcuts app comes from the signed metadata, not
+from this filename, so it may still read as the author named it. Rename it
+in the Shortcuts app if you want it to match.
