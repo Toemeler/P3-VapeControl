@@ -72,19 +72,24 @@ def gallery(base_url, shots_dir):
 
     # The <picture> above follows the reader's theme; this keeps the dark shots
     # reachable from a light-themed page too.
-    dark_images = "".join(
+    # Inverted pairing: whichever appearance the reader is not already seeing.
+    other_images = "".join(
         f'<td align="center">'
+        f"<picture>"
+        f'<source media="(prefers-color-scheme: dark)" '
+        f'srcset="{base_url}/{index:02d}-{name}.png">'
         f'<img src="{base_url}/{index:02d}-{name}-dark.png" '
-        f'width="{THUMB_WIDTH}" alt="{name} screen, dark"></td>'
+        f'width="{THUMB_WIDTH}" alt="{name} screen, other appearance">'
+        f"</picture></td>"
         for index, name in shots
     )
-    dark_table = f"<table>\n<tr>{headers}</tr>\n<tr>{dark_images}</tr>\n</table>"
+    other_table = f"<table>\n<tr>{headers}</tr>\n<tr>{other_images}</tr>\n</table>"
 
     return "\n".join([
         '<div align="center">', "", table, "", "</div>", "",
         "<details>",
-        "<summary align=\"center\"><b>Dark mode</b></summary>", "",
-        '<div align="center">', "", dark_table, "", "</div>", "",
+        "<summary align=\"center\"><b>The other appearance</b></summary>", "",
+        '<div align="center">', "", other_table, "", "</div>", "",
         "</details>",
     ])
 
