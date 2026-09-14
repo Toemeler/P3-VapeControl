@@ -5,8 +5,8 @@
 <div align="center">
 
 <table>
-<tr><td align="center"><b>Scan</b></td><td align="center"><b>Device</b></td></tr>
-<tr><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/01-scan-dark.png"><img src="screenshots/01-scan.png" width="230" alt="scan screen"></picture></td><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/02-device-dark.png"><img src="screenshots/02-device.png" width="230" alt="device screen"></picture></td></tr>
+<tr><td align="center"><b>Control</b></td><td align="center"><b>Settings</b></td><td align="center"><b>Devices</b></td></tr>
+<tr><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/01-control-dark.png"><img src="screenshots/01-control.png" width="230" alt="control screen"></picture></td><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/02-device-dark.png"><img src="screenshots/02-device.png" width="230" alt="device screen"></picture></td><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/03-scan-dark.png"><img src="screenshots/03-scan.png" width="230" alt="scan screen"></picture></td></tr>
 </table>
 
 </div>
@@ -17,8 +17,8 @@
 <div align="center">
 
 <table>
-<tr><td align="center"><b>Scan</b></td><td align="center"><b>Device</b></td></tr>
-<tr><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/01-scan.png"><img src="screenshots/01-scan-dark.png" width="230" alt="scan screen, other appearance"></picture></td><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/02-device.png"><img src="screenshots/02-device-dark.png" width="230" alt="device screen, other appearance"></picture></td></tr>
+<tr><td align="center"><b>Control</b></td><td align="center"><b>Settings</b></td><td align="center"><b>Devices</b></td></tr>
+<tr><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/01-control.png"><img src="screenshots/01-control-dark.png" width="230" alt="control screen, other appearance"></picture></td><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/02-device.png"><img src="screenshots/02-device-dark.png" width="230" alt="device screen, other appearance"></picture></td><td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/03-scan.png"><img src="screenshots/03-scan-dark.png" width="230" alt="scan screen, other appearance"></picture></td></tr>
 </table>
 
 </div>
@@ -117,31 +117,46 @@ Now open the app — it's ready to use.
 
 ## Using the App
 
+The app is a single screen: a temperature dial. Everything that is not
+temperature lives behind the two buttons in the top bar.
+
 ### Connecting to your PAX 3
 
 1. **Power on your PAX 3** — press and hold the button until it vibrates
-2. Open the app and go to the **Scan** tab
-3. Tap **Scan** — your PAX 3 should appear within a few seconds
+2. Open the app and tap the **connection capsule** in the top left
+3. Scanning starts automatically — your PAX 3 should appear within a few seconds
 4. Tap **Connect** next to your device
 
-### Monitoring
+The capsule's dot shows the connection at a glance: green connected, amber
+working, red failed, grey idle.
 
-Switch to the **Device** tab to see:
-- Battery level
-- Heating state (Off / Standby / Heating / Ready / Cooling / Boost)
-- Current oven temperature
-- Target temperature
-- Lock state, serial number, firmware version
+### Reading the dial
 
-Tap **↺** (top right) to manually refresh.
+- The **filled arc** is the oven's current temperature, climbing from 180 °C at
+  the bottom left to 215 °C at the bottom right
+- The **white marker** is the target
+- The **four dots** are the presets: 180 °C · 193 °C · 204 °C · 215 °C
+- The **centre** shows the live temperature and the heating state
+  (Off / Standby / Heating / Ready / Cooling / Boost)
 
 ### Setting Temperature
 
-Tap one of the four preset buttons in the Device tab: **180°C · 193°C · 204°C · 215°C**
+Three ways, all writing the same `HeaterSetPoint` (`0x02`):
 
-### Debug Log
+- **Drag the dial** — one packet is written when you lift your finger, not during the drag
+- **− / +** — one degree at a time
+- **Preset capsules** — 180 °C · 193 °C · 204 °C · 215 °C
 
-The **Log** tab shows a full trace of every Bluetooth packet sent and received — useful if something isn't working.
+### Heating mode
+
+The row along the bottom sets the PAX 3 dynamic mode: Standard, Boost,
+Efficiency, Stealth or Flavor.
+
+### Settings and diagnostics
+
+The **gear** opens a sheet with battery, heating state, lock state, °C/°F,
+serial and firmware — and, in debug builds, the packet log, which traces every
+Bluetooth packet sent and received.
 
 ---
 
@@ -150,7 +165,7 @@ The **Log** tab shows a full trace of every Bluetooth packet sent and received �
 | Problem | Solution |
 |---------|----------|
 | Device not found during scan | Make sure PAX is powered on and not already connected to another app |
-| Temperatures show `--` | Tap ↺ to refresh after connecting |
+| Temperatures show `--` | Reopen the gear sheet, or reconnect — the app requests a full status on connect |
 | "No team" error in Xcode | Complete Step 3 and 4 above — sign in with your Apple ID |
 | "Could not launch" on iPhone | Complete Step 7 — trust the developer certificate |
 | Build fails: CommonCrypto not found | In Xcode Build Settings, verify `SWIFT_OBJC_BRIDGING_HEADER` points to `PaxController/Sources/PaxController-Bridging-Header.h` |
@@ -160,7 +175,8 @@ The **Log** tab shows a full trace of every Bluetooth packet sent and received �
 
 ## Safety
 
-This app only reads device telemetry and sets the heater temperature to standard preset values — the same values available in the official app. It does **not** touch firmware, disable thermal limits, or override any safety cutoffs.
+This app only reads device telemetry and sets the heater temperature within the
+PAX's own 180–215 °C range — the same range available in the official app. It does **not** touch firmware, disable thermal limits, or override any safety cutoffs.
 
 No data leaves your device. No network requests are made.
 
@@ -174,9 +190,12 @@ PaxController/
 │   ├── PaxControllerApp.swift          Entry point (@main)
 │   ├── PaxProtocol.swift               UUIDs, message types, AES crypto, packet codec
 │   ├── BluetoothManager.swift          CoreBluetooth central manager + state machine
-│   ├── ContentView.swift               Root tab view
-│   ├── ScanView.swift                  Device scanning & connection UI
-│   ├── DeviceView.swift                Status display + temperature control
+│   ├── ContentView.swift               Root view + sheet presentation
+│   ├── ControlView.swift               The one screen: dial, presets, modes
+│   ├── TemperatureDial.swift           Draggable thermostat dial
+│   ├── DesignSystem.swift              Layout tokens + temperature formatting
+│   ├── DeviceSheet.swift               Status, units, device info, diagnostics
+│   ├── ScanSheet.swift                 Device picker
 │   ├── DebugConsoleView.swift          In-app BLE log viewer
 │   └── PaxController-Bridging-Header.h CommonCrypto bridge
 └── Resources/
