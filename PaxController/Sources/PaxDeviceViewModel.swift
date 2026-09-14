@@ -101,6 +101,31 @@ final class PaxDeviceViewModel: ObservableObject {
     // MARK: Remembered device (auto-connect)
     @Published private(set) var rememberedDeviceName: String?
 
+    // MARK: LED capability, discovered from the device
+    /// Attribute IDs the device reported via SupportedAttributes (0x18).
+    @Published private(set) var supportedAttributes: Set<UInt8> = []
+    /// Payload the device reported for each LED attribute, so a write can echo
+    /// the same shape rather than invent one.
+    private var ledAttributeShapes: [UInt8: Data] = [:]
+    /// The write we are waiting to confirm by reading the attribute back.
+    private var pendingLedWrite: (attribute: UInt8, payload: Data)?
+    /// Send the saved colour as soon as we learn the device can accept one.
+    private var pushColorOnceDiscovered = false
+
+    /// Which attribute to use for LED color, preferring the one the device
+    /// actually answered with. nil means it never reported either, so there is
+    /// nothing sensible to write.
+    /// Whether the connected device reported an LED attribute we can write.
+    var deviceLedColorSupported: Bool { ledAttribute != nil }
+
+    private var ledAttribute: PaxMessageType? {
+        for candidate in [PaxMessageType.colorTheme, .shellColor]
+        where ledAttributeShapes[candidate.rawValue] != nil || supportedAttributes.contains(candidate.rawValue) {
+            return candidate
+        }
+        return nil
+    }
+
     // MARK: Private
     private let bluetooth = BluetoothManager()
     private let settings = AppSettings.shared
@@ -264,11 +289,45 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     private func sendLedColorToDevice(_ color: LedColor) {
+        guard let attribute = ledAttribute else {
+            log("Not sending \(color.hex): the device never reported ColorTheme or ShellColor, so there is no attribute to write. In-app accent color is unaffected.",
+                level: .warn)
+            return
+        }
+        let payload = ledPayload(for: color, attribute: attribute)
+        pendingLedWrite = (attribute.rawValue, payload)
         enqueue {
-            let packet = PaxPacket.setShellColor(red: color.red, green: color.green, blue: color.blue)
-            try self.sendPacket(packet)
-            self.log("Sent experimental ShellColor \(color.hex) — payload format unconfirmed, watch for an ACK or an error below",
-                     level: .tx)
+            try self.sendPacket(PaxPacket.setLedColor(attribute: attribute, payload: payload))
+            self.log("Wrote \(attribute) = \(payload.hexString) for \(color.hex)", level: .tx)
+            // The write characteristic is writeWithoutResponse, so no ACK can
+            // ever come back. Reading the attribute again is the only way to
+            // find out whether the device took it.
+            try self.sendPacket(PaxPacket.statusRequest(attributes: [attribute]))
+        }
+    }
+
+    /// Builds a payload matching the shape the device reported for this
+    /// attribute. A 1-byte value is a theme index, not a color, so the chosen
+    /// preset's position is sent instead of RGB.
+    private func ledPayload(for color: LedColor, attribute: PaxMessageType) -> Data {
+        let rgb = Data([color.red, color.green, color.blue])
+        guard let known = ledAttributeShapes[attribute.rawValue], !known.isEmpty else {
+            return rgb
+        }
+        switch known.count {
+        case 1:
+            let index = LedColor.presets.firstIndex { $0.hex == color.hex } ?? 0
+            return Data([UInt8(index)])
+        case 3:
+            return rgb
+        default:
+            var padded = rgb
+            if padded.count > known.count {
+                padded = Data(padded.prefix(known.count))
+            } else {
+                padded.append(contentsOf: known.dropFirst(padded.count))
+            }
+            return padded
         }
     }
 
@@ -318,6 +377,19 @@ final class PaxDeviceViewModel: ObservableObject {
 
     func endLiveActivity() {
         LiveActivityController.shared.end()
+    }
+
+    /// One-shot on connect. SupportedAttributes (0x18) is the device telling us
+    /// exactly which attribute IDs its firmware implements, and asking for the
+    /// two LED attributes makes it report their *current* values — which is how
+    /// we learn the payload shape instead of guessing at it. Deliberately not
+    /// part of the 3 s poll.
+    func requestCapabilities() {
+        enqueue {
+            let attrs: [PaxMessageType] = [.supportedAttribs, .colorTheme, .shellColor, .brightness, .uiMode]
+            try self.sendPacket(PaxPacket.statusRequest(attributes: attrs))
+            self.log("Asked the device which attributes it supports, and for its current LED values", level: .tx)
+        }
     }
 
     func requestFullStatus() {
@@ -455,10 +527,71 @@ final class PaxDeviceViewModel: ObservableObject {
                     displayName = String(bytes: packet.payload[1..<(1 + len)], encoding: .utf8)
                 }
             }
+        case .supportedAttribs:
+            applySupportedAttributes(packet)
+        case .colorTheme, .shellColor:
+            applyLedAttributeReport(packet)
         default:
             break
         }
         refreshLiveActivity()
+    }
+
+    private func applySupportedAttributes(_ packet: PaxPacket) {
+        let supported = packet.supportedAttributes
+        guard !supported.isEmpty else {
+            log("SupportedAttributes came back empty — cannot tell what this firmware implements", level: .warn)
+            return
+        }
+        supportedAttributes = supported
+        let described = supported.sorted().map { id -> String in
+            let hex = String(format: "0x%02X", id)
+            if let known = PaxMessageType(rawValue: id) { return "\(hex) \(known)" }
+            return hex
+        }
+        log("Device supports \(supported.count) attributes: \(described.joined(separator: ", "))", level: .info)
+
+        let colorSupported = [PaxMessageType.colorTheme, .shellColor].filter { supported.contains($0.rawValue) }
+        if colorSupported.isEmpty {
+            log("Neither ColorTheme (0x14) nor ShellColor (0x1C) is supported — this device cannot have its LEDs set over BLE. The in-app accent color still works.",
+                level: .warn)
+        } else {
+            log("LED attribute(s) available: \(colorSupported.map { "\($0)" }.joined(separator: ", "))", level: .info)
+        }
+        pushSavedColorIfReady()
+    }
+
+    private func pushSavedColorIfReady() {
+        guard pushColorOnceDiscovered, ledAttribute != nil else { return }
+        pushColorOnceDiscovered = false
+        sendLedColorToDevice(settings.ledColor)
+    }
+
+    /// The device reporting its current LED value is the only reliable source
+    /// for the payload's length and encoding, so record it verbatim.
+    private func applyLedAttributeReport(_ packet: PaxPacket) {
+        let trimmed = Data(packet.payload.prefix(8))
+        let previous = ledAttributeShapes[packet.type.rawValue]
+        ledAttributeShapes[packet.type.rawValue] = trimmed
+
+        // A value arriving for an attribute the bitfield did not list still
+        // proves the device implements it.
+        pushSavedColorIfReady()
+
+        if let pending = pendingLedWrite, pending.attribute == packet.type.rawValue {
+            pendingLedWrite = nil
+            if trimmed.prefix(pending.payload.count) == pending.payload {
+                log("✔ Device accepted \(packet.type) = \(trimmed.hexString)", level: .info)
+            } else {
+                log("✘ Device ignored the \(packet.type) write — asked for \(pending.payload.hexString), still reports \(trimmed.hexString)",
+                    level: .warn)
+            }
+            return
+        }
+
+        guard previous != trimmed else { return }
+        log("Current \(packet.type) value: \(trimmed.hexString) (\(trimmed.count) B) — a write must match this shape",
+            level: .info)
     }
 
     private func checkReady() {
@@ -469,9 +602,11 @@ final class PaxDeviceViewModel: ObservableObject {
         rememberCurrentDevice()
         flushPendingCommands()
         requestFullStatus()
-        if settings.pushColorToDevice {
-            sendLedColorToDevice(settings.ledColor)
-        }
+        // The colour push waits for the capability reply: writing before the
+        // device has told us which attribute it implements is exactly the blind
+        // guess that did nothing on real hardware.
+        pushColorOnceDiscovered = settings.pushColorToDevice
+        requestCapabilities()
         startPolling()
         refreshLiveActivity()
     }
@@ -513,6 +648,10 @@ final class PaxDeviceViewModel: ObservableObject {
         paxCharNotifyFound  = false
         paxCharNotifying    = false
         pendingCommands.removeAll()
+        supportedAttributes.removeAll()
+        ledAttributeShapes.removeAll()
+        pendingLedWrite = nil
+        pushColorOnceDiscovered = false
     }
 
     func log(_ message: String, level: DebugEntry.Level = .info) {

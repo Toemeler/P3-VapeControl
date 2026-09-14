@@ -2,9 +2,8 @@ import SwiftUI
 import UIKit
 
 /// A user-selectable LED color, persisted as "#RRGGBB" by `AppSettings`. Drives
-/// `DS.Palette.accent`, and is sent to the device on connect (and whenever
-/// changed) as a best-effort ShellColor (0x1C) command — see
-/// PaxProtocol.setShellColor for the caveat that the payload format is unconfirmed.
+/// `DS.Palette.accent`, and is pushed to the device when its firmware reports an
+/// LED attribute it will accept — see PaxDeviceViewModel's capability discovery.
 struct LedColor: Identifiable, Equatable {
     let name: String
     let red: UInt8

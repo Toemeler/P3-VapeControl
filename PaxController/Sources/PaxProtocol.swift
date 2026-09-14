@@ -291,13 +291,13 @@ extension PaxPacket {
         PaxPacket(type: .dynamicMode, payload: Data([mode.rawValue]))
     }
 
-    /// ShellColor (0x1C) payload format is not publicly documented (see
-    /// protocol-notes.md — "Open Uncertainties" #2/shellColor). This sends
-    /// the most commonly guessed encoding among PAX BLE reverse-engineering
-    /// projects — raw RGB bytes — on a best-effort basis; unconfirmed against
-    /// real PAX 3 firmware.
-    static func setShellColor(red: UInt8, green: UInt8, blue: UInt8) -> PaxPacket {
-        PaxPacket(type: .shellColor, payload: Data([red, green, blue]))
+    /// Writes an LED color attribute. Neither ColorTheme (0x14) nor ShellColor
+    /// (0x1C) has a publicly documented payload, so the caller decides both
+    /// which attribute to target and what shape the payload takes, based on
+    /// what the device reported it supports and what its current value looks
+    /// like — see PaxDeviceViewModel's capability discovery.
+    static func setLedColor(attribute: PaxMessageType, payload: Data) -> PaxPacket {
+        PaxPacket(type: attribute, payload: payload)
     }
 }
 
@@ -330,6 +330,15 @@ extension PaxPacket {
     var dynamicMode: PaxDynamicMode? {
         guard payload.count >= 1 else { return nil }
         return PaxDynamicMode(rawValue: payload[0])
+    }
+
+    /// SupportedAttributes (0x18): 64-bit LE bitfield, bit N set = the device
+    /// supports attribute N. Asking the device what it can do beats guessing.
+    var supportedAttributes: Set<UInt8> {
+        guard payload.count >= 8 else { return [] }
+        var bits: UInt64 = 0
+        for i in 0..<8 { bits |= UInt64(payload[i]) << (8 * i) }
+        return Set((0..<64).compactMap { bits & (1 << UInt64($0)) != 0 ? UInt8($0) : nil })
     }
 }
 
