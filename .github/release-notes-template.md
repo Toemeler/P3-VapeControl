@@ -51,6 +51,4 @@ Add [**AutoRefreshApps.shortcut**]({shortcut_url}).
 
 </details>
 
-
-
 <sub>Not affiliated with PAX Labs.</sub>

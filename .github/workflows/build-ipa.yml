@@ -91,8 +91,8 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         run: |
           set -o pipefail
-          # Release configuration only: the screenshots show what a normal
-          # install looks like, and the log console is a debug-build screen.
+          # Release configuration: the screenshots should show exactly what a
+          # normal install looks like.
           .github/scripts/build_app.sh Release iphonesimulator \
             de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee simbuild.log
           mkdir -p build/release && mv build/Release-iphonesimulator/PaxController.app build/release/
@@ -324,6 +324,7 @@ jobs:
           SIZE: ${{ steps.package.outputs.size }}
           SHA256: ${{ steps.package.outputs.sha256 }}
           TAG: ${{ steps.tag.outputs.tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           python3 .github/scripts/make_icon.py icon.png
