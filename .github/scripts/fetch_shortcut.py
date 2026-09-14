@@ -30,9 +30,21 @@ def main(share_url, out_path):
 
     record = json.loads(get(RECORD_API.format(share_id=match.group(1))))
     fields = record.get("fields", {})
-    try:
-        download_url = fields["shortcut"]["value"]["downloadURL"]
-    except (KeyError, TypeError):
+
+    # signedShortcut, not shortcut: iOS refuses to import unsigned shortcut
+    # files ("Das Importieren von nicht signierten Kurzbefehldateien wird nicht
+    # unterstuetzt"), and the record carries both.
+    download_url = None
+    for key in ("signedShortcut", "shortcut"):
+        try:
+            download_url = fields[key]["value"]["downloadURL"]
+        except (KeyError, TypeError):
+            continue
+        if key != "signedShortcut":
+            print("::warning::no signed shortcut in the record; the file will not import")
+        break
+
+    if not download_url:
         sys.exit(
             "::error::no downloadURL in the iCloud record - the link may be revoked "
             f"or the API shape changed. Fields seen: {sorted(fields)}"
