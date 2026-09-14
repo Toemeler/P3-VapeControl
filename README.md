@@ -11,6 +11,20 @@
 
 </div>
 
+<details>
+<summary align="center"><b>Dark mode</b></summary>
+
+<div align="center">
+
+<table>
+<tr><td align="center"><b>Scan</b></td><td align="center"><b>Device</b></td></tr>
+<tr><td align="center"><img src="screenshots/01-scan-dark.png" width="230" alt="scan screen, dark"></td><td align="center"><img src="screenshots/02-device-dark.png" width="230" alt="device screen, dark"></td></tr>
+</table>
+
+</div>
+
+</details>
+
 <!-- screenshots:end -->
 
 A personal-use iOS app to monitor and control a PAX 3 vaporizer over Bluetooth. Built with SwiftUI + CoreBluetooth.

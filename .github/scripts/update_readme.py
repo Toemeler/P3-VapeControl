@@ -52,10 +52,23 @@ def block():
         f'<td align="center">{picture(index, tab, WIDTH)}</td>'
         for index, tab in shots
     )
+    dark_images = "".join(
+        f'<td align="center">'
+        f'<img src="screenshots/{index:02d}-{tab}-dark.png" '
+        f'width="{WIDTH}" alt="{tab} screen, dark"></td>'
+        for index, tab in shots
+    )
+
     return (
         '<div align="center">\n\n'
         f"<table>\n<tr>{headers}</tr>\n<tr>{images}</tr>\n</table>\n\n"
-        "</div>"
+        "</div>\n\n"
+        # The <picture> above follows the reader's theme; this keeps the dark
+        # shots reachable from a light-themed page too.
+        "<details>\n<summary align=\"center\"><b>Dark mode</b></summary>\n\n"
+        '<div align="center">\n\n'
+        f"<table>\n<tr>{headers}</tr>\n<tr>{dark_images}</tr>\n</table>\n\n"
+        "</div>\n\n</details>"
     )
 
 
