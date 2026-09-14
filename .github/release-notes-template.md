@@ -51,17 +51,6 @@ Add [**AutoRefreshApps.shortcut**]({shortcut_url}).
 
 </details>
 
-<details>
-<summary><b>Which file?</b></summary>
-
-<br>
-
-| File | For |
-|---|---|
-| `PaxController.ipa` | Normal install — what the source installs. |
-| `PaxController-DEBUG.ipa` | Troubleshooting. Adds a **Log** tab, installs as *PAX Debug* next to the normal app. |
-
-</details>
 
 
 <sub>Not affiliated with PAX Labs.</sub>

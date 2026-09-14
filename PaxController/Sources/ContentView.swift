@@ -17,13 +17,9 @@ struct ContentView: View {
                 .tabItem { Label("Device", systemImage: "thermometer.medium") }
                 .tag(1)
 
-            // The log console ships in debug builds only; the released app has
-            // no use for it and it is compiled out entirely.
-            #if DEBUG
             DebugConsoleView()
                 .tabItem { Label("Log", systemImage: "text.alignleft") }
                 .tag(2)
-            #endif
         }
         .environmentObject(viewModel)
         .accentColor(.orange)
