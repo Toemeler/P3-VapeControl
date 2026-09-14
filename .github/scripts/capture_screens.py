@@ -64,22 +64,42 @@ def dump_crash_reports():
                 print("".join(fh.readlines()[:80]), flush=True)
 
 
-def launch(udid, bundle_id, tab):
-    result = run(
-        [
-            "xcrun", "simctl", "launch", "--terminate-running-process",
-            udid, bundle_id, "-uiTab", str(tab),
-        ],
-        timeout=120,
+def launch(udid, bundle_id, tab, attempts=3):
+    """Start the app on a tab and confirm it stayed up.
+
+    A freshly created simulator can accept a launch before it is really ready
+    and drop the app immediately, so a failed start is retried rather than
+    treated as a crash on the first try.
+    """
+    last_pid = ""
+    for attempt in range(1, attempts + 1):
+        result = run(
+            [
+                "xcrun", "simctl", "launch", "--terminate-running-process",
+                udid, bundle_id, "-uiTab", str(tab),
+            ],
+            timeout=120,
+            check=False,
+        )
+        if result.returncode != 0:
+            print(f"launch attempt {attempt} failed to start", flush=True)
+            time.sleep(5)
+            continue
+
+        last_pid = result.stdout.strip().rsplit(":", 1)[-1].strip()
+        time.sleep(6)
+        # Simulator apps are ordinary host processes, so ps is the honest check;
+        # launchctl inside the simulator does not list them under the bundle id.
+        if subprocess.run(["ps", "-p", last_pid], capture_output=True).returncode == 0:
+            return last_pid
+        print(f"launch attempt {attempt}: pid {last_pid} is gone", flush=True)
+        time.sleep(5)
+
+    dump_crash_reports()
+    sys.exit(
+        f"::error::{bundle_id} would not stay running after {attempts} attempts "
+        f"(last pid {last_pid or 'none'})"
     )
-    pid = result.stdout.strip().rsplit(":", 1)[-1].strip()
-    time.sleep(6)
-    # Simulator apps are ordinary host processes, so ps is the honest check;
-    # launchctl inside the simulator does not list them under the bundle id.
-    if subprocess.run(["ps", "-p", pid], capture_output=True).returncode != 0:
-        dump_crash_reports()
-        sys.exit(f"::error::{bundle_id} (pid {pid}) exited after launch - it likely crashed")
-    return pid
 
 
 def main():
