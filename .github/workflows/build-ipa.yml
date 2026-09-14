@@ -203,32 +203,6 @@ jobs:
           path: screenshots
           if-no-files-found: error
 
-      - name: Refresh the notes on the existing release
-        # No new release is cut when the app is unchanged, but wording changes
-        # should still reach the published one.
-        if: steps.appcheck.outputs.skip == 'true'
-        id: facts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          python3 .github/scripts/release_facts.py
-
-      - name: Publish the refreshed notes
-        if: steps.appcheck.outputs.skip == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.facts.outputs.version }}
-          IPA_SIZE: ${{ steps.facts.outputs.human_size }}
-          SOURCE_URL: ${{ steps.facts.outputs.source_url }}
-          SCREENSHOT_SHA: ${{ needs.screenshots.outputs.sha }}
-        run: |
-          set -euo pipefail
-          python3 .github/scripts/render_notes.py notes.md
-          gh release edit "${{ steps.facts.outputs.tag }}" \
-            --repo "${{ github.repository }}" --notes-file notes.md
-          echo "Refreshed the notes on ${{ steps.facts.outputs.tag }}"
-
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
