@@ -132,9 +132,9 @@ jobs:
             exit 1
           fi
 
-          xcrun simctl status_bar "$UDID" override \
-            --time "09:41" --batteryState charged --batteryLevel 100 \
-            --cellularMode active --cellularBars 4 --wifiMode active --wifiBars 3 || true
+          # No status_bar override: on this runtime it paints a second copy of
+          # the wifi and battery glyphs over the tab bar, which shows up in the
+          # release preview.
 
       - name: Capture the app's screens
         if: steps.check.outputs.skip != 'true'
