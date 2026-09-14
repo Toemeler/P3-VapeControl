@@ -177,15 +177,9 @@ jobs:
 
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
-          git add -A screenshots
-          if git diff --cached --quiet; then
-            echo "screenshots unchanged"
-          else
-            git commit -m "Update simulator screenshots (run ${{ github.run_id }})"
-            # Another run may have landed first; rebase rather than fail the job.
-            git pull --rebase origin main
-            git push origin HEAD:main
-          fi
+          .github/scripts/commit_generated.sh \
+            "Update simulator screenshots (run ${{ github.run_id }})" \
+            screenshots
 
       - name: Report the commit the screenshots live in
         id: result
@@ -341,23 +335,14 @@ jobs:
         # Pages as soon as Pages is switched on for the branch.
         run: |
           set -euo pipefail
-          # The screenshots were downloaded from the other job purely to attach
-          # them to the release; that job commits them itself. Leaving them here
-          # untracked makes the rebase below refuse to overwrite them.
-          rm -rf screenshots
-          # The plist was version-stamped for the build; keep that out of the commit.
-          git checkout -- PaxController/Resources/Info.plist
+          # Only the feed paths are committed here; the screenshots downloaded
+          # for the release and the version-stamped plist are left behind by the
+          # reset onto origin/main inside the helper.
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
-          git add s.json apps.json icon.png index.html
-          git add shortcut || true
-          if git diff --cached --quiet; then
-            echo "source feed unchanged"
-            exit 0
-          fi
-          git commit -m "Update source feed for ${{ steps.tag.outputs.tag }}"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          .github/scripts/commit_generated.sh \
+            "Update source feed for ${{ steps.tag.outputs.tag }}" \
+            s.json apps.json icon.png index.html shortcut
 
       - name: Upload build log on failure
         if: failure()
