@@ -52,14 +52,14 @@ def block():
         f'<td align="center">{picture(index, tab, WIDTH)}</td>'
         for index, tab in shots
     )
-    # Inverted pairing: whichever appearance the reader is not already seeing.
+    # Inverted pairing: whichever theme the reader is not already seeing.
     other_images = "".join(
         f'<td align="center">'
         f"<picture>"
         f'<source media="(prefers-color-scheme: dark)" '
         f'srcset="screenshots/{index:02d}-{tab}.png">'
         f'<img src="screenshots/{index:02d}-{tab}-dark.png" '
-        f'width="{WIDTH}" alt="{tab} screen, other appearance">'
+        f'width="{WIDTH}" alt="{tab} screen, other theme">'
         f"</picture></td>"
         for index, tab in shots
     )
@@ -70,7 +70,7 @@ def block():
         "</div>\n\n"
         # The <picture> above follows the reader's theme; this keeps the dark
         # shots reachable from a light-themed page too.
-        "<details>\n<summary align=\"center\"><b>The other appearance</b></summary>\n\n"
+        "<details>\n<summary align=\"center\"><b>Light / dark</b></summary>\n\n"
         '<div align="center">\n\n'
         f"<table>\n<tr>{headers}</tr>\n<tr>{other_images}</tr>\n</table>\n\n"
         "</div>\n\n</details>"
