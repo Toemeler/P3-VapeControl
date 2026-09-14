@@ -16,6 +16,10 @@ on:
         description: "Recapture screenshots even when nothing changed"
         type: boolean
         default: false
+      force_build:
+        description: "Rebuild the IPAs even when the app did not change"
+        type: boolean
+        default: false
       refresh_shortcut:
         description: "Re-download the auto-refresh Shortcut from iCloud"
         type: boolean
@@ -79,7 +83,7 @@ jobs:
           fi
 
       - name: Toolchain info
-        if: steps.check.outputs.skip != 'true'
+        if: steps.appcheck.outputs.skip != 'true' && (steps.check.outputs.skip != 'true')
         run: |
           sw_vers
           xcodebuild -version
@@ -199,6 +203,32 @@ jobs:
           path: screenshots
           if-no-files-found: error
 
+      - name: Refresh the notes on the existing release
+        # No new release is cut when the app is unchanged, but wording changes
+        # should still reach the published one.
+        if: steps.appcheck.outputs.skip == 'true'
+        id: facts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/release_facts.py
+
+      - name: Publish the refreshed notes
+        if: steps.appcheck.outputs.skip == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.facts.outputs.version }}
+          IPA_SIZE: ${{ steps.facts.outputs.human_size }}
+          SOURCE_URL: ${{ steps.facts.outputs.source_url }}
+          SCREENSHOT_SHA: ${{ needs.screenshots.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/render_notes.py notes.md
+          gh release edit "${{ steps.facts.outputs.tag }}" \
+            --repo "${{ github.repository }}" --notes-file notes.md
+          echo "Refreshed the notes on ${{ steps.facts.outputs.tag }}"
+
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -216,6 +246,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Has the app changed since the last release?
+        id: appcheck
+        run: |
+          set -euo pipefail
+          # Only what ends up inside the IPA: sources, project, and the two
+          # scripts that build and package them. Release-note or feed edits
+          # deliberately do not force a rebuild.
+          STAMP=$( {
+            git rev-parse HEAD:PaxController
+            git rev-parse HEAD:PaxController.xcodeproj
+            git hash-object .github/scripts/build_app.sh .github/scripts/package_ipa.sh
+          } | shasum -a 256 | cut -d' ' -f1 )
+          echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.ref_type }}" = "tag" ] || [ "${{ inputs.force_build }}" = "true" ]; then
+            echo "Building: tag push or forced."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ -f .build-stamp ] && [ "$(cat .build-stamp)" = "$STAMP" ]; then
+            echo "App unchanged since the last release; refreshing its notes only."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "App changed; building."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Toolchain info
         run: |
           sw_vers
@@ -223,6 +278,7 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-version
 
       - name: Stamp version
+        if: steps.appcheck.outputs.skip != 'true'
         id: version
         run: |
           set -euo pipefail
@@ -237,6 +293,7 @@ jobs:
           echo "Building version $VERSION"
 
       - name: Build both variants
+        if: steps.appcheck.outputs.skip != 'true'
         run: |
           set -o pipefail
           # Release: no log console, normal name and bundle id.
@@ -249,6 +306,7 @@ jobs:
             de.marcomeissner.PaxController.debug "PAX Debug" 2>&1 | tee -a build.log
 
       - name: Package both IPAs
+        if: steps.appcheck.outputs.skip != 'true'
         id: package
         run: |
           set -euo pipefail
@@ -267,6 +325,7 @@ jobs:
           path: screenshots
 
       - name: Determine release tag
+        if: steps.appcheck.outputs.skip != 'true'
         id: tag
         run: |
           if [ "${{ github.ref_type }}" = "tag" ]; then
@@ -278,6 +337,7 @@ jobs:
           fi
 
       - name: Upload IPA as run artifact (non-fatal, short retention)
+        if: steps.appcheck.outputs.skip != 'true'
         # Account-wide artifact storage quota must never kill a finished build -
         # the GitHub Release below is the real distribution channel.
         continue-on-error: true
@@ -291,6 +351,7 @@ jobs:
           retention-days: 7
 
       - name: Build SideStore source feed
+        if: steps.appcheck.outputs.skip != 'true'
         id: feed
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -305,6 +366,7 @@ jobs:
           cat s.json
 
       - name: Publish IPA as a GitHub Release
+        if: steps.appcheck.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -327,11 +389,16 @@ jobs:
         # not a dependency the release build should have.
         if: inputs.refresh_shortcut
         run: |
+          set -euo pipefail
           python3 .github/scripts/fetch_shortcut.py \
             "${{ inputs.shortcut_url }}" \
             shortcut/AutoRefreshApps.shortcut
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          .github/scripts/commit_generated.sh "Update the archived shortcut" shortcut
 
       - name: Commit source feed
+        if: steps.appcheck.outputs.skip != 'true'
         # Committed rather than deployed with actions/deploy-pages: the Actions
         # token is not allowed to create the Pages site itself. This makes the
         # feed reachable over raw.githubusercontent.com immediately, and over
@@ -343,9 +410,38 @@ jobs:
           # reset onto origin/main inside the helper.
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          # The stamp rides along with the feed: both describe the release
+          # that was just published.
+          echo "${{ steps.appcheck.outputs.stamp }}" > .build-stamp
           .github/scripts/commit_generated.sh \
             "Update source feed for ${{ steps.tag.outputs.tag }}" \
-            s.json apps.json icon.png index.html shortcut
+            s.json apps.json icon.png index.html .build-stamp
+
+      - name: Refresh the notes on the existing release
+        # No new release is cut when the app is unchanged, but wording changes
+        # should still reach the published one.
+        if: steps.appcheck.outputs.skip == 'true'
+        id: facts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/release_facts.py
+
+      - name: Publish the refreshed notes
+        if: steps.appcheck.outputs.skip == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.facts.outputs.version }}
+          IPA_SIZE: ${{ steps.facts.outputs.human_size }}
+          SOURCE_URL: ${{ steps.facts.outputs.source_url }}
+          SCREENSHOT_SHA: ${{ needs.screenshots.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/render_notes.py notes.md
+          gh release edit "${{ steps.facts.outputs.tag }}" \
+            --repo "${{ github.repository }}" --notes-file notes.md
+          echo "Refreshed the notes on ${{ steps.facts.outputs.tag }}"
 
       - name: Upload build log on failure
         if: failure()
