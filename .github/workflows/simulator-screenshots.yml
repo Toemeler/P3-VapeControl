@@ -82,46 +82,21 @@ jobs:
             exit 1
           fi
 
-          # Booted is not the same as ready: wait until the system container
-          # answers, otherwise install races SpringBoard coming up.
-          for _ in $(seq 1 60); do
-            if xcrun simctl spawn "$UDID" launchctl print system >/dev/null 2>&1; then
-              break
-            fi
-            sleep 5
-          done
-
           xcrun simctl status_bar "$UDID" override \
             --time "09:41" --batteryState charged --batteryLevel 100 \
             --cellularMode active --cellularBars 4 --wifiMode active --wifiBars 3 || true
 
       - name: Install and launch
-        timeout-minutes: 8
+        timeout-minutes: 10
         env:
           UDID: ${{ steps.boot.outputs.udid }}
         run: |
           set -euo pipefail
-          APP="build/Debug-iphonesimulator/PaxController.app"
-          ls -la "$APP"
-          xcrun simctl install "$UDID" "$APP"
-
-          # Plain launch: it returns once the app is up and prints the pid.
-          # --console-pty would stay attached and leave the step hanging.
-          OUT=$(xcrun simctl launch "$UDID" de.marcomeissner.PaxController)
-          echo "$OUT"
-          PID="${OUT##*: }"
-          sleep 10
-
-          # Simulator apps are ordinary host processes, so ps is the honest
-          # liveness check - launchctl inside the simulator does not list them
-          # under a name we can grep for.
-          if ! ps -p "$PID" >/dev/null 2>&1; then
-            echo "::error::PaxController (pid $PID) exited after launch - it likely crashed"
-            find "$HOME/Library/Logs/DiagnosticReports" -name '*PaxController*' \
-              -newermt '-10 minutes' -exec cat {} \; 2>/dev/null | head -n 120 || true
-            exit 1
-          fi
-          echo "App is running as pid $PID"
+          ls -la build/Debug-iphonesimulator/PaxController.app
+          python3 .github/scripts/launch_app.py \
+            "$UDID" \
+            build/Debug-iphonesimulator/PaxController.app \
+            de.marcomeissner.PaxController
 
       - name: Capture screenshots
         env:
