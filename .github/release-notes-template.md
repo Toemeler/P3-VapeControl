@@ -17,7 +17,7 @@ Unsigned · iOS 16+ · {size}
 
 <br>
 
-Free Apple ID is enough. Apps signed with one expire after 7 days — see **AutoRefreshApps** below.
+A free Apple ID is enough — see **AutoRefreshApps** below for what that means after seven days.
 
 1. Install **iLoader** on a computer, connect the device — [docs](https://docs.sidestore.io/docs/installation/prerequisites).
 2. iLoader → *Add Account*, pick your device, install **SideStore (Stable)**.
