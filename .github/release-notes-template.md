@@ -65,4 +65,4 @@ Add [**AutoRefreshApps.shortcut**]({shortcut_url}) and run it daily via *Shortcu
 </details>
 
 
-<sub>Built by GitHub Actions, ad-hoc signed — SideStore re-signs it with your Apple ID. Screenshots come from a simulator. Not affiliated with PAX Labs.</sub>
+<sub>Not affiliated with PAX Labs.</sub>
