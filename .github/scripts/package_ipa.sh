@@ -8,7 +8,13 @@ APP=$1
 OUTPUT=$2
 
 ls -la "$APP"
-file "$APP/$(basename "${APP%.app}")" || true
+# The folder name inside Payload/ is what sideloaders show as the app, so it
+# has to stay PaxController.app - not the build directory it came from.
+case "$(basename "$APP")" in
+  *.app) ;;
+  *) echo "::error::$APP is not a .app bundle"; exit 1 ;;
+esac
+file "$APP/$(basename "$APP" .app)" || true
 
 # Ad-hoc signature: SideStore/AltStore/Sideloadly re-sign with the user's Apple
 # ID anyway, but an entirely unsigned Mach-O upsets some of those tools.

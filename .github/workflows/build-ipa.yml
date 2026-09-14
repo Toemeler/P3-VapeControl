@@ -96,7 +96,7 @@ jobs:
           # install looks like, and the log console is a debug-build screen.
           .github/scripts/build_app.sh Release iphonesimulator \
             de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee simbuild.log
-          mv build/Release-iphonesimulator/PaxController.app build/release.app
+          mkdir -p build/release && mv build/Release-iphonesimulator/PaxController.app build/release/
           git checkout -- PaxController/Resources/Info.plist
 
       - name: Pick a simulator
@@ -156,7 +156,7 @@ jobs:
           set -euo pipefail
           rm -rf screenshots
           python3 .github/scripts/capture_screens.py \
-            "$UDID" build/release.app de.marcomeissner.PaxController \
+            "$UDID" build/release/PaxController.app de.marcomeissner.PaxController \
             screenshots scan:0 device:1
           ls -lh screenshots
 
@@ -299,7 +299,7 @@ jobs:
           # Release: no log console, normal name and bundle id.
           .github/scripts/build_app.sh Release iphoneos \
             de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee build.log
-          mv build/Release-iphoneos/PaxController.app build/release.app
+          mkdir -p build/release && mv build/Release-iphoneos/PaxController.app build/release/
           # Debug: log console included, distinct name and bundle id so it can
           # sit next to the release build on the same device.
           .github/scripts/build_app.sh Debug iphoneos \
@@ -310,7 +310,7 @@ jobs:
         id: package
         run: |
           set -euo pipefail
-          .github/scripts/package_ipa.sh build/release.app PaxController.ipa
+          .github/scripts/package_ipa.sh build/release/PaxController.app PaxController.ipa
           .github/scripts/package_ipa.sh \
             build/Debug-iphoneos/PaxController.app PaxController-DEBUG.ipa
 
