@@ -31,6 +31,17 @@ Free Apple ID is enough. Apps signed with one expire after 7 days — see **Auto
 6. *Sources* → **+** → paste the URL above.
 7. Install **PAX Controller**, open it, tap *Scan*.
 
+<details>
+<summary><b>Problems</b></summary>
+
+<br>
+
+- **"Not connected to VPN"** — reconnect LocalDevVPN.
+- **Install or refresh fails** — iLoader → *Manage Pairing File* → *Place* next to SideStore, pick `On My iPhone → SideStore → ALTPairingFile.mobiledevicepairing`.
+- **Finds no device** — allow Bluetooth on first scan, make sure the PAX is awake.
+
+</details>
+
 </details>
 
 <details>
@@ -57,15 +68,5 @@ Add [**AutoRefreshApps.shortcut**]({shortcut_url}) and run it daily via *Shortcu
 
 </details>
 
-<details>
-<summary><b>Problems</b></summary>
-
-<br>
-
-- **"Not connected to VPN"** — reconnect LocalDevVPN.
-- **Install or refresh fails** — iLoader → *Manage Pairing File* → *Place* next to SideStore, pick `On My iPhone → SideStore → ALTPairingFile.mobiledevicepairing`.
-- **Finds no device** — allow Bluetooth on first scan, make sure the PAX is awake.
-
-</details>
 
 <sub>Built by GitHub Actions, ad-hoc signed — SideStore re-signs it with your Apple ID. Screenshots come from a simulator. Not affiliated with PAX Labs.</sub>
