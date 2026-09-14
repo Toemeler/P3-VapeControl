@@ -50,6 +50,7 @@ def main():
     for name, udid, runtime in available:
         by_name.setdefault(name, (udid, runtime))
 
+    # 1. The requested model, already on the image.
     for want in PREFERRED:
         if want in by_name:
             udid, runtime = by_name[want]
@@ -59,42 +60,51 @@ def main():
                 print(f"::warning::{PREFERRED[0]} unavailable; used {want} instead")
             return
 
+    device_types = simctl("devicetypes")["devicetypes"]
+    types_by_name = {t["name"]: t for t in device_types}
+    runtimes = [
+        r
+        for r in simctl("runtimes")["runtimes"]
+        if r.get("isAvailable") and "iOS" in r.get("name", "")
+    ]
+    runtimes.sort(key=version_key, reverse=True)
+
+    def runtime_for(device):
+        for runtime in runtimes:
+            supported = runtime.get("supportedDeviceTypes")
+            if supported is None:
+                return runtime
+            if device["identifier"] in {d.get("identifier") for d in supported}:
+                return runtime
+        return None
+
+    # 2. The requested model, created on demand. Worth the extra boot time:
+    #    screenshots are model-specific, so falling back to another phone
+    #    silently changes what the caller asked for.
+    for want in PREFERRED:
+        device = types_by_name.get(want)
+        if not device:
+            continue
+        runtime = runtime_for(device)
+        if not runtime:
+            continue
+        emit(
+            device_name=device["name"],
+            device_type=device["identifier"],
+            runtime=runtime["identifier"],
+            runtime_name=runtime["name"],
+        )
+        print(f"Creating {device['name']} on {runtime['name']}")
+        if want != PREFERRED[0]:
+            print(f"::warning::{PREFERRED[0]} unavailable; created {want} instead")
+        return
+
+    # 3. Last resort: any iPhone at all, loudly flagged.
     iphones = [entry for entry in available if entry[0].startswith("iPhone")]
     if iphones:
         name, udid, runtime = iphones[-1]
         emit(device_name=name, existing_udid=udid, runtime_name=runtime)
-        print(f"::warning::no iPhone 14 variant preinstalled; used {name} ({runtime})")
+        print(f"::warning::no iPhone 14 device type on this runner; used {name} ({runtime})")
         return
 
-    # Nothing preinstalled - fall back to creating a device.
-    device_types = simctl("devicetypes")["devicetypes"]
-    types_by_name = {t["name"]: t for t in device_types}
-    runtimes = [
-        r for r in simctl("runtimes")["runtimes"] if r.get("isAvailable") and "iOS" in r.get("name", "")
-    ]
-    if not runtimes:
-        sys.exit("no available iOS simulator runtime on this runner")
-    runtimes.sort(key=version_key, reverse=True)
-
-    candidates = [types_by_name[n] for n in PREFERRED if n in types_by_name]
-    candidates += [t for t in device_types if t["name"].startswith("iPhone")][::-1]
-    for device in candidates:
-        for runtime in runtimes:
-            supported = runtime.get("supportedDeviceTypes")
-            if supported is not None:
-                if device["identifier"] not in {d.get("identifier") for d in supported}:
-                    continue
-            emit(
-                device_name=device["name"],
-                device_type=device["identifier"],
-                runtime=runtime["identifier"],
-                runtime_name=runtime["name"],
-            )
-            print(f"::warning::creating a new {device['name']} on {runtime['name']}")
-            return
-
     sys.exit("no usable iPhone device type / runtime combination found")
-
-
-if __name__ == "__main__":
-    main()
