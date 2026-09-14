@@ -19,10 +19,10 @@ Unsigned · iOS 16+ · {size}
 
 Free Apple ID is enough. Apps signed with one expire after 7 days — see **AutoRefreshApps** below.
 
-1. Install **iLoader** on a computer, connect the device — [docs](https://docs.sidestore.io/docs/installation/install).
+1. Install **iLoader** on a computer, connect the device — [docs](https://docs.sidestore.io/docs/installation/prerequisites).
 2. iLoader → *Add Account*, pick your device, install **SideStore (Stable)**.
 3. On the device: *Settings → General → VPN & Device Management → your account → Trust*.
-4. Install **LocalDevVPN**, tap **Connect**.
+4. Install **[LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044)**, tap **Connect**.
 5. Open **SideStore**, sign in with the same account, *My Apps* → tap the **7 DAYS** counter.
 6. Open the **Add to SideStore** link above, or paste `{source_url}` under *Sources* → **+**.
 7. Install **PAX Controller**, open it, tap *Scan*.
@@ -33,7 +33,7 @@ Free Apple ID is enough. Apps signed with one expire after 7 days — see **Auto
 <br>
 
 - **"Not connected to VPN"** — reconnect LocalDevVPN.
-- **Install or refresh fails** — iLoader → *Manage Pairing File* → *Place* next to SideStore, pick `On My iPhone → SideStore → ALTPairingFile.mobiledevicepairing`.
+- **Install or refresh fails** — in iLoader, click *Place pairing file*.
 - **Finds no device** — allow Bluetooth on first scan, make sure the PAX is awake.
 
 </details>
