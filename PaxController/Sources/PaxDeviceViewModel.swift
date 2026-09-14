@@ -100,8 +100,51 @@ final class PaxDeviceViewModel: ObservableObject {
     private var pendingCommands: [() throws -> Void] = []
     private var pollTimer: AnyCancellable?
 
+    /// Screenshot fixture switch. Launch arguments land in UserDefaults'
+    /// argument domain, so this is unreachable in normal use - nothing in the
+    /// UI sets the key.
+    private let demoMode = UserDefaults.standard.bool(forKey: "uiDemo")
+
     init() {
         bluetooth.delegate = self
+        // The simulator has no Bluetooth radio, so the screenshot workflow
+        // launches with `-uiDemo YES` to fill in a plausible connected device.
+        if demoMode {
+            loadDemoFixture()
+        }
+    }
+
+    /// Populates the published state as if a PAX 3 were connected.
+    private func loadDemoFixture() {
+        connectionState = .ready
+        scannedDevices = [
+            ScannedDevice(id: UUID(), peripheral: nil, name: "PAX 3", rssi: -52)
+        ]
+
+        displayName       = "PAX 3"
+        modelNumber       = "PAX 3"
+        serialNumber      = "P3D1J4K7QM"
+        firmwareRevision  = "1.34.1"
+
+        batteryLevel      = 78
+        isCharging        = false
+        isLocked          = false
+        heatingState      = .ready
+        dynamicMode       = .standard
+
+        actualTempC        = 193.4
+        targetTempC        = 193.0
+        currentTargetTempC = 193.0
+        selectedPreset     = .t193
+        customTargetTempC  = 193
+
+        paxServiceConfirmed = true
+        paxCharReadFound    = true
+        paxCharWriteFound   = true
+        paxCharNotifyFound  = true
+        paxCharNotifying    = true
+
+        log("Demo fixture loaded", level: .info)
     }
 
     // MARK: - Public commands
@@ -127,7 +170,7 @@ final class PaxDeviceViewModel: ObservableObject {
         stopScan()
         connectionState = .connecting
         bluetooth.connect(to: device)
-        log("Connecting to \(device.name) [\(device.peripheral.identifier)]", level: .info)
+        log("Connecting to \(device.name) [\(device.id)]", level: .info)
     }
 
     func disconnect() {
@@ -337,6 +380,9 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
 
     func bluetoothDidUpdatePower(available: Bool) {
         log("Bluetooth power: \(available ? "ON" : "OFF")", level: .ble)
+        // The simulator reports the radio as unavailable immediately, which
+        // would wipe the fixture straight after init.
+        guard !demoMode else { return }
         if !available {
             connectionState = .idle
             resetDeviceState()
@@ -344,7 +390,7 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
     }
 
     func bluetoothDidDiscover(device: ScannedDevice) {
-        log("Found: \(device.name) [\(device.peripheral.identifier)] RSSI=\(device.rssi)", level: .ble)
+        log("Found: \(device.name) [\(device.id)] RSSI=\(device.rssi)", level: .ble)
         if let idx = scannedDevices.firstIndex(where: { $0.id == device.id }) {
             scannedDevices[idx] = device
         } else {
