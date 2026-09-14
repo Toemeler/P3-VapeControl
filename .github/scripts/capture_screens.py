@@ -9,18 +9,16 @@ Every simctl call runs with a deadline: simctl blocks indefinitely when the
 simulator is wedged, and macOS ships no coreutils `timeout` to bound it with.
 
 Usage:
-  capture_screens.py <udid> <app> <bundle id> <out dir> <start index> <name:tab>...
+  capture_screens.py <udid> <app> <bundle id> <out dir> <name:tab>...
 
-The tab list is explicit because the release and debug builds do not have the
-same screens: the log console is compiled out of release builds, so it is
-captured from the debug app in a second pass.
+Captures the released app's screens in light appearance - that is what the
+release notes show.
 """
 import os
 import subprocess
 import sys
 import time
 
-APPEARANCES = ["light", "dark"]
 SPRINGBOARD_TIMEOUT = 180
 
 
@@ -85,9 +83,9 @@ def launch(udid, bundle_id, tab):
 
 
 def main():
-    udid, app_path, bundle_id, out_dir, start_index = sys.argv[1:6]
+    udid, app_path, bundle_id, out_dir = sys.argv[1:5]
     tabs = []
-    for spec in sys.argv[6:]:
+    for spec in sys.argv[5:]:
         name, _, tab = spec.partition(":")
         tabs.append((name, int(tab)))
     if not tabs:
@@ -97,19 +95,15 @@ def main():
 
     wait_for_springboard(udid)
     run(["xcrun", "simctl", "install", udid, app_path], timeout=180)
+    run(["xcrun", "simctl", "ui", udid, "appearance", "light"], timeout=60, check=False)
 
-    index = int(start_index)
-    for name, tab in tabs:
+    for index, (name, tab) in enumerate(tabs, start=1):
         launch(udid, bundle_id, tab)
-        for appearance in APPEARANCES:
-            index += 1
-            run(["xcrun", "simctl", "ui", udid, "appearance", appearance], timeout=60, check=False)
-            time.sleep(2)
-            path = os.path.join(out_dir, f"{index:02d}-{name}-{appearance}.png")
-            run(["xcrun", "simctl", "io", udid, "screenshot", path], timeout=90)
-            print(f"captured {path}", flush=True)
+        path = os.path.join(out_dir, f"{index:02d}-{name}.png")
+        run(["xcrun", "simctl", "io", udid, "screenshot", path], timeout=90)
+        print(f"captured {path}", flush=True)
 
-    print(f"screenshots written up to index {index}", flush=True)
+    print(f"{len(tabs)} screenshots written to {out_dir}", flush=True)
 
 
 if __name__ == "__main__":

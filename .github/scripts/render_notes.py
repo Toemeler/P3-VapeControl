@@ -19,12 +19,7 @@ import os
 import re
 import sys
 
-TAB_TITLES = {
-    "scan": "Scan",
-    "device": "Device",
-    # The log console is compiled out of release builds, so say so where it shows.
-    "log": "Log<br><sub>debug build only</sub>",
-}
+TAB_TITLES = {"scan": "Scan", "device": "Device"}
 
 # The Shortcut that refreshes sideloaded apps before their 7-day signature
 # expires. It is committed to the repo rather than only linked, so it keeps
@@ -40,11 +35,11 @@ the 7 days run out, so the app does not stop working.
 
 
 def parse(filename):
-    """01-scan-light.png -> (1, 'scan', 'light')"""
-    match = re.match(r"(\d+)-([a-z]+)-(light|dark)\.png$", filename)
+    """01-scan.png -> (1, 'scan')"""
+    match = re.match(r"(\d+)-([a-z]+)\.png$", filename)
     if not match:
         return None
-    return int(match.group(1)), match.group(2), match.group(3)
+    return int(match.group(1)), match.group(2)
 
 
 def gallery(base_url, shots_dir):
@@ -55,41 +50,18 @@ def gallery(base_url, shots_dir):
     if not shots:
         return "_No screenshots for this build._"
 
-    def table(appearance):
-        row = [s for s in shots if s[2] == appearance]
-        if not row:
-            return ""
-        headers = "".join(
-            f"<td align=\"center\"><b>{TAB_TITLES.get(tab, tab.title())}</b></td>"
-            for _, tab, _ in row
-        )
-        images = "".join(
-            f'<td align="center">'
-            f'<img src="{base_url}/{index:02d}-{tab}-{appearance}.png" '
-            f'width="{THUMB_WIDTH}" alt="{tab} screen"></td>'
-            for index, tab, _ in row
-        )
-        return f"<table>\n<tr>{headers}</tr>\n<tr>{images}</tr>\n</table>"
-
-    light = table("light")
-    dark = table("dark")
-
-    parts = ['<div align="center">', "", light, "", "</div>"]
-    if dark:
-        parts += [
-            "",
-            "<details>",
-            "<summary align=\"center\"><b>Dark mode</b></summary>",
-            "",
-            '<div align="center">',
-            "",
-            dark,
-            "",
-            "</div>",
-            "",
-            "</details>",
-        ]
-    return "\n".join(parts)
+    headers = "".join(
+        f'<td align="center"><b>{TAB_TITLES.get(name, name.title())}</b></td>'
+        for _, name in shots
+    )
+    images = "".join(
+        f'<td align="center">'
+        f'<img src="{base_url}/{index:02d}-{name}.png" '
+        f'width="{THUMB_WIDTH}" alt="{name} screen"></td>'
+        for index, name in shots
+    )
+    table = f"<table>\n<tr>{headers}</tr>\n<tr>{images}</tr>\n</table>"
+    return "\n".join(['<div align="center">', "", table, "", "</div>"])
 
 
 def main(out_path):
