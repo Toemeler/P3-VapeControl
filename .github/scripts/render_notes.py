@@ -13,7 +13,7 @@ Environment:
   SCREENSHOT_SHA            commit to pin image URLs to (default: main)
   GITHUB_REPOSITORY         owner/name, for building raw URLs
   IPA_SIZE                  human-readable size, shown in the header
-  SHORTCUT_URL              optional override for the refresh Shortcut link
+  SHORTCUT_URL              optional override; defaults to the committed file
 """
 import os
 import re
@@ -27,13 +27,15 @@ TAB_TITLES = {
 }
 
 # The Shortcut that refreshes sideloaded apps before their 7-day signature
-# expires. Overridable so the link can be changed without a code edit.
-DEFAULT_SHORTCUT_URL = "https://www.icloud.com/shortcuts/3357ecb0d7fd47208271bbe4b3df71ac"
+# expires. It is committed to the repo rather than only linked, so it keeps
+# working if the iCloud share link is revoked.
+SHORTCUT_PATH = "shortcut/RefreshApps.shortcut"
 THUMB_WIDTH = 230
 
 SHORTCUT_SECTION = """
-**8.** Add [this Shortcut]({url}) and let it run daily. It refreshes your apps
-before the 7 days run out, so the app does not stop working.
+**8.** Open [**RefreshApps.shortcut**]({url}) on the device to add it, then let
+it run daily via *Shortcuts → Automation*. It calls SideStore's refresh before
+the 7 days run out, so the app does not stop working.
 """
 
 
@@ -94,7 +96,7 @@ def main(out_path):
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     sha = os.environ.get("SCREENSHOT_SHA") or "main"
     base = f"https://raw.githubusercontent.com/{repo}/{sha}"
-    shortcut_url = os.environ.get("SHORTCUT_URL", "").strip() or DEFAULT_SHORTCUT_URL
+    shortcut_url = os.environ.get("SHORTCUT_URL", "").strip() or f"{base}/{SHORTCUT_PATH}"
 
     with open(os.path.join(".github", "release-notes-template.md")) as fh:
         template = fh.read()
