@@ -8,6 +8,11 @@
 #
 # It deletes its own workflow file at the end, so the repo is left with a
 # single workflow. Run it once; it is not part of the pipeline.
+#
+# Two runs survive this by design, and have to be removed by hand:
+#   - this run itself - GitHub refuses to delete a run that is in progress
+#   - the pages build its own commit triggers, while Pages deploys from the
+#     branch (every push starts one)
 
 name: Cleanup
 
@@ -28,6 +33,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Refuse to run while a build is in flight
+        # The self-removal commit below would race that build's own pushes,
+        # and the run it is meant to keep may not exist yet.
+        run: |
+          set -euo pipefail
+          BUSY=$(gh run list --repo "$REPO" --workflow "Build" --limit 20 \
+            --json status --jq '[.[] | select(.status != "completed")] | length')
+          if [ "$BUSY" != "0" ]; then
+            echo "::error::$BUSY Build run(s) still going - wait for them, then re-run"
+            exit 1
+          fi
 
       - name: Delete old build-* releases
         run: |
@@ -79,11 +96,15 @@ jobs:
               if gh api -X DELETE "repos/$REPO/actions/runs/$ID" >/dev/null 2>&1; then
                 echo "deleted run $ID"
               else
-                echo "could not delete run $ID (still running?)"
+                echo "could not delete run $ID (in progress, or already gone)"
               fi
             done
 
       - name: Delete this run
         run: |
-          # Last on purpose: this terminates the job.
-          gh api -X DELETE "repos/$REPO/actions/runs/$GITHUB_RUN_ID" || true
+          # Last on purpose: if it succeeds it terminates the job. GitHub
+          # normally refuses to delete an in-progress run, so expect this to
+          # fail and this run to stay in the list.
+          gh api -X DELETE "repos/$REPO/actions/runs/$GITHUB_RUN_ID" \
+            || echo "this run could not delete itself - remove it by hand"
+
