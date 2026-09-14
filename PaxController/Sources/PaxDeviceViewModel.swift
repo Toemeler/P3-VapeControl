@@ -116,6 +116,10 @@ final class PaxDeviceViewModel: ObservableObject {
     private var capabilitiesKnown = false
     /// Coalesces colour-wheel drags into a single write.
     private var ledWriteDebounce: Task<Void, Never>?
+    /// Deadline for the capability query, so a silent device still gets a colour.
+    private var capabilityTimeout: Task<Void, Never>?
+    /// The device never answered the capability query, so any write is a guess.
+    private var capabilityQueryUnanswered = false
 
     /// Which attribute to use for LED color, preferring the one the device
     /// actually answered with. nil means it never reported either, so there is
@@ -128,7 +132,10 @@ final class PaxDeviceViewModel: ObservableObject {
         where ledAttributeShapes[candidate.rawValue] != nil || supportedAttributes.contains(candidate.rawValue) {
             return candidate
         }
-        return nil
+        // A device that never answered the capability query still gets one
+        // labelled attempt — the read-back that follows it reveals the real
+        // shape if the attribute does exist after all.
+        return capabilityQueryUnanswered ? .colorTheme : nil
     }
 
     // MARK: Private
@@ -415,6 +422,24 @@ final class PaxDeviceViewModel: ObservableObject {
             try self.sendPacket(PaxPacket.statusRequest(attributes: attrs))
             self.log("Asked the device which attributes it supports, and for its current LED values", level: .tx)
         }
+        // Not every firmware implements SupportedAttributes. Without a deadline
+        // a device that simply never answers would leave the colour queued for
+        // ever, which is worse than the blind write it replaced.
+        capabilityTimeout?.cancel()
+        capabilityTimeout = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.capabilityQueryDidTimeOut()
+        }
+    }
+
+    private func capabilityQueryDidTimeOut() {
+        guard !capabilitiesKnown, connectionState.isConnected else { return }
+        capabilityQueryUnanswered = true
+        capabilitiesKnown = true
+        log("No capability reply after 2 s — this firmware may not implement SupportedAttributes (0x18). Falling back to an unverified ColorTheme write.",
+            level: .warn)
+        pushSavedColorIfReady()
     }
 
     func requestFullStatus() {
@@ -590,7 +615,9 @@ final class PaxDeviceViewModel: ObservableObject {
     private func pushSavedColorIfReady() {
         guard pushColorOnceDiscovered, ledAttribute != nil else { return }
         pushColorOnceDiscovered = false
-        sendLedColorToDevice(settings.ledColor)
+        let color = settings.ledColor
+        log("Applying saved LED color \(color.name) (\(color.hex)) now that the device is ready", level: .info)
+        sendLedColorToDevice(color)
     }
 
     /// The device reporting its current LED value is the only reliable source
@@ -603,8 +630,10 @@ final class PaxDeviceViewModel: ObservableObject {
         // A value arriving for an attribute the bitfield did not list still
         // proves the device implements it.
         capabilitiesKnown = true
-        pushSavedColorIfReady()
 
+        // Judge this report against any write already outstanding *before*
+        // starting a new one — pushing first would compare the fresh write
+        // against the old value that just arrived and always cry foul.
         if let pending = pendingLedWrite, pending.attribute == packet.type.rawValue {
             pendingLedWrite = nil
             if trimmed.prefix(pending.payload.count) == pending.payload {
@@ -613,12 +642,12 @@ final class PaxDeviceViewModel: ObservableObject {
                 log("✘ Device ignored the \(packet.type) write — asked for \(pending.payload.hexString), still reports \(trimmed.hexString)",
                     level: .warn)
             }
-            return
+        } else if previous != trimmed {
+            log("Current \(packet.type) value: \(trimmed.hexString) (\(trimmed.count) B) — a write must match this shape",
+                level: .info)
         }
 
-        guard previous != trimmed else { return }
-        log("Current \(packet.type) value: \(trimmed.hexString) (\(trimmed.count) B) — a write must match this shape",
-            level: .info)
+        pushSavedColorIfReady()
     }
 
     private func checkReady() {
@@ -680,8 +709,11 @@ final class PaxDeviceViewModel: ObservableObject {
         pendingLedWrite = nil
         pushColorOnceDiscovered = false
         capabilitiesKnown = false
+        capabilityQueryUnanswered = false
         ledWriteDebounce?.cancel()
         ledWriteDebounce = nil
+        capabilityTimeout?.cancel()
+        capabilityTimeout = nil
     }
 
     func log(_ message: String, level: DebugEntry.Level = .info) {
