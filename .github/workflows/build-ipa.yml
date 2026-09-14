@@ -1,0 +1,184 @@
+# Builds PaxController into a sideloadable (unsigned) IPA.
+# - Publishes the IPA as a GitHub Release (and as a run artifact).
+# - Publishes a SideStore/AltStore source feed to GitHub Pages so the release
+#   can be installed and updated from inside the sideloader.
+# Manual runs release as build-N; pushing a v* tag releases under that tag.
+
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-ipa:
+    name: Build PaxController for iOS
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain info
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Stamp version
+        id: version
+        run: |
+          set -euo pipefail
+          PLIST=PaxController/Resources/Info.plist
+          BASE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
+          # Monotonic third component so SideStore can tell builds apart and offer
+          # updates. Stamped into the checkout only - the committed plist is untouched.
+          VERSION="${BASE}.${{ github.run_number }}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$PLIST"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version $VERSION"
+
+      - name: Build (unsigned, device SDK)
+        run: |
+          set -o pipefail
+          # The project pins CODE_SIGN_STYLE=Automatic and a DEVELOPMENT_TEAM, which
+          # cannot resolve on a runner with no Apple ID. Override signing off entirely
+          # and build with -target: the project ships no shared .xcscheme, so -scheme
+          # would fail on a fresh checkout. -derivedDataPath is scheme-only, so the
+          # product location is pinned with SYMROOT instead.
+          xcodebuild \
+            -project PaxController.xcodeproj \
+            -target PaxController \
+            -configuration Release \
+            -sdk iphoneos \
+            SYMROOT="$GITHUB_WORKSPACE/build" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            build 2>&1 | tee build.log
+
+      - name: Package IPA
+        id: package
+        run: |
+          set -euo pipefail
+          APP="build/Release-iphoneos/PaxController.app"
+          ls -la "$APP"
+          file "$APP/PaxController"
+
+          # Ad-hoc signature: Sideloadly/AltStore/SideStore re-sign with the user's
+          # Apple ID anyway, but an unsigned Mach-O upsets some of those tools.
+          codesign --force --deep --sign - "$APP" || true
+
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          # Drop dangling symlinks, then zip while DEREFERENCING the rest (no -y)
+          # so the IPA contains zero symlink entries - Windows signing tools
+          # otherwise fail with "os error 1314 / A required privilege is not held".
+          find Payload -type l ! -exec test -e {} \; -delete || true
+          echo "Symlinks left in Payload: $(find Payload -type l | wc -l | tr -d ' ')"
+          zip -qr PaxController.ipa Payload
+          ls -lh PaxController.ipa
+
+          echo "size=$(stat -f%z PaxController.ipa)" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 PaxController.ipa | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "title=PaxController ${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "title=PaxController build #${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload IPA as run artifact (non-fatal, short retention)
+        # Account-wide artifact storage quota must never kill a finished build -
+        # the GitHub Release below is the real distribution channel.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: PaxController-ipa
+          path: PaxController.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish IPA as a GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # printf, not a heredoc: inside a YAML block scalar the EOF terminator
+          # cannot sit at column 0, so a quoted heredoc would never close.
+          NOTES=$(printf '%s\n' \
+            'Unsigned IPA of version ${{ steps.version.outputs.version }}, requires iOS 16 or later.' \
+            '' \
+            '**Easiest install:** add the SideStore source and install from there -' \
+            'updates then show up automatically.' \
+            '' \
+            'Otherwise sideload this file with SideStore, AltStore or Sideloadly.' \
+            'The build is ad-hoc signed only; the sideloader re-signs it with your' \
+            'Apple ID. With a free Apple ID the app expires after 7 days.')
+          gh release create "${{ steps.tag.outputs.tag }}" PaxController.ipa \
+            --repo "${{ github.repository }}" \
+            --title "${{ steps.tag.outputs.title }}" \
+            --notes "$NOTES"
+
+      - name: Build SideStore source feed
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SIZE: ${{ steps.package.outputs.size }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          python3 .github/scripts/make_icon.py site/icon.png
+          python3 .github/scripts/make_source.py site
+          echo "--- source feed ---"
+          cat site/s.json
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
+
+  deploy-pages:
+    name: Publish source feed to Pages
+    needs: build-ipa
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # enablement: true turns Pages on via the API the first time this runs,
+      # so the repo needs no manual Settings -> Pages click.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - id: deployment
+        uses: actions/deploy-pages@v4
