@@ -7,6 +7,13 @@
 # a DEVELOPMENT_TEAM that cannot resolve on a runner without an Apple ID.
 # -target rather than -scheme: the project ships no shared .xcscheme. SYMROOT
 # rather than -derivedDataPath: the latter is rejected without -scheme.
+#
+# The Live Activity extension is a target dependency, so building the app
+# target builds and embeds it too. The bundle id goes in as APP_BUNDLE_ID
+# rather than PRODUCT_BUNDLE_IDENTIFIER because a command-line build setting
+# applies to *every* target being built: overriding PRODUCT_BUNDLE_IDENTIFIER
+# directly would give the extension the app's own id instead of its
+# "<app id>.LiveActivity" suffix, which iOS rejects.
 set -euo pipefail
 
 CONFIGURATION=$1
@@ -23,7 +30,7 @@ xcodebuild \
   -configuration "$CONFIGURATION" \
   -sdk "$SDK" \
   SYMROOT="$PWD/build" \
-  PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+  APP_BUNDLE_ID="$BUNDLE_ID" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \

@@ -30,7 +30,7 @@ struct DebugConsoleView: View {
                         Image(systemName: "arrow.down.to.line")
                     }
                     .toggleStyle(.button)
-                    .tint(.orange)
+                    .tint(DS.Palette.accent)
                     .help("Auto-scroll")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -152,7 +152,7 @@ struct FilterChip: View {
                 .font(.caption)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(isActive ? Color.orange : Color(.tertiarySystemBackground))
+                .background(isActive ? DS.Palette.accent : Color(.tertiarySystemBackground))
                 .foregroundColor(isActive ? .white : .primary)
                 .cornerRadius(8)
         }

@@ -37,8 +37,11 @@ enum DS {
         static let fill = Color(.tertiarySystemFill)
         /// The unfilled part of the dial arc.
         static let track = Color(.secondarySystemFill)
-        static let accent = Color.orange
-        static let accentTint = Color.orange.opacity(0.15)
+        /// The LED color chosen in settings, orange until changed. Computed so
+        /// every existing call site re-themes without being rewired; views
+        /// re-render on change because they observe AppSettings.
+        static var accent: Color { AppSettings.shared.ledColor.color }
+        static var accentTint: Color { accent.opacity(0.15) }
     }
 
     /// The oven's usable range. `PaxPresetTemp` sits inside it.

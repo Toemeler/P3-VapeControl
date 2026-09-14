@@ -33,6 +33,10 @@ protocol BluetoothManagerDelegate: AnyObject {
     func bluetoothDidWrite(characteristic: CBUUID)
     func bluetoothDidError(_ message: String, characteristic: CBUUID?)
     func bluetoothNotifyStateChanged(characteristic: CBUUID, isNotifying: Bool)
+    /// Fired once the radio is powered on, before any auto-connect attempt is
+    /// made, so the view model can decide whether to try reconnecting to the
+    /// last-known device.
+    func bluetoothReadyForAutoConnect()
 }
 
 // MARK: - BluetoothManager (pure BLE transport)
@@ -51,7 +55,15 @@ final class BluetoothManager: NSObject {
 
     override init() {
         super.init()
-        centralManager = CBCentralManager(delegate: self, queue: nil)
+        // A restore identifier lets iOS relaunch the app into the background
+        // (via state restoration) when a BLE event happens while the app is
+        // suspended or not running in the foreground — the basis for staying
+        // connected while backgrounded / the phone is locked. It cannot
+        // survive the user force-quitting the app; that stops all background
+        // BLE activity for every app, with no API to opt back in.
+        centralManager = CBCentralManager(
+            delegate: self, queue: nil,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: "PaxControllerCentral"])
     }
 
     // MARK: - scan()
@@ -78,6 +90,45 @@ final class BluetoothManager: NSObject {
     func disconnect() {
         guard let p = connectedPeripheral else { return }
         centralManager.cancelPeripheralConnection(p)
+    }
+
+    /// Withdraws a pending (timeout-free) connect request so iOS stops waiting
+    /// for a device we no longer care about.
+    func cancelPendingConnect() {
+        guard let p = connectedPeripheral else { return }
+        centralManager.cancelPeripheralConnection(p)
+        connectedPeripheral = nil
+    }
+
+    /// Auto-connect to a device the app has connected to before, identified
+    /// by its CoreBluetooth peripheral UUID. Works whether the device is
+    /// already connected to the system (`retrieveConnectedPeripherals`, e.g.
+    /// after state restoration) or just previously known to iOS
+    /// (`retrievePeripherals(withIdentifiers:)`, which still requires the
+    /// device to be in range/advertising to actually connect).
+    func autoConnect(toKnownIdentifier id: UUID) -> ScannedDevice? {
+        guard centralManager.state == .poweredOn, connectedPeripheral == nil else { return nil }
+
+        if let already = centralManager.retrieveConnectedPeripherals(
+            withServices: [PaxUUIDs.serviceUUID]).first(where: { $0.identifier == id }) {
+            connectedPeripheral = already
+            already.delegate = self
+            if already.state == .connected {
+                discoverServices()
+            } else {
+                centralManager.connect(already, options: nil)
+            }
+            return ScannedDevice(id: already.identifier, peripheral: already,
+                                 name: already.name ?? "PAX", rssi: 0)
+        }
+
+        guard let known = centralManager.retrievePeripherals(withIdentifiers: [id]).first else {
+            return nil
+        }
+        connectedPeripheral = known
+        centralManager.connect(known, options: nil)
+        return ScannedDevice(id: known.identifier, peripheral: known,
+                             name: known.name ?? "PAX", rssi: 0)
     }
 
     // MARK: - discoverServices()
@@ -141,7 +192,31 @@ final class BluetoothManager: NSObject {
 extension BluetoothManager: CBCentralManagerDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         Task { @MainActor in
-            delegate?.bluetoothDidUpdatePower(available: central.state == .poweredOn)
+            let available = central.state == .poweredOn
+            delegate?.bluetoothDidUpdatePower(available: available)
+            if available {
+                delegate?.bluetoothReadyForAutoConnect()
+            }
+        }
+    }
+
+    /// Called before `centralManagerDidUpdateState` when iOS relaunches the app
+    /// in the background via state restoration (only possible because of the
+    /// restore identifier + `bluetooth-central` background mode). Reattaches us
+    /// to whatever peripheral was still connected or pending when the app was
+    /// suspended, so the session — and the Lock Screen card — carry on without
+    /// the user reopening the app.
+    nonisolated func centralManager(_ central: CBCentralManager,
+                                    willRestoreState dict: [String: Any]) {
+        guard let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral],
+              let peripheral = peripherals.first else { return }
+        Task { @MainActor in
+            connectedPeripheral = peripheral
+            peripheral.delegate = self
+            if peripheral.state == .connected {
+                delegate?.bluetoothDidConnect()
+                discoverServices()
+            }
         }
     }
 

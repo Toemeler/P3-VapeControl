@@ -4,13 +4,11 @@ import SwiftUI
 /// temperature lives behind the two buttons in the top bar.
 struct ControlView: View {
     @EnvironmentObject var viewModel: PaxDeviceViewModel
+    @EnvironmentObject var settings: AppSettings
     @Binding var showDeviceSheet: Bool
     @Binding var showScanSheet: Bool
-    @AppStorage("temperatureUnit") private var temperatureUnitRawValue = TemperatureUnit.celsius.rawValue
 
-    private var unit: TemperatureUnit {
-        TemperatureUnit(rawValue: temperatureUnitRawValue) ?? .celsius
-    }
+    private var unit: TemperatureUnit { settings.temperatureUnit }
 
     private var canSendCommands: Bool {
         viewModel.connectionState.isConnected && viewModel.paxServiceConfirmed
@@ -41,7 +39,7 @@ struct ControlView: View {
                         .frame(width: DS.Metric.statusDot, height: DS.Metric.statusDot)
                     Text(viewModel.connectionState.isConnected
                          ? (viewModel.displayName ?? "PAX")
-                         : "Not connected")
+                         : viewModel.statusHeadline)
                 }
                 .font(.system(size: 15, weight: .semibold))
                 .padding(.leading, 12)
@@ -97,7 +95,7 @@ struct ControlView: View {
     private var connectionColor: Color {
         switch viewModel.connectionState {
         case .ready:                                        return .green
-        case .scanning, .connecting,
+        case .scanning, .connecting, .waitingForDevice,
              .discoveringServices, .awaitingSerial:         return .orange
         case .error:                                        return .red
         case .idle, .disconnecting:                         return .secondary

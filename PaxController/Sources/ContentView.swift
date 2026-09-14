@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = PaxDeviceViewModel()
+    @StateObject private var settings = AppSettings.shared
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showDeviceSheet = false
     @State private var showScanSheet = false
 
@@ -14,11 +16,16 @@ struct ContentView: View {
     var body: some View {
         ControlView(showDeviceSheet: $showDeviceSheet, showScanSheet: $showScanSheet)
             .environmentObject(viewModel)
+            .environmentObject(settings)
             .sheet(isPresented: $showDeviceSheet) {
-                DeviceSheet().environmentObject(viewModel)
+                DeviceSheet()
+                    .environmentObject(viewModel)
+                    .environmentObject(settings)
             }
             .sheet(isPresented: $showScanSheet) {
-                ScanSheet().environmentObject(viewModel)
+                ScanSheet()
+                    .environmentObject(viewModel)
+                    .environmentObject(settings)
             }
             .tint(DS.Palette.accent)
             .onAppear {
@@ -27,6 +34,11 @@ struct ContentView: View {
                 case "scan":   showScanSheet = true
                 default:       break
                 }
+            }
+            .onChange(of: scenePhase) { phase in
+                // A background reconnect can only *update* a Live Activity, never
+                // start one, so retry the start whenever we are foregrounded.
+                if phase == .active { viewModel.refreshLiveActivity() }
             }
     }
 }

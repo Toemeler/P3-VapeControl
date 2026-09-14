@@ -4,18 +4,20 @@ import SwiftUI
 /// in a while from the gear button, so it is a sheet rather than a tab.
 struct DeviceSheet: View {
     @EnvironmentObject var viewModel: PaxDeviceViewModel
+    @EnvironmentObject var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("temperatureUnit") private var temperatureUnitRawValue = TemperatureUnit.celsius.rawValue
+    @State private var customColor: Color = LedColor.orange.color
 
-    private var unit: TemperatureUnit {
-        TemperatureUnit(rawValue: temperatureUnitRawValue) ?? .celsius
-    }
+    private var unit: TemperatureUnit { settings.temperatureUnit }
 
     var body: some View {
         NavigationStack {
             List {
                 statusSection
+                ledColorSection
                 temperatureSection
+                connectionSection
+                lockScreenSection
                 deviceSection
                 diagnosticsSection
                 if viewModel.connectionState.isConnected {
@@ -36,6 +38,7 @@ struct DeviceSheet: View {
                 }
             }
         }
+        .onAppear { customColor = settings.ledColor.color }
     }
 
     // MARK: - Sections
@@ -78,14 +81,130 @@ struct DeviceSheet: View {
 
     private var temperatureSection: some View {
         Section("Temperature") {
-            Picker("Units", selection: $temperatureUnitRawValue) {
-                Text("°C").tag(TemperatureUnit.celsius.rawValue)
-                Text("°F").tag(TemperatureUnit.fahrenheit.rawValue)
+            Picker("Units", selection: $settings.temperatureUnit) {
+                Text("°C").tag(TemperatureUnit.celsius)
+                Text("°F").tag(TemperatureUnit.fahrenheit)
             }
             .pickerStyle(.segmented)
+            .onChange(of: settings.temperatureUnit) { _ in
+                viewModel.refreshLiveActivity()
+            }
             if let target = viewModel.targetTempC {
                 row("On device", value: unit.format(target, decimals: 1))
             }
+        }
+    }
+
+    // MARK: - LED color
+
+    private var ledColorSection: some View {
+        Section {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 12) {
+                ForEach(LedColor.presets) { preset in
+                    swatch(preset)
+                }
+            }
+            .padding(.vertical, 4)
+
+            ColorPicker("Custom", selection: $customColor, supportsOpacity: false)
+                .onChange(of: customColor) { newValue in
+                    guard let picked = LedColor.fromColor(newValue),
+                          picked.hex != settings.ledColorHex else { return }
+                    viewModel.applyLedColor(picked)
+                }
+
+            Toggle("Also set the PAX's own LEDs", isOn: $settings.pushColorToDevice)
+            if settings.pushColorToDevice {
+                Button("Send color to device now") {
+                    viewModel.applyLedColor(settings.ledColor)
+                }
+                .disabled(!viewModel.connectionState.isConnected)
+            }
+        } header: {
+            Text("LED Color")
+        } footer: {
+            Text("Colors the dial, chips and buttons. Sending it to the PAX itself is experimental: the ShellColor command is not publicly documented, so the app writes a best-guess payload that the device may ignore — check Diagnostics to see whether it is acknowledged.")
+        }
+    }
+
+    private func swatch(_ preset: LedColor) -> some View {
+        let isSelected = preset.hex == settings.ledColorHex
+        return Button {
+            customColor = preset.color
+            viewModel.applyLedColor(preset)
+        } label: {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(preset.color)
+                        .frame(width: 38, height: 38)
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(preset.isLight ? Color.black : Color.white)
+                    }
+                }
+                .overlay(
+                    Circle()
+                        .stroke(isSelected ? Color.primary : Color.clear, lineWidth: 2)
+                        .frame(width: 44, height: 44)
+                )
+                Text(preset.name)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(preset.name)
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+
+    // MARK: - Connection
+
+    private var connectionSection: some View {
+        Section {
+            Toggle("Reconnect automatically", isOn: $settings.autoConnectEnabled)
+                .onChange(of: settings.autoConnectEnabled) { enabled in
+                    if enabled { viewModel.attemptAutoConnect() }
+                }
+            if let name = viewModel.rememberedDeviceName {
+                row("Remembered", value: name)
+                Button("Forget this device", role: .destructive) {
+                    viewModel.forgetRememberedDevice()
+                }
+            }
+        } header: {
+            Text("Auto-Connect")
+        } footer: {
+            Text("Reconnects on its own whenever the PAX is in range, including while the app is in the background or has been closed by iOS. It cannot reconnect after you force-quit the app from the App Switcher — iOS blocks Bluetooth for every app that was force-quit until it is opened again.")
+        }
+    }
+
+    // MARK: - Lock screen
+
+    private var lockScreenSection: some View {
+        Section {
+            Toggle("Show on Lock Screen", isOn: $settings.liveActivityEnabled)
+                .onChange(of: settings.liveActivityEnabled) { enabled in
+                    if enabled {
+                        viewModel.refreshLiveActivity()
+                    } else {
+                        viewModel.endLiveActivity()
+                    }
+                }
+            if !LiveActivityController.shared.areActivitiesEnabled {
+                Label("Live Activities are turned off for this app in iOS Settings.",
+                      systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        } header: {
+            Text("Lock Screen")
+        } footer: {
+            Text("Keeps a live status card on the Lock Screen and in the Dynamic Island while the PAX is connected or charging. The card stays up after a disconnect so it can light back up when the device returns.")
         }
     }
 
