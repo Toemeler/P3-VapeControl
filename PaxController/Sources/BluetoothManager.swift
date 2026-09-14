@@ -6,7 +6,9 @@ import CryptoKit
 
 struct ScannedDevice: Identifiable, Equatable {
     let id: UUID
-    let peripheral: CBPeripheral
+    // Optional so the demo fixture can stand in without a real radio; every
+    // real scan result still carries its peripheral.
+    let peripheral: CBPeripheral?
     let name: String
     let rssi: Int
 
@@ -68,8 +70,9 @@ final class BluetoothManager: NSObject {
     // MARK: - connect() / disconnect()
 
     func connect(to device: ScannedDevice) {
-        connectedPeripheral = device.peripheral
-        centralManager.connect(device.peripheral, options: nil)
+        guard let peripheral = device.peripheral else { return }
+        connectedPeripheral = peripheral
+        centralManager.connect(peripheral, options: nil)
     }
 
     func disconnect() {

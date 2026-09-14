@@ -111,7 +111,7 @@ struct DeviceRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(device.name)
                     .font(.headline)
-                Text(device.peripheral.identifier.uuidString)
+                Text(device.id.uuidString)
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
