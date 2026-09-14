@@ -278,6 +278,12 @@ jobs:
           VERSION="${BASE}.${{ github.run_number }}"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$PLIST"
+          # The embedded Live Activity extension has to carry the same version
+          # as its host app: iOS refuses to install a bundle whose nested
+          # extension versions disagree.
+          EXT_PLIST=PaxController/LiveActivity/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$EXT_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$EXT_PLIST"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building version $VERSION"
 

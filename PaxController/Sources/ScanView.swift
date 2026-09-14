@@ -5,11 +5,7 @@ struct ScanView: View {
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                statusBanner
-                deviceList
-
-            }
+            deviceList
             .navigationTitle("Devices")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -28,21 +24,6 @@ struct ScanView: View {
     }
 
     // MARK: - Subviews
-
-    private var statusBanner: some View {
-        HStack {
-            Circle()
-                .fill(stateColor)
-                .frame(width: 10, height: 10)
-            Text(viewModel.connectionState.displayString)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color(.secondarySystemBackground))
-    }
 
     private var scanButton: some View {
         Group {
@@ -86,23 +67,13 @@ struct ScanView: View {
         }
     }
 
-    private var stateColor: Color {
-        switch viewModel.connectionState {
-        case .idle:                 return .gray
-        case .scanning:             return .blue
-        case .connecting,
-             .discoveringServices,
-             .awaitingSerial:       return .orange
-        case .ready:                return .green
-        case .disconnecting:        return .yellow
-        case .error:                return .red
-        }
-    }
 }
 
 // MARK: - Device Row
 
 struct DeviceRow: View {
+    @EnvironmentObject var settings: AppSettings
+
     let device: ScannedDevice
     let onConnect: () -> Void
 
@@ -124,7 +95,7 @@ struct DeviceRow: View {
                 Button("Connect") { onConnect() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .tint(.orange)
+                    .tint(settings.ledColor.color)
             }
         }
         .padding(.vertical, 4)

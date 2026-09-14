@@ -8,6 +8,10 @@ import Combine
 enum ConnectionState: Equatable {
     case idle
     case scanning
+    /// A pending, timeout-free connect is armed for a known device. iOS holds
+    /// it until the PAX shows up, which may be seconds or hours — deliberately
+    /// distinct from `.connecting`, which is an exchange already underway.
+    case waitingForDevice
     case connecting
     case discoveringServices
     case awaitingSerial
@@ -19,6 +23,7 @@ enum ConnectionState: Equatable {
         switch self {
         case .idle:                 return "Idle"
         case .scanning:             return "Scanning…"
+        case .waitingForDevice:     return "Waiting for PAX…"
         case .connecting:           return "Connecting…"
         case .discoveringServices:  return "Discovering services…"
         case .awaitingSerial:       return "Reading serial number…"
@@ -93,12 +98,19 @@ final class PaxDeviceViewModel: ObservableObject {
     // MARK: Debug log
     @Published var debugLog: [DebugEntry] = []
 
+    // MARK: Remembered device (auto-connect)
+    @Published private(set) var rememberedDeviceName: String?
+
     // MARK: Private
     private let bluetooth = BluetoothManager()
+    private let settings = AppSettings.shared
     private var sessionKey: SymmetricKey?
     private var serialReady = false
     private var pendingCommands: [() throws -> Void] = []
     private var pollTimer: AnyCancellable?
+    /// Distinguishes "the user tapped Disconnect" from "the device went away",
+    /// because only the latter should re-arm the auto-reconnect.
+    private var userInitiatedDisconnect = false
 
     /// Screenshot fixture switch. Launch arguments land in UserDefaults'
     /// argument domain, so this is unreachable in normal use - nothing in the
@@ -107,6 +119,7 @@ final class PaxDeviceViewModel: ObservableObject {
 
     init() {
         bluetooth.delegate = self
+        rememberedDeviceName = Self.storedDeviceName
         // The simulator has no Bluetooth radio, so the screenshot workflow
         // launches with `-uiDemo YES` to fill in a plausible connected device.
         if demoMode {
@@ -174,9 +187,137 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     func disconnect() {
+        userInitiatedDisconnect = true
         connectionState = .disconnecting
         bluetooth.disconnect()
+        LiveActivityController.shared.end()
         log("Disconnecting…", level: .info)
+    }
+
+    // MARK: - Auto-connect
+
+    private static let deviceIDKey   = "lastDeviceIdentifier"
+    private static let deviceNameKey = "lastDeviceName"
+
+    private static var storedDeviceID: UUID? {
+        UserDefaults.standard.string(forKey: deviceIDKey).flatMap(UUID.init(uuidString:))
+    }
+
+    private static var storedDeviceName: String? {
+        UserDefaults.standard.string(forKey: deviceNameKey)
+    }
+
+    /// Re-issues a connect for the last device we successfully paired with.
+    /// CoreBluetooth connects have **no timeout**: iOS keeps the request
+    /// pending at the controller level and completes it whenever the PAX comes
+    /// into range — including while the app is backgrounded, or after iOS has
+    /// terminated and relaunched it via state restoration. This, not scanning,
+    /// is what makes background reconnection work.
+    func attemptAutoConnect() {
+        guard settings.autoConnectEnabled else { return }
+        guard !connectionState.isConnected, !demoMode else { return }
+        guard let id = Self.storedDeviceID else { return }
+
+        guard let device = bluetooth.autoConnect(toKnownIdentifier: id) else {
+            log("Auto-connect: iOS no longer knows device \(id) — scan once to re-pair", level: .warn)
+            return
+        }
+        connectionState = .waitingForDevice
+        log("Auto-connect armed for \(device.name) — will connect whenever it is in range", level: .info)
+        refreshLiveActivity()
+    }
+
+    func forgetRememberedDevice() {
+        UserDefaults.standard.removeObject(forKey: Self.deviceIDKey)
+        UserDefaults.standard.removeObject(forKey: Self.deviceNameKey)
+        rememberedDeviceName = nil
+        bluetooth.cancelPendingConnect()
+        if !connectionState.isConnected { connectionState = .idle }
+        LiveActivityController.shared.end()
+        log("Forgot the remembered device — auto-connect disarmed", level: .info)
+    }
+
+    private func rememberCurrentDevice() {
+        guard let id = bluetooth.connectedPeripheral?.identifier else { return }
+        let name = displayName ?? modelNumber ?? "PAX"
+        UserDefaults.standard.set(id.uuidString, forKey: Self.deviceIDKey)
+        UserDefaults.standard.set(name, forKey: Self.deviceNameKey)
+        rememberedDeviceName = name
+        log("Remembered \(name) for auto-connect", level: .info)
+    }
+
+    // MARK: - LED color
+
+    /// Applies the chosen color to the app's accent and, when enabled, tries to
+    /// push it to the PAX itself. The device-side payload format is unconfirmed
+    /// (protocol-notes.md lists ShellColor as "Unknown"), so the outcome is
+    /// logged to the Debug Console rather than surfaced as a guaranteed result.
+    func applyLedColor(_ color: LedColor) {
+        settings.ledColorHex = color.hex
+        refreshLiveActivity()
+        guard settings.pushColorToDevice else { return }
+        guard connectionState.isConnected else {
+            log("LED color saved — will be sent to the device on next connect", level: .info)
+            return
+        }
+        sendLedColorToDevice(color)
+    }
+
+    private func sendLedColorToDevice(_ color: LedColor) {
+        enqueue {
+            let packet = PaxPacket.setShellColor(red: color.red, green: color.green, blue: color.blue)
+            try self.sendPacket(packet)
+            self.log("Sent experimental ShellColor \(color.hex) — payload format unconfirmed, watch for an ACK or an error below",
+                     level: .tx)
+        }
+    }
+
+    // MARK: - Live Activity
+
+    /// Headline shown on the Lock Screen card and in the in-app banner.
+    var statusHeadline: String {
+        guard connectionState.isConnected else {
+            switch connectionState {
+            case .connecting, .discoveringServices, .awaitingSerial:
+                return "Connecting…"
+            case .scanning:
+                return "Scanning…"
+            case .waitingForDevice:
+                return "Waiting for PAX…"
+            case .error(let msg):
+                return msg
+            default:
+                return Self.storedDeviceID != nil ? "Waiting for PAX…" : "Not connected"
+            }
+        }
+        if isCharging == true {
+            return (batteryLevel ?? 0) >= 100 ? "Charged" : "Charging"
+        }
+        if let state = heatingState { return state.description }
+        return "Connected"
+    }
+
+    func refreshLiveActivity() {
+        guard settings.liveActivityEnabled, !demoMode else { return }
+        let state = PaxActivityAttributes.ContentState(
+            isConnected: connectionState.isConnected,
+            headline: statusHeadline,
+            batteryLevel: batteryLevel,
+            isCharging: isCharging ?? false,
+            // Rounded because the card renders whole degrees: without this the
+            // 0.1° poll jitter would push a Live Activity update every 3 s and
+            // burn through the system's update budget for nothing.
+            actualTempC: actualTempC?.rounded(),
+            targetTempC: targetTempC?.rounded(),
+            ledColorHex: settings.ledColorHex,
+            useFahrenheit: settings.useFahrenheit)
+        LiveActivityController.shared.sync(
+            deviceName: displayName ?? rememberedDeviceName ?? "PAX",
+            state: state)
+    }
+
+    func endLiveActivity() {
+        LiveActivityController.shared.end()
     }
 
     func requestFullStatus() {
@@ -317,15 +458,22 @@ final class PaxDeviceViewModel: ObservableObject {
         default:
             break
         }
+        refreshLiveActivity()
     }
 
     private func checkReady() {
         guard paxServiceConfirmed, serialReady else { return }
         log("PAX service confirmed + serial ready — entering ready state", level: .info)
         connectionState = .ready
+        userInitiatedDisconnect = false
+        rememberCurrentDevice()
         flushPendingCommands()
         requestFullStatus()
+        if settings.pushColorToDevice {
+            sendLedColorToDevice(settings.ledColor)
+        }
         startPolling()
+        refreshLiveActivity()
     }
 
     private func startPolling() {
@@ -417,6 +565,23 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
         }
         connectionState = .idle
         resetDeviceState()
+
+        if userInitiatedDisconnect {
+            userInitiatedDisconnect = false
+            LiveActivityController.shared.end()
+            return
+        }
+        // The device went away on its own (powered off, walked out of range).
+        // Re-arm the pending connect so iOS brings it back automatically, and
+        // leave the Lock Screen card up showing "Waiting for PAX…" — ending it
+        // here would be unrecoverable, since a background reconnect is allowed
+        // to update an activity but never to start one.
+        attemptAutoConnect()
+        refreshLiveActivity()
+    }
+
+    func bluetoothReadyForAutoConnect() {
+        attemptAutoConnect()
     }
 
     func bluetoothDiscoveredService(_ uuid: CBUUID) {

@@ -30,7 +30,6 @@ struct DebugConsoleView: View {
                         Image(systemName: "arrow.down.to.line")
                     }
                     .toggleStyle(.button)
-                    .tint(.orange)
                     .help("Auto-scroll")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -142,6 +141,8 @@ struct ShareSheet: UIViewControllerRepresentable {
 // MARK: - Filter Chip
 
 struct FilterChip: View {
+    @EnvironmentObject var settings: AppSettings
+
     let label: String
     let isActive: Bool
     let action: () -> Void
@@ -152,7 +153,7 @@ struct FilterChip: View {
                 .font(.caption)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(isActive ? Color.orange : Color(.tertiarySystemBackground))
+                .background(isActive ? settings.ledColor.color : Color(.tertiarySystemBackground))
                 .foregroundColor(isActive ? .white : .primary)
                 .cornerRadius(8)
         }

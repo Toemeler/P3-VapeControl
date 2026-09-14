@@ -1,31 +1,10 @@
 import SwiftUI
 
-private enum TemperatureUnit: String {
-    case celsius
-    case fahrenheit
-
-    var symbol: String {
-        switch self {
-        case .celsius: return "°C"
-        case .fahrenheit: return "°F"
-        }
-    }
-
-    func convert(celsius: Double) -> Double {
-        switch self {
-        case .celsius: return celsius
-        case .fahrenheit: return (celsius * 9 / 5) + 32
-        }
-    }
-}
-
 struct DeviceView: View {
     @EnvironmentObject var viewModel: PaxDeviceViewModel
-    @AppStorage("temperatureUnit") private var temperatureUnitRawValue = TemperatureUnit.celsius.rawValue
+    @EnvironmentObject var settings: AppSettings
 
-    private var temperatureUnit: TemperatureUnit {
-        TemperatureUnit(rawValue: temperatureUnitRawValue) ?? .celsius
-    }
+    private var accent: Color { settings.ledColor.color }
 
     var body: some View {
         NavigationView {
@@ -40,16 +19,15 @@ struct DeviceView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        temperatureUnitRawValue = temperatureUnit == .celsius
-                            ? TemperatureUnit.fahrenheit.rawValue
-                            : TemperatureUnit.celsius.rawValue
+                        settings.useFahrenheit.toggle()
+                        viewModel.refreshLiveActivity()
                     } label: {
-                        Text(temperatureUnit.symbol)
+                        Text(settings.useFahrenheit ? "°F" : "°C")
                             .fontWeight(.semibold)
                             .monospacedDigit()
                     }
                     .accessibilityLabel("Temperature unit")
-                    .accessibilityValue(temperatureUnit == .celsius ? "Celsius" : "Fahrenheit")
+                    .accessibilityValue(settings.useFahrenheit ? "Fahrenheit" : "Celsius")
                     .accessibilityHint("Switches between Celsius and Fahrenheit")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -247,7 +225,7 @@ struct DeviceView: View {
                     Text(formattedTemperature(180, decimals: 0))
                         .font(.caption2).foregroundColor(.secondary)
                     Slider(value: $viewModel.customTargetTempC, in: 180...215, step: 1)
-                        .accentColor(.orange)
+                        .accentColor(accent)
                         .disabled(!viewModel.paxServiceConfirmed)
                     Text(formattedTemperature(215, decimals: 0))
                         .font(.caption2).foregroundColor(.secondary)
@@ -258,7 +236,7 @@ struct DeviceView: View {
                     Text(formattedTemperature(viewModel.customTargetTempC, decimals: 0))
                         .font(.title2.monospacedDigit())
                         .fontWeight(.semibold)
-                        .foregroundColor(.orange)
+                        .foregroundColor(accent)
                     Spacer()
                     if let t = viewModel.targetTempC {
                         VStack(alignment: .trailing, spacing: 1) {
@@ -277,7 +255,7 @@ struct DeviceView: View {
                             .font(.subheadline.weight(.semibold))
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .background(viewModel.paxServiceConfirmed ? Color.orange : Color(.quaternarySystemFill))
+                            .background(viewModel.paxServiceConfirmed ? accent : Color(.quaternarySystemFill))
                             .foregroundColor(viewModel.paxServiceConfirmed ? .white : .secondary)
                             .cornerRadius(10)
                     }
@@ -295,7 +273,7 @@ struct DeviceView: View {
                                 .font(.caption.monospacedDigit())
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(viewModel.selectedPreset == preset ? Color.orange : Color(.tertiarySystemBackground))
+                                .background(viewModel.selectedPreset == preset ? accent : Color(.tertiarySystemBackground))
                                 .foregroundColor(viewModel.selectedPreset == preset ? .white : .primary)
                                 .cornerRadius(8)
                         }
@@ -440,8 +418,8 @@ struct DeviceView: View {
     }
 
     private func formattedTemperature(_ celsius: Double, decimals: Int) -> String {
-        let converted = temperatureUnit.convert(celsius: celsius)
-        return String(format: "%.\(decimals)f%@", converted, temperatureUnit.symbol)
+        let converted = settings.useFahrenheit ? (celsius * 9 / 5) + 32 : celsius
+        return String(format: "%.\(decimals)f%@", converted, settings.useFahrenheit ? "°F" : "°C")
     }
 }
 
@@ -467,45 +445,17 @@ struct CardView<Content: View>: View {
     }
 }
 
-// MARK: - Temp Preset Button
-
-struct TempPresetButton: View {
-    let preset: PaxPresetTemp
-    let isActive: Bool
-    var disabled: Bool = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 2) {
-                Text(preset.label)
-                    .font(.title3.monospacedDigit())
-                    .fontWeight(isActive ? .bold : .regular)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(disabled ? Color(.quaternarySystemFill)
-                        : isActive ? Color.orange : Color(.tertiarySystemBackground))
-            .foregroundColor(disabled ? .secondary : isActive ? .white : .primary)
-            .cornerRadius(10)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isActive && !disabled ? Color.orange : Color.clear, lineWidth: 2)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-    }
-}
-
 // MARK: - Dynamic Mode Button
 
 struct DynamicModeButton: View {
+    @EnvironmentObject var settings: AppSettings
+
     let mode: PaxDynamicMode
     let isActive: Bool
     let action: () -> Void
 
     var body: some View {
+        let accent = settings.ledColor.color
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: mode.icon)
@@ -517,12 +467,12 @@ struct DynamicModeButton: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(isActive ? Color.orange : Color(.tertiarySystemBackground))
+            .background(isActive ? accent : Color(.tertiarySystemBackground))
             .foregroundColor(isActive ? .white : .primary)
             .cornerRadius(10)
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(isActive ? Color.orange : Color.clear, lineWidth: 2)
+                    .stroke(isActive ? accent : Color.clear, lineWidth: 2)
             )
         }
         .buttonStyle(.plain)

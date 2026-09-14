@@ -27,9 +27,23 @@
     <key>NSBluetoothPeripheralUsageDescription</key>
     <string>This app needs Bluetooth access to communicate with your vaporizer device.</string>
 
-    <!-- Supported iOS versions -->
+    <!-- Keeps the CoreBluetooth session (and auto-reconnect) alive while the
+         app is backgrounded or the phone is locked, and lets iOS relaunch the
+         app into the background on a BLE event via state restoration. Does
+         NOT survive the user force-quitting the app — no iOS API allows that. -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>bluetooth-central</string>
+    </array>
+
+    <!-- Live Activity (Lock Screen + Dynamic Island) support -->
+    <key>NSSupportsLiveActivities</key>
+    <true/>
+
+    <!-- Supported iOS versions. 16.2 is the floor for the non-deprecated
+         ActivityKit content API used by the Lock Screen card. -->
     <key>MinimumOSVersion</key>
-    <string>16.0</string>
+    <string>16.2</string>
 
     <key>UIRequiredDeviceCapabilities</key>
     <array>

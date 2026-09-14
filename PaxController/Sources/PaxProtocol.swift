@@ -290,6 +290,15 @@ extension PaxPacket {
     static func setDynamicMode(_ mode: PaxDynamicMode) -> PaxPacket {
         PaxPacket(type: .dynamicMode, payload: Data([mode.rawValue]))
     }
+
+    /// ShellColor (0x1C) payload format is not publicly documented (see
+    /// protocol-notes.md — "Open Uncertainties" #2/shellColor). This sends
+    /// the most commonly guessed encoding among PAX BLE reverse-engineering
+    /// projects — raw RGB bytes — on a best-effort basis; unconfirmed against
+    /// real PAX 3 firmware.
+    static func setShellColor(red: UInt8, green: UInt8, blue: UInt8) -> PaxPacket {
+        PaxPacket(type: .shellColor, payload: Data([red, green, blue]))
+    }
 }
 
 // MARK: - Parser helpers
