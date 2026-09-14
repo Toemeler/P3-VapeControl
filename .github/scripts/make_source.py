@@ -28,6 +28,10 @@ def main(out_dir):
     sha256 = os.environ["SHA256"]
 
     pages_base = f"https://{owner.lower()}.github.io/{name}"
+    raw_base = f"https://raw.githubusercontent.com/{repo}/main"
+    # Assets are referenced over raw.githubusercontent.com so the feed works
+    # before GitHub Pages is switched on for the repository.
+    icon_url = f"{raw_base}/icon.png"
     download_url = f"{server}/{repo}/releases/download/{tag}/PaxController.ipa"
     date = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -58,7 +62,7 @@ def main(out_dir):
         "developerName": owner,
         "subtitle": "Bluetooth control for the PAX 3",
         "localizedDescription": DESCRIPTION,
-        "iconURL": f"{pages_base}/icon.png",
+        "iconURL": icon_url,
         "tintColor": "FF7A1A",
         "category": "utilities",
         "screenshots": shots,
@@ -76,7 +80,7 @@ def main(out_dir):
         "identifier": f"io.github.{owner.lower()}.p3vapecontrol",
         "subtitle": "Unsigned builds of PAX Controller",
         "description": "Automated unsigned builds of the P3-VapeControl PAX 3 app.",
-        "iconURL": f"{pages_base}/icon.png",
+        "iconURL": icon_url,
         "website": f"{server}/{repo}",
         "tintColor": "FF7A1A",
         "apps": [app],
@@ -91,10 +95,16 @@ def main(out_dir):
             fh.write(payload + "\n")
 
     source_url = f"{pages_base}/s.json"
+    raw_url = f"{raw_base}/s.json"
     with open(os.path.join(out_dir, "index.html"), "w") as fh:
-        fh.write(LANDING.format(source_url=source_url, version=version, repo=repo, server=server))
+        fh.write(
+            LANDING.format(
+                source_url=source_url, raw_url=raw_url, version=version, repo=repo, server=server
+            )
+        )
 
-    print(f"source URL: {source_url}")
+    print(f"source URL (Pages): {source_url}")
+    print(f"source URL (raw):   {raw_url}")
 
 
 LANDING = """<!doctype html>
@@ -120,6 +130,8 @@ LANDING = """<!doctype html>
 <p><a class="btn" href="sidestore://source?url={source_url}">Add to SideStore</a></p>
 <p>Or paste this URL into SideStore &rarr; Sources &rarr; +:</p>
 <p><code>{source_url}</code></p>
+<p>Works without GitHub Pages too:</p>
+<p><code>{raw_url}</code></p>
 <p><a href="{server}/{repo}">Source code and releases</a></p>
 </body>
 </html>
