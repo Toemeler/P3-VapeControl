@@ -19,8 +19,11 @@ for path in "$@"; do
   cp -R "$path" "$STAGING/$(dirname "$path")/"
 done
 
+# FETCH_HEAD, not origin/main: actions/checkout configures a narrow refspec,
+# so the remote-tracking ref can be stale and resetting to it would silently
+# drop a commit another job just pushed.
 git fetch -q origin main
-git reset -q --hard origin/main
+git reset -q --hard FETCH_HEAD
 
 for path in "$@"; do
   rm -rf "$path"
