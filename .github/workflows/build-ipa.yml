@@ -1,13 +1,29 @@
-# Builds PaxController into a sideloadable (unsigned) IPA.
-# - Publishes the IPA as a GitHub Release (and as a run artifact).
-# - Publishes a SideStore/AltStore source feed to GitHub Pages so the release
-#   can be installed and updated from inside the sideloader.
+# Builds PaxController into sideloadable (unsigned) IPAs - a release build and
+# a debug build with the log console - screenshots the app in a simulator, and
+# publishes both as a GitHub Release with an inline preview.
+#
+# Also commits a SideStore/AltStore source feed so the build can be installed
+# and updated from inside the sideloader.
+#
 # Manual runs release as build-N; pushing a v* tag releases under that tag.
 
-name: Build unsigned IPA
+name: Build
 
 on:
   workflow_dispatch:
+    inputs:
+      force_screenshots:
+        description: "Recapture screenshots even when nothing changed"
+        type: boolean
+        default: false
+      refresh_shortcut:
+        description: "Re-download the auto-refresh Shortcut from iCloud"
+        type: boolean
+        default: false
+      shortcut_url:
+        description: "iCloud Shortcuts share link"
+        type: string
+        default: "https://www.icloud.com/shortcuts/3357ecb0d7fd47208271bbe4b3df71ac"
   push:
     tags:
       - "v*"
@@ -15,11 +31,180 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  # A newer build supersedes whatever is still running: they push to the same
+  # branch and cut releases from the same tag sequence.
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   screenshots:
-    # Every release ships a current preview, so this runs on each build rather
-    # than only when the app sources change.
-    uses: ./.github/workflows/simulator-screenshots.yml
+    name: Launch in simulator and screenshot
+    runs-on: macos-15
+    timeout-minutes: 40
+    outputs:
+      sha: ${{ steps.result.outputs.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Are the existing screenshots still current?
+        id: check
+        run: |
+          set -euo pipefail
+          # Fingerprint everything that can change what a screenshot looks like:
+          # the app sources, the project, and the capture script itself.
+          STAMP=$( {
+            git rev-parse HEAD:PaxController
+            git rev-parse HEAD:PaxController.xcodeproj
+            git hash-object .github/scripts/capture_screens.py
+          } | shasum -a 256 | cut -d' ' -f1 )
+          echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ inputs.force_screenshots }}" = "true" ]; then
+            echo "Forced recapture."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ -f screenshots/.stamp ] \
+            && [ "$(cat screenshots/.stamp)" = "$STAMP" ] \
+            && ls screenshots/*.png >/dev/null 2>&1; then
+            echo "Nothing that affects screenshots changed; reusing them."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Screenshots are missing or stale; recapturing."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Toolchain info
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          sw_vers
+          xcodebuild -version
+
+      - name: Build the app for the simulator
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          set -o pipefail
+          # Release configuration only: the screenshots show what a normal
+          # install looks like, and the log console is a debug-build screen.
+          .github/scripts/build_app.sh Release iphonesimulator \
+            de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee simbuild.log
+          mv build/Release-iphonesimulator/PaxController.app build/release.app
+          git checkout -- PaxController/Resources/Info.plist
+
+      - name: Pick a simulator
+        id: sim
+        if: steps.check.outputs.skip != 'true'
+        run: python3 .github/scripts/pick_simulator.py
+
+      - name: Boot simulator
+        id: boot
+        if: steps.check.outputs.skip != 'true'
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          UDID="${{ steps.sim.outputs.existing_udid }}"
+          DEVICE_TYPE="${{ steps.sim.outputs.device_type }}"
+          # A picker that emitted nothing must fail here, not later as an
+          # opaque "Invalid device type:" from simctl create.
+          if [ -z "$UDID" ] && [ -z "$DEVICE_TYPE" ]; then
+            echo "::error::pick_simulator.py produced no device"
+            exit 1
+          fi
+          if [ -z "$UDID" ]; then
+            echo "Creating ${{ steps.sim.outputs.device_name }}"
+            UDID=$(xcrun simctl create "ci-screenshots" \
+              "$DEVICE_TYPE" "${{ steps.sim.outputs.runtime }}")
+          fi
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          echo "Using simulator $UDID"
+
+          # simctl bootstatus -b hangs indefinitely on these runners, so boot
+          # without blocking and poll for the state ourselves.
+          xcrun simctl boot "$UDID" || true
+          STATE=Unknown
+          for _ in $(seq 1 90); do
+            STATE=$(python3 .github/scripts/simctl_helper.py state "$UDID")
+            [ "$STATE" = "Booted" ] && break
+            sleep 5
+          done
+          if [ "$STATE" != "Booted" ]; then
+            echo "::error::simulator never reached Booted (last state: $STATE)"
+            exit 1
+          fi
+
+          xcrun simctl status_bar "$UDID" override \
+            --time "09:41" --batteryState charged --batteryLevel 100 \
+            --cellularMode active --cellularBars 4 --wifiMode active --wifiBars 3 || true
+
+      - name: Capture the app's screens
+        if: steps.check.outputs.skip != 'true'
+        timeout-minutes: 20
+        env:
+          UDID: ${{ steps.boot.outputs.udid }}
+        run: |
+          set -euo pipefail
+          rm -rf screenshots
+          python3 .github/scripts/capture_screens.py \
+            "$UDID" build/release.app de.marcomeissner.PaxController \
+            screenshots scan:0 device:1
+          ls -lh screenshots
+
+      - name: Commit screenshots
+        if: steps.check.outputs.skip != 'true'
+        env:
+          DEVICE: ${{ steps.sim.outputs.device_name }}
+          RUNTIME: ${{ steps.sim.outputs.runtime_name }}
+        run: |
+          set -euo pipefail
+          echo "${{ steps.check.outputs.stamp }}" > screenshots/.stamp
+          printf '%s\n' \
+            "# Simulator screenshots" \
+            "" \
+            "Captured automatically by the \`Simulator screenshots\` workflow." \
+            "" \
+            "- Device: $DEVICE" \
+            "- Runtime: $RUNTIME" \
+            "- Run: ${{ github.run_id }}" \
+            "" \
+            "The simulator has no Bluetooth radio, so the app shows its" \
+            "disconnected state. These confirm the app builds, launches and" \
+            "renders; they do not exercise the PAX connection." \
+            > screenshots/README.md
+
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          git add -A screenshots
+          if git diff --cached --quiet; then
+            echo "screenshots unchanged"
+          else
+            git commit -m "Update simulator screenshots (run ${{ github.run_id }})"
+            # Another run may have landed first; rebase rather than fail the job.
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Report the commit the screenshots live in
+        id: result
+        run: |
+          set -euo pipefail
+          # Release notes embed the images by raw URL pinned to this commit, so
+          # an old release keeps showing the screens it shipped with.
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload screenshots as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-screenshots
+          path: screenshots
+          if-no-files-found: error
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-build-log
+          path: simbuild.log
+          if-no-files-found: ignore
 
   build-ipa:
     name: Build PaxController for iOS
@@ -124,7 +309,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           SOURCE_URL: ${{ steps.feed.outputs.source_url }}
           SHORTCUT_URL: ${{ vars.SHORTCUT_URL }}
-          SCREENSHOT_SHA: ${{ needs.screenshots.outputs.screenshots_sha }}
+          SCREENSHOT_SHA: ${{ needs.screenshots.outputs.sha }}
           IPA_SIZE: ${{ steps.package.outputs.human_size }}
         run: |
           set -euo pipefail
@@ -135,6 +320,15 @@ jobs:
             --repo "${{ github.repository }}" \
             --title "${{ steps.tag.outputs.title }}" \
             --notes-file notes.md
+
+      - name: Refresh the archived shortcut
+        # Off by default: the committed file is what users get, and iCloud is
+        # not a dependency the release build should have.
+        if: inputs.refresh_shortcut
+        run: |
+          python3 .github/scripts/fetch_shortcut.py \
+            "${{ inputs.shortcut_url }}" \
+            shortcut/RefreshApps.shortcut
 
       - name: Commit source feed
         # Committed rather than deployed with actions/deploy-pages: the Actions
@@ -152,6 +346,7 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           git add s.json apps.json icon.png index.html
+          git add shortcut || true
           if git diff --cached --quiet; then
             echo "source feed unchanged"
             exit 0
