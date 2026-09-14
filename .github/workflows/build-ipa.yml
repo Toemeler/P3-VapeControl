@@ -136,9 +136,12 @@ jobs:
             exit 1
           fi
 
-          # No status_bar override: on this runtime it paints a second copy of
-          # the wifi and battery glyphs over the tab bar, which shows up in the
-          # release preview.
+          # Clear any status bar override left on this device by an earlier
+          # run: simulators persist between runs, and a stale override paints a
+          # second copy of the wifi and battery glyphs over the tab bar, which
+          # then shows up in the release preview. Removing the override call
+          # alone does not undo one that was already set.
+          xcrun simctl status_bar "$UDID" clear || true
 
       - name: Capture the app's screens
         if: steps.check.outputs.skip != 'true'
