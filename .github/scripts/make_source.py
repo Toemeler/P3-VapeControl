@@ -78,8 +78,10 @@ def main(out_dir):
     source = {
         "name": "P3 VapeControl",
         "identifier": f"io.github.{owner.lower()}.p3vapecontrol",
-        "subtitle": "Unsigned builds of PAX Controller",
-        "description": "Automated unsigned builds of the P3-VapeControl PAX 3 app.",
+        "subtitle": "Bluetooth control for the PAX 3",
+        # Shown as "About" in SideStore, so it describes the app rather than
+        # how the builds are produced.
+        "description": DESCRIPTION,
         "iconURL": icon_url,
         "website": f"{server}/{repo}",
         "tintColor": "FF7A1A",
