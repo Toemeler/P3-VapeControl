@@ -45,10 +45,9 @@ Free Apple ID is enough. Apps signed with one expire after 7 days — see **Auto
 
 <br>
 
-Add [**AutoRefreshApps.shortcut**]({shortcut_url}) and run it daily via *Shortcuts → Automation*. It calls SideStore's refresh before the signature runs out.
+Add [**AutoRefreshApps.shortcut**]({shortcut_url}).
 
 - Needs **iOS 27 or later**. Older iOS: refresh by hand in SideStore.
-- Will not import? Turn on *Settings → Shortcuts → Allow Untrusted Shortcuts*.
 
 </details>
 
