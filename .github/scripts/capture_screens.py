@@ -121,16 +121,19 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
 
     install(udid, app_path)
-    run(["xcrun", "simctl", "ui", udid, "appearance", "light"], timeout=60,
-        check=False, fatal=False)
 
     for index, (name, tab) in enumerate(tabs, start=1):
         launch(udid, bundle_id, tab)
-        path = os.path.join(out_dir, f"{index:02d}-{name}.png")
-        run(["xcrun", "simctl", "io", udid, "screenshot", path], timeout=90)
-        print(f"captured {path}", flush=True)
+        for appearance in ("light", "dark"):
+            run(["xcrun", "simctl", "ui", udid, "appearance", appearance],
+                timeout=60, check=False, fatal=False)
+            time.sleep(2)
+            suffix = "" if appearance == "light" else "-dark"
+            path = os.path.join(out_dir, f"{index:02d}-{name}{suffix}.png")
+            run(["xcrun", "simctl", "io", udid, "screenshot", path], timeout=90)
+            print(f"captured {path}", flush=True)
 
-    print(f"{len(tabs)} screenshots written to {out_dir}", flush=True)
+    print(f"{len(tabs) * 2} screenshots written to {out_dir}", flush=True)
 
 
 if __name__ == "__main__":

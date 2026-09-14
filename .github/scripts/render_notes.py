@@ -27,6 +27,23 @@ TAB_TITLES = {"scan": "Scan", "device": "Device"}
 SHORTCUT_PATH = "shortcut/AutoRefreshApps.shortcut"
 THUMB_WIDTH = 230
 
+def picture(base_url, index, name, width):
+    """Pair the light and dark shots so GitHub serves the matching one.
+
+    <picture> with a prefers-color-scheme source is the only way to switch
+    images on GitHub - release notes and READMEs run no scripts, so a real
+    toggle button is not possible.
+    """
+    light = f"{base_url}/{index:02d}-{name}.png"
+    dark = f"{base_url}/{index:02d}-{name}-dark.png"
+    return (
+        "<picture>"
+        f'<source media="(prefers-color-scheme: dark)" srcset="{dark}">'
+        f'<img src="{light}" width="{width}" alt="{name} screen">'
+        "</picture>"
+    )
+
+
 def parse(filename):
     """01-scan.png -> (1, 'scan')"""
     match = re.match(r"(\d+)-([a-z]+)\.png$", filename)
@@ -48,9 +65,7 @@ def gallery(base_url, shots_dir):
         for _, name in shots
     )
     images = "".join(
-        f'<td align="center">'
-        f'<img src="{base_url}/{index:02d}-{name}.png" '
-        f'width="{THUMB_WIDTH}" alt="{name} screen"></td>'
+        f'<td align="center">{picture(base_url, index, name, THUMB_WIDTH)}</td>'
         for index, name in shots
     )
     table = f"<table>\n<tr>{headers}</tr>\n<tr>{images}</tr>\n</table>"

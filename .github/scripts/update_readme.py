@@ -17,6 +17,23 @@ TITLES = {"scan": "Scan", "device": "Device"}
 WIDTH = 230
 
 
+def picture(index, name, width):
+    """Pair the light and dark shots so GitHub serves the matching one.
+
+    <picture> with a prefers-color-scheme source is the only way to switch
+    images on GitHub - release notes and READMEs run no scripts, so a real
+    toggle button is not possible.
+    """
+    light = f"screenshots/{index:02d}-{name}.png"
+    dark = f"screenshots/{index:02d}-{name}-dark.png"
+    return (
+        "<picture>"
+        f'<source media="(prefers-color-scheme: dark)" srcset="{dark}">'
+        f'<img src="{light}" width="{width}" alt="{name} screen">'
+        "</picture>"
+    )
+
+
 def block():
     if not os.path.isdir("screenshots"):
         return ""
@@ -24,7 +41,7 @@ def block():
     for name in sorted(os.listdir("screenshots")):
         match = re.match(r"(\d+)-([a-z]+)\.png$", name)
         if match:
-            shots.append((name, match.group(2)))
+            shots.append((int(match.group(1)), match.group(2)))
     if not shots:
         return ""
 
@@ -32,8 +49,8 @@ def block():
         f'<td align="center"><b>{TITLES.get(tab, tab.title())}</b></td>' for _, tab in shots
     )
     images = "".join(
-        f'<td align="center"><img src="screenshots/{name}" width="{WIDTH}" alt="{tab} screen"></td>'
-        for name, tab in shots
+        f'<td align="center">{picture(index, tab, WIDTH)}</td>'
+        for index, tab in shots
     )
     return (
         '<div align="center">\n\n'
