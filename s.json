@@ -1,0 +1,40 @@
+{
+  "name": "P3 VapeControl",
+  "identifier": "io.github.toemeler.p3vapecontrol",
+  "subtitle": "Unsigned builds of PAX Controller",
+  "description": "Automated unsigned builds of the P3-VapeControl PAX 3 app.",
+  "iconURL": "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/icon.png",
+  "website": "https://github.com/Toemeler/P3-VapeControl",
+  "tintColor": "FF7A1A",
+  "apps": [
+    {
+      "name": "PAX Controller",
+      "bundleIdentifier": "de.marcomeissner.PaxController",
+      "developerName": "Toemeler",
+      "subtitle": "Bluetooth control for the PAX 3",
+      "localizedDescription": "Monitor and control a PAX 3 vaporizer over Bluetooth: battery level, heating state, live temperature readout and four oven presets (180/193/204/215 C).\n\nIndependent tool, not affiliated with or endorsed by PAX Labs. Based on P3-VapeControl by selfmeister.",
+      "iconURL": "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/icon.png",
+      "tintColor": "FF7A1A",
+      "category": "utilities",
+      "screenshots": [],
+      "versions": [
+        {
+          "version": "1.0.4",
+          "buildVersion": "4",
+          "date": "2026-09-14T16:01:42Z",
+          "localizedDescription": "Automated build build-4.",
+          "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/build-4/PaxController.ipa",
+          "size": 225393,
+          "sha256": "e402949d66d5de6b0794af7c069129cd64a433caaf83cfab6f29f7dfa60b0e10",
+          "minOSVersion": "16.0"
+        }
+      ],
+      "version": "1.0.4",
+      "versionDate": "2026-09-14T16:01:42Z",
+      "versionDescription": "Automated build build-4.",
+      "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/build-4/PaxController.ipa",
+      "size": 225393
+    }
+  ],
+  "news": []
+}
