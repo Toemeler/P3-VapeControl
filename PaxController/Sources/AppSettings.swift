@@ -8,7 +8,8 @@ final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
     private enum Key {
-        static let ledColor        = "ledColorHex"
+        /// Shared with `LedColor.current`, which reads it without actor isolation.
+        static let ledColor        = LedColor.defaultsKey
         static let pushColor       = "pushLedColorToDevice"
         static let autoConnect     = "autoConnectEnabled"
         static let liveActivity    = "liveActivityEnabled"

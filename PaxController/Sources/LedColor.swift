@@ -23,6 +23,18 @@ struct LedColor: Identifiable, Equatable {
 
     static let orange = LedColor(name: "Orange", red: 0xFF, green: 0x6A, blue: 0x00)
 
+    /// Where `AppSettings` persists the choice.
+    static let defaultsKey = "ledColorHex"
+
+    /// The current choice, read straight from UserDefaults rather than through
+    /// `AppSettings`. `DS.Palette.accent` is a plain static with no actor
+    /// isolation, so it cannot touch a main-actor-isolated property; reading
+    /// the defaults directly keeps the palette usable from any context. Views
+    /// still re-render on a change because they observe `AppSettings`.
+    static var current: LedColor {
+        UserDefaults.standard.string(forKey: defaultsKey).flatMap(fromHex) ?? .orange
+    }
+
     static let presets: [LedColor] = [
         .orange,
         LedColor(name: "Red",    red: 0xE5, green: 0x1F, blue: 0x1F),
