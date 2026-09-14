@@ -53,11 +53,15 @@ jobs:
         run: |
           set -euo pipefail
           # Fingerprint everything that can change what a screenshot looks like:
-          # the app sources, the project, and the capture script itself.
+          # the app sources, the project, the capture script, and this job's own
+          # steps - a change like dropping the status bar override lives here,
+          # not in the script. Only this job's slice of the file is hashed, so
+          # editing the release notes or packaging does not force a recapture.
           STAMP=$( {
             git rev-parse HEAD:PaxController
             git rev-parse HEAD:PaxController.xcodeproj
             git hash-object .github/scripts/capture_screens.py
+            sed -n '/^  screenshots:/,/^  build-ipa:/p' .github/workflows/build-ipa.yml
           } | shasum -a 256 | cut -d' ' -f1 )
           echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
 
