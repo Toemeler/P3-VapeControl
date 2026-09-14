@@ -104,16 +104,24 @@ jobs:
           APP="build/Debug-iphonesimulator/PaxController.app"
           ls -la "$APP"
           xcrun simctl install "$UDID" "$APP"
-          xcrun simctl launch --console-pty "$UDID" de.marcomeissner.PaxController &
-          sleep 12
-          # A crashed app leaves no running process - catch that before screenshotting
-          # something misleading like an empty springboard.
-          if ! xcrun simctl spawn "$UDID" launchctl list | grep -q marcomeissner; then
-            echo "::error::app is not running after launch - it likely crashed"
-            xcrun simctl spawn "$UDID" log show --last 2m --predicate \
-              'process == "PaxController"' --style compact | tail -n 100 || true
+
+          # Plain launch: it returns once the app is up and prints the pid.
+          # --console-pty would stay attached and leave the step hanging.
+          OUT=$(xcrun simctl launch "$UDID" de.marcomeissner.PaxController)
+          echo "$OUT"
+          PID="${OUT##*: }"
+          sleep 10
+
+          # Simulator apps are ordinary host processes, so ps is the honest
+          # liveness check - launchctl inside the simulator does not list them
+          # under a name we can grep for.
+          if ! ps -p "$PID" >/dev/null 2>&1; then
+            echo "::error::PaxController (pid $PID) exited after launch - it likely crashed"
+            find "$HOME/Library/Logs/DiagnosticReports" -name '*PaxController*' \
+              -newermt '-10 minutes' -exec cat {} \; 2>/dev/null | head -n 120 || true
             exit 1
           fi
+          echo "App is running as pid $PID"
 
       - name: Capture screenshots
         env:
