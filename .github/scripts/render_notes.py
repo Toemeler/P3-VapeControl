@@ -19,7 +19,7 @@ import os
 import re
 import sys
 
-TAB_TITLES = {"scan": "Scan", "device": "Device"}
+SCREEN_TITLES = {"control": "Control", "device": "Settings", "scan": "Devices"}
 
 # The Shortcut that refreshes sideloaded apps before their 7-day signature
 # expires. It is committed to the repo rather than only linked, so it keeps
@@ -61,7 +61,7 @@ def gallery(base_url, shots_dir):
         return "_No screenshots for this build._"
 
     headers = "".join(
-        f'<td align="center"><b>{TAB_TITLES.get(name, name.title())}</b></td>'
+        f'<td align="center"><b>{SCREEN_TITLES.get(name, name.title())}</b></td>'
         for _, name in shots
     )
     images = "".join(

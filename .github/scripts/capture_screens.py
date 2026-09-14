@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Install the app on a booted simulator and screenshot each of its tabs.
+"""Install the app on a booted simulator and screenshot each of its screens.
 
-simctl cannot tap, so tabs are not reachable by driving the UI. The app reads
-its initial tab from the `uiTab` launch argument instead, and this script
-relaunches once per tab.
+simctl cannot tap, so the sheets are not reachable by driving the UI. The app
+reads which one to open from the `uiScreen` launch argument instead, and this
+script relaunches once per screen.
 
 `-uiDemo YES` fills the app with a plausible connected PAX 3: the simulator
 has no Bluetooth radio, so without it every screenshot shows an empty
@@ -14,7 +14,7 @@ coming up are retried: simctl blocks indefinitely when the simulator is
 wedged, and macOS ships no coreutils `timeout` to bound it with.
 
 Usage:
-  capture_screens.py <udid> <app> <bundle id> <out dir> <name:tab>...
+  capture_screens.py <udid> <app> <bundle id> <out dir> <name:screen>...
 """
 import os
 import subprocess
@@ -76,14 +76,14 @@ def install(udid, app_path, attempts=6):
     sys.exit(f"::error::could not install {app_path} after {attempts} attempts")
 
 
-def launch(udid, bundle_id, tab, attempts=3):
-    """Start the app on a tab and confirm it stayed up."""
+def launch(udid, bundle_id, screen, attempts=3):
+    """Start the app on a screen and confirm it stayed up."""
     last_pid = ""
     for attempt in range(1, attempts + 1):
         result = run(
             [
                 "xcrun", "simctl", "launch", "--terminate-running-process",
-                udid, bundle_id, "-uiTab", str(tab), "-uiDemo", "YES",
+                udid, bundle_id, "-uiScreen", screen, "-uiDemo", "YES",
             ],
             timeout=120,
             fatal=False,
@@ -111,19 +111,19 @@ def launch(udid, bundle_id, tab, attempts=3):
 
 def main():
     udid, app_path, bundle_id, out_dir = sys.argv[1:5]
-    tabs = []
+    screens = []
     for spec in sys.argv[5:]:
-        name, _, tab = spec.partition(":")
-        tabs.append((name, int(tab)))
-    if not tabs:
-        sys.exit("::error::no tabs requested")
+        name, _, screen = spec.partition(":")
+        screens.append((name, screen or name))
+    if not screens:
+        sys.exit("::error::no screens requested")
 
     os.makedirs(out_dir, exist_ok=True)
 
     install(udid, app_path)
 
-    for index, (name, tab) in enumerate(tabs, start=1):
-        launch(udid, bundle_id, tab)
+    for index, (name, screen) in enumerate(screens, start=1):
+        launch(udid, bundle_id, screen)
         for appearance in ("light", "dark"):
             run(["xcrun", "simctl", "ui", udid, "appearance", appearance],
                 timeout=60, check=False, fatal=False)
@@ -133,7 +133,7 @@ def main():
             run(["xcrun", "simctl", "io", udid, "screenshot", path], timeout=90)
             print(f"captured {path}", flush=True)
 
-    print(f"{len(tabs) * 2} screenshots written to {out_dir}", flush=True)
+    print(f"{len(screens) * 2} screenshots written to {out_dir}", flush=True)
 
 
 if __name__ == "__main__":

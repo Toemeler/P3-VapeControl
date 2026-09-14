@@ -11,10 +11,13 @@
 		AA000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000002 /* ContentView.swift */; };
 		AA000003 /* PaxProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000003 /* PaxProtocol.swift */; };
 		AA000004 /* BluetoothManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000004 /* BluetoothManager.swift */; };
-		AA000005 /* ScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000005 /* ScanView.swift */; };
-		AA000006 /* DeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000006 /* DeviceView.swift */; };
 		AA000007 /* DebugConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000007 /* DebugConsoleView.swift */; };
 		AA000010 /* PaxDeviceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000010 /* PaxDeviceViewModel.swift */; };
+		AA000011 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000011 /* DesignSystem.swift */; };
+		AA000012 /* TemperatureDial.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000012 /* TemperatureDial.swift */; };
+		AA000013 /* ControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000013 /* ControlView.swift */; };
+		AA000014 /* DeviceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000014 /* DeviceSheet.swift */; };
+		AA000015 /* ScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000015 /* ScanSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,12 +25,15 @@
 		AB000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AB000003 /* PaxProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxProtocol.swift; sourceTree = "<group>"; };
 		AB000004 /* BluetoothManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothManager.swift; sourceTree = "<group>"; };
-		AB000005 /* ScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanView.swift; sourceTree = "<group>"; };
-		AB000006 /* DeviceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceView.swift; sourceTree = "<group>"; };
 		AB000007 /* DebugConsoleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugConsoleView.swift; sourceTree = "<group>"; };
 		AB000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AB000009 /* PaxController-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "PaxController-Bridging-Header.h"; sourceTree = "<group>"; };
 		AB000010 /* PaxDeviceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxDeviceViewModel.swift; sourceTree = "<group>"; };
+		AB000011 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		AB000012 /* TemperatureDial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemperatureDial.swift; sourceTree = "<group>"; };
+		AB000013 /* ControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlView.swift; sourceTree = "<group>"; };
+		AB000014 /* DeviceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSheet.swift; sourceTree = "<group>"; };
+		AB000015 /* ScanSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSheet.swift; sourceTree = "<group>"; };
 		AC000001 /* PaxController.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PaxController.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -67,11 +73,14 @@
 				AB000002 /* ContentView.swift */,
 				AB000003 /* PaxProtocol.swift */,
 				AB000004 /* BluetoothManager.swift */,
-				AB000005 /* ScanView.swift */,
-				AB000006 /* DeviceView.swift */,
 				AB000007 /* DebugConsoleView.swift */,
 				AB000009 /* PaxController-Bridging-Header.h */,
 				AB000010 /* PaxDeviceViewModel.swift */,
+				AB000011 /* DesignSystem.swift */,
+				AB000012 /* TemperatureDial.swift */,
+				AB000013 /* ControlView.swift */,
+				AB000014 /* DeviceSheet.swift */,
+				AB000015 /* ScanSheet.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -156,10 +165,13 @@
 				AA000002 /* ContentView.swift in Sources */,
 				AA000003 /* PaxProtocol.swift in Sources */,
 				AA000004 /* BluetoothManager.swift in Sources */,
-				AA000005 /* ScanView.swift in Sources */,
-				AA000006 /* DeviceView.swift in Sources */,
 				AA000007 /* DebugConsoleView.swift in Sources */,
 				AA000010 /* PaxDeviceViewModel.swift in Sources */,
+				AA000011 /* DesignSystem.swift in Sources */,
+				AA000012 /* TemperatureDial.swift in Sources */,
+				AA000013 /* ControlView.swift in Sources */,
+				AA000014 /* DeviceSheet.swift in Sources */,
+				AA000015 /* ScanSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

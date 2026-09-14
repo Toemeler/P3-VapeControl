@@ -157,7 +157,7 @@ jobs:
           rm -rf screenshots
           python3 .github/scripts/capture_screens.py \
             "$UDID" build/release/PaxController.app de.marcomeissner.PaxController \
-            screenshots scan:0 device:1
+            screenshots control:control device:device scan:scan
           ls -lh screenshots
 
       - name: Commit screenshots
@@ -177,9 +177,10 @@ jobs:
             "- Runtime: $RUNTIME" \
             "- Run: ${{ github.run_id }}" \
             "" \
-            "The simulator has no Bluetooth radio, so the app shows its" \
-            "disconnected state. These confirm the app builds, launches and" \
-            "renders; they do not exercise the PAX connection." \
+            "The simulator has no Bluetooth radio, so the app is launched with" \
+            "a demo fixture standing in for a connected PAX 3. These confirm the" \
+            "app builds, launches and renders; they do not exercise the PAX" \
+            "connection." \
             > screenshots/README.md
 
           # The README shows the same shots by relative path, so it moves with them.
