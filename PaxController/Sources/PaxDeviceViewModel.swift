@@ -111,6 +111,11 @@ final class PaxDeviceViewModel: ObservableObject {
     private var pendingLedWrite: (attribute: UInt8, payload: Data)?
     /// Send the saved colour as soon as we learn the device can accept one.
     private var pushColorOnceDiscovered = false
+    /// True once the device has answered the capability query, which is what
+    /// separates "we do not know yet" from "this firmware cannot do it".
+    private var capabilitiesKnown = false
+    /// Coalesces colour-wheel drags into a single write.
+    private var ledWriteDebounce: Task<Void, Never>?
 
     /// Which attribute to use for LED color, preferring the one the device
     /// actually answered with. nil means it never reported either, so there is
@@ -277,21 +282,41 @@ final class PaxDeviceViewModel: ObservableObject {
     /// push it to the PAX itself. The device-side payload format is unconfirmed
     /// (protocol-notes.md lists ShellColor as "Unknown"), so the outcome is
     /// logged to the Debug Console rather than surfaced as a guaranteed result.
+    /// Applies the colour the instant it is picked: the app re-themes
+    /// synchronously, and the device write follows immediately.
     func applyLedColor(_ color: LedColor) {
         settings.ledColorHex = color.hex
         refreshLiveActivity()
         guard settings.pushColorToDevice else { return }
+
         guard connectionState.isConnected else {
-            log("LED color saved — will be sent to the device on next connect", level: .info)
+            pushColorOnceDiscovered = true
+            log("LED color saved — it will be sent as soon as the PAX connects", level: .info)
             return
         }
-        sendLedColorToDevice(color)
+
+        // Dragging the colour wheel fires on every frame. Coalesce into one
+        // write per gesture so the link is not flooded — short enough that a
+        // tap on a preset still lands immediately.
+        ledWriteDebounce?.cancel()
+        ledWriteDebounce = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
+            self?.sendLedColorToDevice(color)
+        }
     }
 
     private func sendLedColorToDevice(_ color: LedColor) {
         guard let attribute = ledAttribute else {
-            log("Not sending \(color.hex): the device never reported ColorTheme or ShellColor, so there is no attribute to write. In-app accent color is unaffected.",
-                level: .warn)
+            // Tapping a colour in the moment between connecting and the
+            // capability reply landing must not be lost — queue it instead.
+            if !capabilitiesKnown {
+                pushColorOnceDiscovered = true
+                log("Holding \(color.hex) until the device reports which LED attribute it supports", level: .info)
+            } else {
+                log("Not sending \(color.hex): this firmware reports neither ColorTheme nor ShellColor, so its LEDs cannot be set over BLE. The in-app accent color still changed.",
+                    level: .warn)
+            }
             return
         }
         let payload = ledPayload(for: color, attribute: attribute)
@@ -543,6 +568,7 @@ final class PaxDeviceViewModel: ObservableObject {
             log("SupportedAttributes came back empty — cannot tell what this firmware implements", level: .warn)
             return
         }
+        capabilitiesKnown = true
         supportedAttributes = supported
         let described = supported.sorted().map { id -> String in
             let hex = String(format: "0x%02X", id)
@@ -576,6 +602,7 @@ final class PaxDeviceViewModel: ObservableObject {
 
         // A value arriving for an attribute the bitfield did not list still
         // proves the device implements it.
+        capabilitiesKnown = true
         pushSavedColorIfReady()
 
         if let pending = pendingLedWrite, pending.attribute == packet.type.rawValue {
@@ -652,6 +679,9 @@ final class PaxDeviceViewModel: ObservableObject {
         ledAttributeShapes.removeAll()
         pendingLedWrite = nil
         pushColorOnceDiscovered = false
+        capabilitiesKnown = false
+        ledWriteDebounce?.cancel()
+        ledWriteDebounce = nil
     }
 
     func log(_ message: String, level: DebugEntry.Level = .info) {
