@@ -27,15 +27,6 @@ TAB_TITLES = {"scan": "Scan", "device": "Device"}
 SHORTCUT_PATH = "shortcut/AutoRefreshApps.shortcut"
 THUMB_WIDTH = 230
 
-SHORTCUT_SECTION = """
-**8.** *(iOS 27 or later)* Open [**AutoRefreshApps.shortcut**]({url}) on the
-device to add it, then let it run daily via *Shortcuts → Automation*. It calls
-SideStore's refresh before the 7 days run out, so the app does not stop working.
-On earlier iOS versions this Shortcut does not work — refresh manually in
-SideStore instead, by tapping the **7 DAYS** counter next to the app.
-"""
-
-
 def parse(filename):
     """01-scan.png -> (1, 'scan')"""
     match = re.match(r"(\d+)-([a-z]+)\.png$", filename)
@@ -81,8 +72,7 @@ def main(out_path):
         source_url=os.environ["SOURCE_URL"],
         icon_url=f"{base}/icon.png",
         gallery=gallery(f"{base}/screenshots", "screenshots"),
-        # Omitted rather than left as a dead placeholder when there is no link.
-        shortcut_section=SHORTCUT_SECTION.format(url=shortcut_url) if shortcut_url else "",
+        shortcut_url=shortcut_url,
     )
     with open(out_path, "w") as fh:
         fh.write(notes)
