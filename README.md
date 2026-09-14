@@ -1,5 +1,8 @@
 # P3 VapeControl
 
+<!-- screenshots:start -->
+<!-- screenshots:end -->
+
 A personal-use iOS app to monitor and control a PAX 3 vaporizer over Bluetooth. Built with SwiftUI + CoreBluetooth.
 
 > **Disclaimer**: Independent personal tool. Not affiliated with, endorsed by, or connected to PAX Labs. PAX® is a registered trademark of PAX Labs. This app contains no PAX branding, logos, or proprietary assets.
@@ -87,6 +90,24 @@ Now open the app — it's ready to use.
 > ⚠️ The app must be built from a Mac with Xcode. It cannot run in the iOS Simulator because Bluetooth is not available there.
 
 ---
+
+## Prebuilt IPAs
+
+The `Build` workflow compiles the app on GitHub's macOS runners and publishes
+an unsigned IPA as a Release, so a computer with Xcode is only needed for the
+manual route above.
+
+The same run publishes a SideStore/AltStore source feed (`s.json`) and a small
+landing page, and screenshots the app in a simulator for the release notes and
+for the block at the top of this file. Nothing is code signed: SideStore,
+AltStore or Sideloadly re-sign with your own Apple ID on install.
+
+Run it from *Actions → Build → Run workflow*. It skips the simulator and the
+compile when nothing that affects them has changed, so a run that only touches
+wording finishes in well under a minute and updates the existing Release in
+place. The short source URL needs GitHub Pages enabled for the branch
+(*Settings → Pages → Deploy from a branch → main / root*); without it the feed
+is still reachable over `raw.githubusercontent.com`.
 
 ## Using the App
 

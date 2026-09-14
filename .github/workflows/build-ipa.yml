@@ -1,0 +1,438 @@
+# Builds PaxController into a sideloadable (unsigned) IPA, screenshots the app
+# in a simulator, and publishes it as a GitHub Release with an inline preview.
+#
+# Also commits a SideStore/AltStore source feed so the build can be installed
+# and updated from inside the sideloader.
+#
+# Manual runs release as build-N; pushing a v* tag releases under that tag.
+
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_screenshots:
+        description: "Recapture screenshots even when nothing changed"
+        type: boolean
+        default: false
+      force_build:
+        description: "Rebuild the IPAs even when the app did not change"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  # Read-only, purely to ask whether Pages is serving; see the feed step.
+  pages: read
+
+env:
+  # Generated files follow the ref being built; a tag build writes to the
+  # default branch, since a tag is not a place to commit to.
+  TARGET_BRANCH: >-
+    ${{ github.ref_type == 'tag'
+        && github.event.repository.default_branch
+        || github.ref_name }}
+
+concurrency:
+  # A newer build supersedes whatever is still running on the same ref, because
+  # those race to commit screenshots and the feed to one branch. Other refs are
+  # left alone: release tags and bundle versions come from github.run_number,
+  # which is unique per run, so parallel branches cannot collide. The ref is
+  # used fully qualified so a branch and a tag of the same name stay apart.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: Launch in simulator and screenshot
+    runs-on: macos-15
+    timeout-minutes: 40
+    outputs:
+      sha: ${{ steps.result.outputs.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Are the existing screenshots still current?
+        id: check
+        run: |
+          set -euo pipefail
+          # Fingerprint everything that can change what a screenshot looks like:
+          # the app sources, the project, the capture script, and this job's own
+          # steps - a change like dropping the status bar override lives here,
+          # not in the script. Only this job's slice of the file is hashed, so
+          # editing the release notes or packaging does not force a recapture.
+          STAMP=$( {
+            git rev-parse HEAD:PaxController
+            git rev-parse HEAD:PaxController.xcodeproj
+            git hash-object .github/scripts/capture_screens.py
+            sed -n '/^  screenshots:/,/^  build-ipa:/p' .github/workflows/build-ipa.yml
+          } | shasum -a 256 | cut -d' ' -f1 )
+          echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ inputs.force_screenshots }}" = "true" ]; then
+            echo "Forced recapture."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ -f screenshots/.stamp ] \
+            && [ "$(cat screenshots/.stamp)" = "$STAMP" ] \
+            && ls screenshots/*.png >/dev/null 2>&1; then
+            echo "Nothing that affects screenshots changed; reusing them."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Screenshots are missing or stale; recapturing."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Toolchain info
+        if: steps.appcheck.outputs.skip != 'true' && (steps.check.outputs.skip != 'true')
+        run: |
+          sw_vers
+          xcodebuild -version
+
+      - name: Build the app for the simulator
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          set -o pipefail
+          # Release configuration: the screenshots should show exactly what a
+          # normal install looks like.
+          .github/scripts/build_app.sh Release iphonesimulator \
+            de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee simbuild.log
+          mkdir -p build/release && mv build/Release-iphonesimulator/PaxController.app build/release/
+          git checkout -- PaxController/Resources/Info.plist
+
+      - name: Pick a simulator
+        id: sim
+        if: steps.check.outputs.skip != 'true'
+        run: python3 .github/scripts/pick_simulator.py
+
+      - name: Boot simulator
+        id: boot
+        if: steps.check.outputs.skip != 'true'
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          UDID="${{ steps.sim.outputs.existing_udid }}"
+          DEVICE_TYPE="${{ steps.sim.outputs.device_type }}"
+          # A picker that emitted nothing must fail here, not later as an
+          # opaque "Invalid device type:" from simctl create.
+          if [ -z "$UDID" ] && [ -z "$DEVICE_TYPE" ]; then
+            echo "::error::pick_simulator.py produced no device"
+            exit 1
+          fi
+          if [ -z "$UDID" ]; then
+            echo "Creating ${{ steps.sim.outputs.device_name }}"
+            UDID=$(xcrun simctl create "ci-screenshots" \
+              "$DEVICE_TYPE" "${{ steps.sim.outputs.runtime }}")
+          fi
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          echo "Using simulator $UDID"
+
+          # simctl bootstatus -b hangs indefinitely on these runners, so boot
+          # without blocking and poll for the state ourselves.
+          xcrun simctl boot "$UDID" || true
+          STATE=Unknown
+          for _ in $(seq 1 90); do
+            STATE=$(python3 .github/scripts/simctl_helper.py state "$UDID")
+            [ "$STATE" = "Booted" ] && break
+            sleep 5
+          done
+          if [ "$STATE" != "Booted" ]; then
+            echo "::error::simulator never reached Booted (last state: $STATE)"
+            exit 1
+          fi
+
+          # Clear any status bar override left on this device by an earlier
+          # run: simulators persist between runs, and a stale override paints a
+          # second copy of the wifi and battery glyphs over the tab bar, which
+          # then shows up in the release preview. Removing the override call
+          # alone does not undo one that was already set.
+          xcrun simctl status_bar "$UDID" clear || true
+
+      - name: Capture the app's screens
+        if: steps.check.outputs.skip != 'true'
+        timeout-minutes: 20
+        env:
+          UDID: ${{ steps.boot.outputs.udid }}
+        run: |
+          set -euo pipefail
+          rm -rf screenshots
+          python3 .github/scripts/capture_screens.py \
+            "$UDID" build/release/PaxController.app de.marcomeissner.PaxController \
+            screenshots scan:0 device:1
+          ls -lh screenshots
+
+      - name: Commit screenshots
+        if: steps.check.outputs.skip != 'true'
+        env:
+          DEVICE: ${{ steps.sim.outputs.device_name }}
+          RUNTIME: ${{ steps.sim.outputs.runtime_name }}
+        run: |
+          set -euo pipefail
+          echo "${{ steps.check.outputs.stamp }}" > screenshots/.stamp
+          printf '%s\n' \
+            "# Simulator screenshots" \
+            "" \
+            "Captured automatically by the \`Build\` workflow." \
+            "" \
+            "- Device: $DEVICE" \
+            "- Runtime: $RUNTIME" \
+            "- Run: ${{ github.run_id }}" \
+            "" \
+            "The simulator has no Bluetooth radio, so the app shows its" \
+            "disconnected state. These confirm the app builds, launches and" \
+            "renders; they do not exercise the PAX connection." \
+            > screenshots/README.md
+
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          .github/scripts/commit_generated.sh \
+            "Update simulator screenshots (run ${{ github.run_id }})" \
+            screenshots
+
+      - name: Keep the README's screenshot block current
+        # Deliberately ungated. The block is rendered from whatever screenshots
+        # are committed, so a change to the renderer alone has to reach the
+        # README without paying for a simulator run. Commits nothing when the
+        # rendered block is identical.
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/update_readme.py
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          .github/scripts/commit_generated.sh \
+            "Update the README's screenshot block" README.md
+
+      - name: Report the commit the screenshots live in
+        id: result
+        run: |
+          set -euo pipefail
+          # Release notes embed the images by raw URL pinned to this commit, so
+          # an old release keeps showing the screens it shipped with.
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload screenshots as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-screenshots
+          path: screenshots
+          if-no-files-found: error
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-build-log
+          path: simbuild.log
+          if-no-files-found: ignore
+
+  build-ipa:
+    name: Build PaxController for iOS
+    needs: screenshots
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Has the app changed since the last release?
+        id: appcheck
+        run: |
+          set -euo pipefail
+          # Only what ends up inside the IPA: sources, project, and the two
+          # scripts that build and package them. Release-note or feed edits
+          # deliberately do not force a rebuild.
+          STAMP=$( {
+            git rev-parse HEAD:PaxController
+            git rev-parse HEAD:PaxController.xcodeproj
+            git hash-object .github/scripts/build_app.sh .github/scripts/package_ipa.sh
+          } | shasum -a 256 | cut -d' ' -f1 )
+          echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.ref_type }}" = "tag" ] || [ "${{ inputs.force_build }}" = "true" ]; then
+            echo "Building: tag push or forced."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ -f .build-stamp ] && [ "$(cat .build-stamp)" = "$STAMP" ]; then
+            echo "App unchanged since the last release; refreshing its notes only."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "App changed; building."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Toolchain info
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Stamp version
+        if: steps.appcheck.outputs.skip != 'true'
+        id: version
+        run: |
+          set -euo pipefail
+          PLIST=PaxController/Resources/Info.plist
+          BASE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
+          # Monotonic third component so SideStore can tell builds apart and offer
+          # updates. Stamped into the checkout only - the committed plist is untouched.
+          VERSION="${BASE}.${{ github.run_number }}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$PLIST"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version $VERSION"
+
+      - name: Build the app
+        if: steps.appcheck.outputs.skip != 'true'
+        run: |
+          set -o pipefail
+          .github/scripts/build_app.sh Release iphoneos \
+            de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee build.log
+          mkdir -p build/release && mv build/Release-iphoneos/PaxController.app build/release/
+
+      - name: Package the IPA
+        if: steps.appcheck.outputs.skip != 'true'
+        id: package
+        run: |
+          set -euo pipefail
+          .github/scripts/package_ipa.sh build/release/PaxController.app PaxController.ipa
+
+          echo "size=$(stat -f%z PaxController.ipa)" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 PaxController.ipa | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "human_size=$(ls -lh PaxController.ipa | awk '{print $5}')" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch screenshots for the release
+        uses: actions/download-artifact@v4
+        with:
+          name: simulator-screenshots
+          path: screenshots
+
+      - name: Determine release tag
+        if: steps.appcheck.outputs.skip != 'true'
+        id: tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "title=PaxController ${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "title=PaxController build #${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload IPA as run artifact (non-fatal, short retention)
+        if: steps.appcheck.outputs.skip != 'true'
+        # Account-wide artifact storage quota must never kill a finished build -
+        # the GitHub Release below is the real distribution channel.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: PaxController-ipa
+          path: PaxController.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Build SideStore source feed
+        if: steps.appcheck.outputs.skip != 'true'
+        id: feed
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SIZE: ${{ steps.package.outputs.size }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The one-tap "Add to SideStore" button needs the Pages landing page,
+          # and the short feed URL needs Pages too. Neither may be advertised
+          # before Pages actually serves, so ask - and on any doubt fall back to
+          # raw.githubusercontent.com, which needs nothing switched on.
+          PAGES_URL=$(gh api "repos/${{ github.repository }}/pages" \
+            --jq '.html_url' 2>/dev/null || true)
+          export PAGES_URL
+          echo "Pages: ${PAGES_URL:-not enabled}"
+
+          python3 .github/scripts/make_icon.py icon.png
+          python3 .github/scripts/make_source.py .
+          echo "--- source feed ---"
+          cat s.json
+
+      - name: Publish IPA as a GitHub Release
+        if: steps.appcheck.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SOURCE_URL: ${{ steps.feed.outputs.source_url }}
+          PAGES_URL: ${{ steps.feed.outputs.pages_url }}
+          SCREENSHOT_SHA: ${{ needs.screenshots.outputs.sha }}
+          IPA_SIZE: ${{ steps.package.outputs.human_size }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/render_notes.py notes.md
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            PaxController.ipa \
+            --repo "${{ github.repository }}" \
+            --title "${{ steps.tag.outputs.title }}" \
+            --notes-file notes.md
+
+      - name: Commit source feed
+        if: steps.appcheck.outputs.skip != 'true'
+        # Committed rather than deployed with actions/deploy-pages: the Actions
+        # token is not allowed to create the Pages site itself. This makes the
+        # feed reachable over raw.githubusercontent.com immediately, and over
+        # Pages as soon as Pages is switched on for the branch.
+        run: |
+          set -euo pipefail
+          # Only the feed paths are committed here; the screenshots downloaded
+          # for the release and the version-stamped plist are left behind by the
+          # reset onto origin/main inside the helper.
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          # The stamp rides along with the feed: both describe the release
+          # that was just published.
+          echo "${{ steps.appcheck.outputs.stamp }}" > .build-stamp
+          .github/scripts/commit_generated.sh \
+            "Update source feed for ${{ steps.tag.outputs.tag }}" \
+            s.json apps.json icon.png index.html .build-stamp
+
+      - name: Refresh the notes on the existing release
+        # No new release is cut when the app is unchanged, but wording changes
+        # should still reach the published one.
+        if: steps.appcheck.outputs.skip == 'true'
+        id: facts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          PAGES_URL=$(gh api "repos/${{ github.repository }}/pages" \
+            --jq '.html_url' 2>/dev/null || true)
+          export PAGES_URL
+          echo "Pages: ${PAGES_URL:-not enabled}"
+
+          python3 .github/scripts/release_facts.py
+
+      - name: Publish the refreshed notes
+        if: steps.appcheck.outputs.skip == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.facts.outputs.version }}
+          IPA_SIZE: ${{ steps.facts.outputs.human_size }}
+          SOURCE_URL: ${{ steps.facts.outputs.source_url }}
+          PAGES_URL: ${{ steps.facts.outputs.pages_url }}
+          SCREENSHOT_SHA: ${{ needs.screenshots.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/render_notes.py notes.md
+          gh release edit "${{ steps.facts.outputs.tag }}" \
+            --repo "${{ github.repository }}" --notes-file notes.md
+          echo "Refreshed the notes on ${{ steps.facts.outputs.tag }}"
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
