@@ -1,18 +1,30 @@
-# Launches the app in an iPhone 14 simulator and screenshots every tab.
+# Launches the app in an iPhone 14 simulator and screenshots its screens.
 # Bluetooth hardware does not exist in the simulator, so this proves the app
 # builds, launches and renders - not that it can talk to a PAX.
 #
 # Callable from the IPA workflow so every release ships a current preview.
+# Booting a simulator is the slowest thing in CI, so it is skipped entirely
+# when nothing that affects the screenshots has changed.
 
 name: Simulator screenshots
 
 on:
   workflow_call:
+    inputs:
+      force:
+        description: "Recapture even when nothing changed"
+        type: boolean
+        default: false
     outputs:
       screenshots_sha:
-        description: "Commit the screenshots were pushed in, for pinning image URLs"
+        description: "Commit the screenshots live in, for pinning image URLs"
         value: ${{ jobs.screenshots.outputs.screenshots_sha }}
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Recapture even when nothing changed"
+        type: boolean
+        default: true
   push:
     branches:
       - main
@@ -32,17 +44,45 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 40
     outputs:
-      screenshots_sha: ${{ steps.commit.outputs.sha }}
+      screenshots_sha: ${{ steps.result.outputs.sha }}
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Are the existing screenshots still current?
+        id: check
+        run: |
+          set -euo pipefail
+          # Fingerprint everything that can change what a screenshot looks like:
+          # the app sources, the project, and the capture script itself.
+          STAMP=$( {
+            git rev-parse HEAD:PaxController
+            git rev-parse HEAD:PaxController.xcodeproj
+            git hash-object .github/scripts/capture_screens.py
+          } | shasum -a 256 | cut -d' ' -f1 )
+          echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "Forced recapture."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ -f screenshots/.stamp ] \
+            && [ "$(cat screenshots/.stamp)" = "$STAMP" ] \
+            && ls screenshots/*.png >/dev/null 2>&1; then
+            echo "Nothing that affects screenshots changed; reusing them."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Screenshots are missing or stale; recapturing."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Toolchain info
+        if: steps.check.outputs.skip != 'true'
         run: |
           sw_vers
           xcodebuild -version
 
       - name: Build the app for the simulator
+        if: steps.check.outputs.skip != 'true'
         run: |
           set -o pipefail
           # Release configuration only: the screenshots show what a normal
@@ -54,10 +94,12 @@ jobs:
 
       - name: Pick a simulator
         id: sim
+        if: steps.check.outputs.skip != 'true'
         run: python3 .github/scripts/pick_simulator.py
 
       - name: Boot simulator
         id: boot
+        if: steps.check.outputs.skip != 'true'
         timeout-minutes: 12
         run: |
           set -euo pipefail
@@ -72,7 +114,7 @@ jobs:
           if [ -z "$UDID" ]; then
             echo "Creating ${{ steps.sim.outputs.device_name }}"
             UDID=$(xcrun simctl create "ci-screenshots" \
-              "${{ steps.sim.outputs.device_type }}" "${{ steps.sim.outputs.runtime }}")
+              "$DEVICE_TYPE" "${{ steps.sim.outputs.runtime }}")
           fi
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
           echo "Using simulator $UDID"
@@ -96,6 +138,7 @@ jobs:
             --cellularMode active --cellularBars 4 --wifiMode active --wifiBars 3 || true
 
       - name: Capture the app's screens
+        if: steps.check.outputs.skip != 'true'
         timeout-minutes: 20
         env:
           UDID: ${{ steps.boot.outputs.udid }}
@@ -107,11 +150,14 @@ jobs:
             screenshots scan:0 device:1
           ls -lh screenshots
 
-      - name: Record what the screenshots show
+      - name: Commit screenshots
+        if: steps.check.outputs.skip != 'true'
         env:
           DEVICE: ${{ steps.sim.outputs.device_name }}
           RUNTIME: ${{ steps.sim.outputs.runtime_name }}
         run: |
+          set -euo pipefail
+          echo "${{ steps.check.outputs.stamp }}" > screenshots/.stamp
           printf '%s\n' \
             "# Simulator screenshots" \
             "" \
@@ -126,13 +172,9 @@ jobs:
             "renders; they do not exercise the PAX connection." \
             > screenshots/README.md
 
-      - name: Commit screenshots
-        id: commit
-        run: |
-          set -euo pipefail
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
-          git add screenshots
+          git add -A screenshots
           if git diff --cached --quiet; then
             echo "screenshots unchanged"
           else
@@ -141,8 +183,13 @@ jobs:
             git pull --rebase origin main
             git push origin HEAD:main
           fi
+
+      - name: Report the commit the screenshots live in
+        id: result
+        run: |
+          set -euo pipefail
           # Release notes embed the images by raw URL pinned to this commit, so
-          # old releases keep showing the screenshots they shipped with.
+          # an old release keeps showing the screens it shipped with.
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Upload screenshots as artifact
