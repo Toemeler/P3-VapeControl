@@ -65,6 +65,13 @@ jobs:
         run: |
           set -euo pipefail
           UDID="${{ steps.sim.outputs.existing_udid }}"
+          DEVICE_TYPE="${{ steps.sim.outputs.device_type }}"
+          # A picker that emitted nothing must fail here, not later as an
+          # opaque "Invalid device type:" from simctl create.
+          if [ -z "$UDID" ] && [ -z "$DEVICE_TYPE" ]; then
+            echo "::error::pick_simulator.py produced no device"
+            exit 1
+          fi
           if [ -z "$UDID" ]; then
             echo "Creating ${{ steps.sim.outputs.device_name }}"
             UDID=$(xcrun simctl create "ci-screenshots" \

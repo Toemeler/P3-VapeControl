@@ -108,3 +108,7 @@ def main():
         return
 
     sys.exit("no usable iPhone device type / runtime combination found")
+
+
+if __name__ == "__main__":
+    main()

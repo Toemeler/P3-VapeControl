@@ -1,0 +1,60 @@
+# Downloads the auto-refresh Shortcut from iCloud and commits it to the repo,
+# so the file survives the share link being revoked or changed.
+
+name: Archive refresh shortcut
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "iCloud Shortcuts share link"
+        required: true
+        default: "https://www.icloud.com/shortcuts/3357ecb0d7fd47208271bbe4b3df71ac"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    name: Download and commit the shortcut
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download from iCloud
+        id: fetch
+        run: |
+          python3 .github/scripts/fetch_shortcut.py \
+            "${{ inputs.url }}" \
+            shortcut/RefreshApps.shortcut
+          ls -lh shortcut
+
+      - name: Commit the shortcut
+        env:
+          SHORTCUT_NAME: ${{ steps.fetch.outputs.shortcut_name }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "# Auto-refresh Shortcut" \
+            "" \
+            "Refreshes sideloaded apps before their 7-day signature expires." \
+            "" \
+            "- Name: ${SHORTCUT_NAME:-unknown}" \
+            "- Downloaded from: ${{ inputs.url }}" \
+            "" \
+            "Open \`RefreshApps.shortcut\` on the device to add it, or use the" \
+            "link above. The file is kept here so the shortcut survives the" \
+            "link being revoked." \
+            > shortcut/README.md
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          git add shortcut
+          if git diff --cached --quiet; then
+            echo "shortcut unchanged"
+            exit 0
+          fi
+          git commit -m "Archive the auto-refresh shortcut"
+          git pull --rebase origin main
+          git push origin HEAD:main
