@@ -35,9 +35,12 @@ permissions:
   contents: write
 
 concurrency:
-  # A newer build supersedes whatever is still running: they push to the same
-  # branch and cut releases from the same tag sequence.
-  group: ${{ github.workflow }}
+  # A newer build supersedes whatever is still running on the same ref, because
+  # those race to commit screenshots and the feed to one branch. Other refs are
+  # left alone: release tags and bundle versions come from github.run_number,
+  # which is unique per run, so parallel branches cannot collide. The ref is
+  # used fully qualified so a branch and a tag of the same name stay apart.
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
