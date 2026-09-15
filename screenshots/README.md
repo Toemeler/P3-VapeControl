@@ -4,7 +4,7 @@ Captured automatically by the `Build` workflow.
 
 - Device: iPhone 14
 - Runtime: iOS 26.2
-- Run: 34952949675
+- Run: 34957735909
 
 The simulator has no Bluetooth radio, so the app is launched with
 a demo fixture standing in for a connected PAX 3. These confirm the
