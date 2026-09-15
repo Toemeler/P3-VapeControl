@@ -144,8 +144,21 @@ final class PaxDeviceViewModel: ObservableObject {
     private var pendingHapticWrite: UInt8?
     /// The name we are waiting to see reported back.
     private var pendingNameWrite: String?
+    /// Deadline for that read-back.
+    private var renameVerification: Task<Void, Never>?
+    /// The name the device reports through DisplayName (0x0A).
+    @Published private(set) var reportedName: String?
+    /// The name from Generic Access, which is also what it advertises.
+    @Published private(set) var gapName: String?
+    /// The name in the advertisement the scan saw.
+    @Published private(set) var advertisedName: String?
     /// Raw payloads collected during an attribute probe, keyed by attribute.
     private var probeSamples: [UInt8: [Data]] = [:]
+    /// Where the current heat-up started, so the warm-up ramp measures the
+    /// climb rather than the whole temperature scale.
+    private var warmUpStartTempC: Double?
+    /// The last ramp colour written, so an unchanged step writes nothing.
+    private var lastWarmUpHex: String?
     private var probeTask: Task<Void, Never>?
     /// Deadline for the capability query, so a silent device still gets a colour.
     private var capabilityTimeout: Task<Void, Never>?
@@ -307,6 +320,7 @@ final class PaxDeviceViewModel: ObservableObject {
         }
         automationPaused = false
         connectionState = .connecting
+        advertisedName = device.name
         bluetooth.connect(to: device)
         armConnectWatchdog()
         log("Connecting to \(device.name) [\(device.id)]", level: .info)
@@ -494,7 +508,7 @@ final class PaxDeviceViewModel: ObservableObject {
 
     private func rememberCurrentDevice() {
         guard let id = bluetooth.connectedPeripheral?.identifier else { return }
-        let name = displayName ?? modelNumber ?? "PAX"
+        let name = deviceLabel
         UserDefaults.standard.set(id.uuidString, forKey: Self.deviceIDKey)
         UserDefaults.standard.set(name, forKey: Self.deviceNameKey)
         rememberedDeviceName = name
@@ -587,6 +601,177 @@ final class PaxDeviceViewModel: ObservableObject {
             // whether the device took it.
             try self.sendPacket(PaxPacket.statusRequest(attributes: [.colorTheme]))
         }
+    }
+
+    // MARK: - Device name
+
+    /// The name to show. The device's own report wins; failing that Generic
+    /// Access, then what it advertises, then a name the user set that this
+    /// firmware would not take, and finally the model.
+    var deviceLabel: String {
+        reportedName ?? gapName ?? advertisedName ?? settings.deviceNickname ?? modelNumber ?? "PAX"
+    }
+
+    /// Whether a rename can reach the device at all, rather than only being
+    /// kept by the app.
+    var canRenameDevice: Bool {
+        bluetooth.deviceNameWritable || supportedAttributes.contains(PaxMessageType.displayName.rawValue)
+    }
+
+    /// DisplayName (0x0A) is documented as a length byte then UTF-8, but a
+    /// device is free to answer with a plain NUL-padded string, and this PAX 3
+    /// answers the attribute not at all. Accept either shape rather than
+    /// discarding a name because its first byte was a letter.
+    private func applyDisplayNameReport(_ packet: PaxPacket) {
+        let payload = packet.payload
+        guard !payload.isEmpty else { return }
+        log("DisplayName raw: \(Data(payload.prefix(20)).hexString)", level: .rx)
+
+        var parsed: String?
+        let declared = Int(payload[payload.startIndex])
+        if declared > 0, payload.count >= 1 + declared,
+           let name = String(bytes: payload[(payload.startIndex + 1)..<(payload.startIndex + 1 + declared)],
+                             encoding: .utf8),
+           name.allSatisfy({ !$0.isNewline }) {
+            parsed = name
+        } else {
+            // No usable length byte: read it as text up to the first NUL.
+            let bytes = Array(payload.prefix(while: { $0 != 0 }))
+            parsed = String(bytes: bytes, encoding: .utf8)
+        }
+        guard let name = parsed?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return }
+        reportedName = name
+        displayName = deviceLabel
+        judgeRename(against: name, source: "DisplayName")
+    }
+
+    /// Renames the PAX. Generic Access' Device Name is tried first when the
+    /// device allows writing it, since that is the name it advertises and the
+    /// one iOS and every other app will show. Otherwise the vendor attribute
+    /// gets a go. Either way the name is read back rather than assumed, and if
+    /// nothing takes it the app says so and keeps the name for itself.
+    func setDisplayName(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            log("Not renaming: a name cannot be empty", level: .warn)
+            return
+        }
+        guard connectionState.isConnected else {
+            settings.deviceNickname = trimmed
+            displayName = deviceLabel
+            log("Not connected — \"\(trimmed)\" is the name this app will use", level: .info)
+            return
+        }
+
+        pendingNameWrite = trimmed
+        renameVerification?.cancel()
+
+        if bluetooth.writeDeviceName(trimmed) {
+            log("Renaming over Generic Access → \"\(trimmed)\"", level: .tx)
+        } else if let packet = PaxPacket.setDisplayName(trimmed) {
+            enqueue {
+                try self.sendPacket(packet)
+                self.log("Renaming over DisplayName (0x0A) → \"\(trimmed)\"", level: .tx)
+                try self.sendPacket(PaxPacket.statusRequest(attributes: [.displayName]))
+            }
+        } else {
+            pendingNameWrite = nil
+            return
+        }
+
+        // Nothing here acknowledges a write, and this firmware does not answer
+        // DisplayName at all, so silence has to be treated as failure rather
+        // than waited on for ever.
+        renameVerification = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.renameDidNotStick(trimmed)
+        }
+    }
+
+    private func judgeRename(against reported: String, source: String) {
+        guard let wanted = pendingNameWrite else { return }
+        guard reported == wanted else {
+            log("✘ \(source) still reports \"\(reported)\" — the rename did not take", level: .warn)
+            return
+        }
+        pendingNameWrite = nil
+        renameVerification?.cancel()
+        renameVerification = nil
+        // It stuck on the device, so the app has no reason to keep its own.
+        settings.deviceNickname = nil
+        log("✔ Device accepted the new name \"\(wanted)\" (\(source))", level: .info)
+    }
+
+    private func renameDidNotStick(_ wanted: String) {
+        renameVerification = nil
+        guard pendingNameWrite == wanted else { return }
+        pendingNameWrite = nil
+        settings.deviceNickname = wanted
+        displayName = deviceLabel
+        log("This firmware never reported the name back, so the rename did not reach the device. \"\(wanted)\" is the name this app will use.",
+            level: .warn)
+        refreshLiveActivity()
+    }
+
+    // MARK: - Heating state
+
+    private func heatingStateDidChange(from previous: PaxHeatingState?) {
+        if settings.notifyWhenReady {
+            ReadyNotifier.shared.handle(state: heatingState,
+                                        targetC: targetTempC ?? currentTargetTempC,
+                                        useFahrenheit: settings.useFahrenheit)
+        }
+        switch heatingState {
+        case .heating:
+            // Where this heat-up started from, so the ramp is a fraction of the
+            // climb rather than of the whole scale — a PAX picked up warm
+            // should not sit on green all the way.
+            warmUpStartTempC = actualTempC
+            lastWarmUpHex = nil
+            updateWarmUpColor()
+        default:
+            guard previous == .heating else { break }
+            warmUpStartTempC = nil
+            // Put the configured heating colours back now the ramp is over,
+            // otherwise the next warm-up starts from wherever it left off.
+            if lastWarmUpHex != nil, settings.pushColorToDevice {
+                lastWarmUpHex = nil
+                scheduleLedWrite()
+            }
+        }
+    }
+
+    /// While the oven is warming up, the heating state's colour follows the
+    /// thermometer: green at the start, yellow halfway, orange as it arrives.
+    /// The PAX cannot do this itself — its own animation runs on a timer, not
+    /// on the temperature — so the app writes the colour as the reading
+    /// climbs, in steps big enough that a 0.1° wobble cannot start a write.
+    private func updateWarmUpColor() {
+        guard settings.warmUpGradient, settings.pushColorToDevice else { return }
+        guard heatingState == .heating, deviceLedColorSupported else { return }
+        guard let actual = actualTempC,
+              let target = targetTempC ?? currentTargetTempC, target > 0 else { return }
+
+        let start = warmUpStartTempC ?? actual
+        let span = target - start
+        // A heat-up that starts within a degree of the set point has no ramp
+        // worth drawing.
+        guard span > 1 else { return }
+        let raw = (actual - start) / span
+        // Twelve steps: about a write every few seconds over a normal heat-up.
+        let stepped = (min(1, max(0, raw)) * 12).rounded(.down) / 12
+        let color = LedColor.warmUp(progress: stepped)
+        guard color.hex != lastWarmUpHex else { return }
+        lastWarmUpHex = color.hex
+
+        var theme = themeFromSettings
+        theme.setColors(.heating, color1: color, color2: color)
+        let payload = theme.payload
+        enqueue {
+            try self.sendPacket(PaxPacket.setLedColor(attribute: .colorTheme, payload: payload))
+        }
+        log("Warm-up \(Int(stepped * 100))% → \(color.hex)", level: .tx)
     }
 
     // MARK: - Attribute probe
@@ -744,7 +929,8 @@ final class PaxDeviceViewModel: ObservableObject {
             ledColorHex: settings.ledColorHex,
             useFahrenheit: settings.useFahrenheit)
         LiveActivityController.shared.sync(
-            deviceName: displayName ?? rememberedDeviceName ?? "PAX",
+            deviceName: connectionState.isConnected ? deviceLabel
+                : (rememberedDeviceName ?? settings.deviceNickname ?? "PAX"),
             state: state)
     }
 
@@ -788,10 +974,14 @@ final class PaxDeviceViewModel: ObservableObject {
 
     func requestFullStatus() {
         enqueue {
+            // ChargeStatus belongs here: read once at connect it was whatever
+            // the PAX happened to be doing then, so putting it on the charger
+            // never changed the headline and the heating state showed through
+            // instead.
             let attrs: [PaxMessageType] = [
                 .actualTemp, .heaterSetPoint, .battery,
                 .heatingState, .lockStatus, .dynamicMode,
-                .currentTargetTemp, .displayName
+                .currentTargetTemp, .chargeStatus, .displayName
             ]
             let packet = PaxPacket.statusRequest(attributes: attrs)
             try self.sendPacket(packet)
@@ -935,6 +1125,7 @@ final class PaxDeviceViewModel: ObservableObject {
         switch packet.type {
         case .actualTemp:
             actualTempC = packet.temperatureCelsius
+            updateWarmUpColor()
         case .heaterSetPoint:
             targetTempC = packet.temperatureCelsius
             if let t = packet.temperatureCelsius {
@@ -946,7 +1137,11 @@ final class PaxDeviceViewModel: ObservableObject {
         case .chargeStatus:
             isCharging = (packet.payload.count >= 1 && packet.payload[0] != 0)
         case .heatingState:
+            let previousHeatingState = heatingState
             heatingState = packet.heatingState
+            if heatingState != previousHeatingState {
+                heatingStateDidChange(from: previousHeatingState)
+            }
         case .lockStatus:
             isLocked = packet.lockState
         case .dynamicMode:
@@ -954,21 +1149,7 @@ final class PaxDeviceViewModel: ObservableObject {
         case .currentTargetTemp:
             currentTargetTempC = packet.temperatureCelsius
         case .displayName:
-            if packet.payload.count > 1 {
-                let len = Int(packet.payload[0])
-                if packet.payload.count >= 1 + len {
-                    let reported = String(bytes: packet.payload[1..<(1 + len)], encoding: .utf8)
-                    displayName = reported
-                    if let wanted = pendingNameWrite {
-                        pendingNameWrite = nil
-                        if reported == wanted {
-                            log("✔ Device accepted the new name \"\(wanted)\"", level: .info)
-                        } else {
-                            log("✘ Device ignored the rename — still called \"\(reported ?? "?")\"", level: .warn)
-                        }
-                    }
-                }
-            }
+            applyDisplayNameReport(packet)
         case .supportedAttribs:
             applySupportedAttributes(packet)
         case .colorTheme, .shellColor:
@@ -1048,24 +1229,6 @@ final class PaxDeviceViewModel: ObservableObject {
         if isNew {
             log("Haptics: amplitude \(Int((hapticAmplitude ?? 0) * 100))% (\(amplitude)/128), first 6 bytes \(raw.hexString)",
                 level: .info)
-        }
-    }
-
-    /// Renames the PAX. The device echoes the new name back through the normal
-    /// DisplayName report, so the rename is confirmed the same way a colour
-    /// write is rather than assumed.
-    func setDisplayName(_ name: String) {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard connectionState.isConnected else { return }
-        guard let packet = PaxPacket.setDisplayName(trimmed) else {
-            log("Not renaming: a name cannot be empty", level: .warn)
-            return
-        }
-        pendingNameWrite = trimmed
-        enqueue {
-            try self.sendPacket(packet)
-            self.log("Renaming device → \"\(trimmed)\"", level: .tx)
-            try self.sendPacket(PaxPacket.statusRequest(attributes: [.displayName]))
         }
     }
 
@@ -1197,6 +1360,8 @@ final class PaxDeviceViewModel: ObservableObject {
         // running the ready sequence again re-sends every capability request.
         guard connectionState != .ready else { return }
         log("PAX service confirmed + serial ready — entering ready state", level: .info)
+        if settings.notifyWhenReady { ReadyNotifier.shared.requestAuthorizationIfNeeded() }
+        displayName = deviceLabel
         connectWatchdog?.cancel()
         connectWatchdog = nil
         connectionState = .ready
@@ -1253,6 +1418,10 @@ final class PaxDeviceViewModel: ObservableObject {
         dynamicMode = nil
         isLocked = nil
         displayName = nil
+        reportedName = nil
+        gapName = nil
+        renameVerification?.cancel()
+        renameVerification = nil
         serialNumber = nil
         firmwareRevision = nil
         modelNumber = nil
@@ -1281,6 +1450,9 @@ final class PaxDeviceViewModel: ObservableObject {
         probeTask = nil
         probeInProgress = false
         probeSamples.removeAll()
+        warmUpStartTempC = nil
+        lastWarmUpHex = nil
+        ReadyNotifier.shared.reset()
         pendingLedWrite = nil
         pushColorOnceDiscovered = false
         capabilitiesKnown = false
@@ -1340,6 +1512,9 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
         stopScan()
         pendingConnectWatchdog?.cancel()
         pendingConnectWatchdog = nil
+        // A pending auto-connect never went through the scan list, so this is
+        // the first chance to learn what the device calls itself.
+        advertisedName = bluetooth.advertisedName ?? advertisedName
         // Covers the pending-connect path too, which reaches this point without
         // ever going through `connect(to:)`.
         armConnectWatchdog()
@@ -1446,6 +1621,16 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
                 log("Key derivation failed: \(error.localizedDescription)", level: .error)
                 connectionState = .error(error.localizedDescription)
             }
+
+        case PaxUUIDs.deviceNameChar:
+            let name = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let name, !name.isEmpty else { return }
+            gapName = name
+            displayName = deviceLabel
+            log("Device name (Generic Access): \(name)\(bluetooth.deviceNameWritable ? " — writable" : " — read only")",
+                level: .ble)
+            judgeRename(against: name, source: "Generic Access")
 
         case PaxUUIDs.modelNumberChar:
             modelNumber = String(data: data, encoding: .utf8) ?? data.hexString

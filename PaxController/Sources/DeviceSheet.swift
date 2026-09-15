@@ -21,6 +21,7 @@ struct DeviceSheet: View {
                 statusSection
                 ledColorSection
                 ledModeSection
+                alertsSection
                 temperatureSection
                 connectionSection
                 lockScreenSection
@@ -36,7 +37,7 @@ struct DeviceSheet: View {
                     }
                 }
             }
-            .navigationTitle(viewModel.displayName ?? "Device")
+            .navigationTitle(viewModel.connectionState.isConnected ? viewModel.deviceLabel : "Device")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -110,6 +111,19 @@ struct DeviceSheet: View {
 
     // MARK: - LED color
 
+    private var alertsSection: some View {
+        Section {
+            Toggle("Tell me when it is ready", isOn: $settings.notifyWhenReady)
+                .onChange(of: settings.notifyWhenReady) { on in
+                    if on { ReadyNotifier.shared.requestAuthorizationIfNeeded() }
+                }
+        } header: {
+            Text("Alerts")
+        } footer: {
+            Text("A notification the moment the oven reaches the set point — the app does not have to be open, since the connection is kept in the background.")
+        }
+    }
+
     /// The PAX keeps two colours for each of its four states. Hidden unless the
     /// user is actually driving the device's LEDs — with that off, these
     /// colours would go nowhere.
@@ -129,15 +143,22 @@ struct DeviceSheet: View {
                         viewModel.resendLedColors()
                     }))
                 if settings.perModeLedColors {
+                    Toggle("Follow the temperature while heating", isOn: Binding(
+                        get: { settings.warmUpGradient },
+                        set: { settings.warmUpGradient = $0; viewModel.resendLedColors() }))
                     ForEach(PaxColorTheme.Mode.allCases, id: \.self) { mode in
                         modeColorRow(mode)
+                    }
+                    Button("Reset to the default colours") {
+                        settings.resetModeColorsToCleanDefaults()
+                        viewModel.resendLedColors()
                     }
                 }
             } header: {
                 Text("PAX LED States")
             } footer: {
                 Text(settings.perModeLedColors
-                     ? "Each state holds two colours; the PAX moves between them. Set both to the same colour for a steady light. The colour above still themes the app."
+                     ? "Each state holds two colours; the PAX moves between them. Set both to the same colour for a steady light. While it warms up the heating colour can follow the thermometer instead — green, through yellow, to orange. The colour above still themes the app."
                      : "The PAX keeps a separate pair of colours for each of its four states. Turn this on to set them individually instead of painting all four with the colour above.")
             }
         }
@@ -373,6 +394,11 @@ struct DeviceSheet: View {
             } else {
                 row("Name", value: viewModel.displayName)
             }
+            if viewModel.connectionState.isConnected {
+                Text(nameSourceNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             row("Model", value: viewModel.modelNumber)
             row("Serial", value: viewModel.serialNumber)
             row("Firmware", value: viewModel.firmwareRevision)
@@ -383,6 +409,21 @@ struct DeviceSheet: View {
                 row("Attributes", value: "\(viewModel.supportedAttributes.count) supported")
             }
         }
+    }
+
+    /// Renaming is only as good as what the firmware allows, so say which it
+    /// is rather than letting a name silently mean nothing.
+    private var nameSourceNote: String {
+        if viewModel.reportedName != nil { return "Stored on the PAX." }
+        if viewModel.gapName != nil {
+            return viewModel.canRenameDevice
+                ? "From the device itself."
+                : "From the device itself, and read only on this firmware — a new name is kept by this app."
+        }
+        if settings.deviceNickname != nil {
+            return "This firmware would not take a name, so this one is kept by the app."
+        }
+        return "This firmware may not store a name; the app keeps one either way."
     }
 
     // Shipped in release, not just debug: a sideloaded app's only support

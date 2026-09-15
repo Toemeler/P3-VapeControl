@@ -13,6 +13,11 @@ enum PaxUUIDs {
     static let notifyCharUUID     = CBUUID(string: "8E320203-64D2-11E6-BDF4-0800200C9A66")
 
     static let deviceInfoService  = CBUUID(string: "180A")
+    /// Generic Access, and the Device Name characteristic inside it. This is
+    /// the name iOS shows and the scan reports — and, on firmware that allows
+    /// writing it, the one a rename has to change to stick.
+    static let genericAccessService = CBUUID(string: "1800")
+    static let deviceNameChar       = CBUUID(string: "2A00")
     static let serialNumberChar   = CBUUID(string: "2A25")
     static let modelNumberChar    = CBUUID(string: "2A24")
     static let firmwareRevChar    = CBUUID(string: "2A26")
@@ -64,24 +69,37 @@ enum PaxMessageType: UInt8 {
 }
 
 // MARK: - Heating State
+/// Values taken from the official PAX web app's own `HeatingStates` enum.
+/// The table this app shipped with was wrong at every position — it read 0 as
+/// "Off", which is why a PAX warming up said Off, and 5 as "Cooling", which is
+/// why one sitting on the charger said Cooling.
 enum PaxHeatingState: UInt8, CustomStringConvertible {
-    case off          = 0x00
-    case standby      = 0x01
-    case heating      = 0x02
-    case ready        = 0x03
-    case cooling      = 0x05
-    case boostMode    = 0x08
+    case heating      = 0x00
+    case ready        = 0x01
+    /// Lip detection: the device boosts while you draw.
+    case boosting     = 0x02
+    /// Lip detection: the draw has ended and it is settling back.
+    case cooling      = 0x03
+    /// Dropped to standby because the device has not moved.
+    case standby      = 0x04
+    case ovenOff      = 0x05
+    /// Temperature being chosen by holding the button on the device.
+    case tempSetMode  = 0x06
 
     var description: String {
         switch self {
-        case .off:       return "Off"
-        case .standby:   return "Standby"
-        case .heating:   return "Heating"
-        case .ready:     return "Ready"
-        case .cooling:   return "Cooling"
-        case .boostMode: return "Boost"
+        case .heating:      return "Heating"
+        case .ready:        return "Ready"
+        case .boosting:     return "Inhaling"
+        case .cooling:      return "Cooling"
+        case .standby:      return "Standby"
+        case .ovenOff:      return "Oven off"
+        case .tempSetMode:  return "Setting temperature"
         }
     }
+
+    /// True while the oven is actually working towards the set point.
+    var isWarmingUp: Bool { self == .heating }
 }
 
 // MARK: - Dynamic Mode (PAX 3 heating profile)

@@ -23,6 +23,28 @@ struct PaxColorTheme: Equatable {
             }
         }
 
+        /// How the PAX moves between the state's two colours. Values seen in
+        /// the official app's own themes: 0, 1 and 2, with frequencies from
+        /// about 5 to 27. A steady state wants a slow fade; the warm-up wants
+        /// none, since the app drives that colour from the temperature.
+        var defaultAnimation: UInt8 {
+            switch self {
+            case .startup:    return 1
+            case .heating:    return 0
+            case .regulating: return 2
+            case .standby:    return 1
+            }
+        }
+
+        var defaultFrequency: UInt8 {
+            switch self {
+            case .startup:    return 12
+            case .heating:    return 15
+            case .regulating: return 9
+            case .standby:    return 6
+            }
+        }
+
         var detail: String {
             switch self {
             case .startup:    return "The moment it wakes up"
@@ -94,18 +116,31 @@ struct PaxColorTheme: Equatable {
     /// Each mode given its own pair of colours, again keeping the animation
     /// and frequency bytes the device reported. `pairs` is indexed by `Mode`;
     /// a short array falls back to `fallback` for the modes it does not cover.
+    ///
+    /// Unlike `solid`, this takes the app's own animation and frequency for
+    /// each state rather than the device's: someone setting four states by
+    /// hand is styling the thing, and the values it shipped with are usually
+    /// all zeroes anyway.
     static func perMode(_ pairs: [(LedColor, LedColor)],
                         fallback: LedColor,
                         basedOn template: PaxColorTheme?) -> PaxColorTheme {
         let modes = (0..<modeCount).map { i -> ModeColors in
-            let existing = template?.modes.indices.contains(i) == true ? template?.modes[i] : nil
+            let mode = Mode(rawValue: i)
             let pair = pairs.indices.contains(i) ? pairs[i] : (fallback, fallback)
             return ModeColors(color1: (pair.0.red, pair.0.green, pair.0.blue),
                               color2: (pair.1.red, pair.1.green, pair.1.blue),
-                              animation: existing?.animation ?? 0,
-                              frequency: existing?.frequency ?? 0)
+                              animation: mode?.defaultAnimation ?? 0,
+                              frequency: mode?.defaultFrequency ?? 0)
         }
         return PaxColorTheme(modes: modes)
+    }
+
+    /// Replaces one state's colours, leaving its animation and frequency and
+    /// every other state alone. The warm-up ramp writes through this.
+    mutating func setColors(_ mode: Mode, color1: LedColor, color2: LedColor) {
+        guard modes.indices.contains(mode.rawValue) else { return }
+        modes[mode.rawValue].color1 = (color1.red, color1.green, color1.blue)
+        modes[mode.rawValue].color2 = (color2.red, color2.green, color2.blue)
     }
 
     /// Payload for a write, excluding the message type byte.

@@ -16,6 +16,9 @@ final class AppSettings: ObservableObject {
         static let temperatureUnit = "temperatureUnit"
         static let perModeColors   = "perModeLedColors"
         static let modeColors      = "ledModeColorHexes"
+        static let readyAlert      = "notifyWhenReady"
+        static let warmUpGradient  = "warmUpGradient"
+        static let nickname        = "deviceNickname"
     }
 
     /// Drives `DS.Palette.accent`, so it re-themes the dial, chips and buttons.
@@ -44,6 +47,26 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(temperatureUnit.rawValue, forKey: Key.temperatureUnit) }
     }
 
+    /// A name the user chose that the device would not take. Kept so a rename
+    /// still means something on firmware that ignores it — the app, the Lock
+    /// Screen card and Siri all use it, and it is cleared the moment a rename
+    /// does reach the device.
+    @Published var deviceNickname: String? {
+        didSet { defaults.set(deviceNickname, forKey: Key.nickname) }
+    }
+
+    /// Whether to raise a notification the moment the oven reaches the set
+    /// point. On by default: it is the one thing worth interrupting for.
+    @Published var notifyWhenReady: Bool {
+        didSet { defaults.set(notifyWhenReady, forKey: Key.readyAlert) }
+    }
+
+    /// Whether the heating state's colour follows the thermometer on the way
+    /// up — green, through yellow, to orange as it reaches the set point.
+    @Published var warmUpGradient: Bool {
+        didSet { defaults.set(warmUpGradient, forKey: Key.warmUpGradient) }
+    }
+
     /// Whether each of the PAX's four states gets its own pair of colours, or
     /// the single colour above paints all of them.
     @Published var perModeLedColors: Bool {
@@ -70,14 +93,18 @@ final class AppSettings: ObservableObject {
         liveActivityEnabled = defaults.object(forKey: Key.liveActivity) as? Bool ?? true
         temperatureUnit     = defaults.string(forKey: Key.temperatureUnit)
             .flatMap(TemperatureUnit.init(rawValue:)) ?? .celsius
-        perModeLedColors    = defaults.object(forKey: Key.perModeColors) as? Bool ?? false
+        deviceNickname      = defaults.string(forKey: Key.nickname)
+        notifyWhenReady     = defaults.object(forKey: Key.readyAlert) as? Bool ?? true
+        warmUpGradient      = defaults.object(forKey: Key.warmUpGradient) as? Bool ?? true
+        // On by default: the four states carry the palette below, which is
+        // what makes the PAX show what it is doing rather than one flat colour.
+        perModeLedColors    = defaults.object(forKey: Key.perModeColors) as? Bool ?? true
         // Anything but eight parseable colours is treated as absent rather than
         // patched up: a half-read list would write colours nobody chose.
         let stored = defaults.stringArray(forKey: Key.modeColors) ?? []
         let valid = stored.count == Self.modeSlotCount
             && stored.allSatisfy { LedColor.fromHex($0) != nil }
-        modeLedHexes = valid ? stored
-            : Array(repeating: hex, count: Self.modeSlotCount)
+        modeLedHexes = valid ? stored : LedColor.cleanStateHexes
     }
 
     /// Four modes, two colours each.
@@ -103,12 +130,17 @@ final class AppSettings: ObservableObject {
         modeLedHexes[index] = color.hex
     }
 
+    /// Back to the shipped palette.
+    func resetModeColorsToCleanDefaults() {
+        modeLedHexes = LedColor.cleanStateHexes
+    }
+
     /// Fills the per-mode colours in from what the device is actually showing,
     /// so switching the toggle on starts from the PAX's own theme rather than
-    /// from eight copies of the accent colour.
+    /// from the shipped palette.
     func seedModeColors(from theme: PaxColorTheme?) {
         guard let theme else {
-            modeLedHexes = Array(repeating: ledColorHex, count: Self.modeSlotCount)
+            modeLedHexes = LedColor.cleanStateHexes
             return
         }
         var hexes: [String] = []

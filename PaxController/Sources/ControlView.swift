@@ -171,10 +171,11 @@ struct ControlView: View {
 
     private var heatingColor: Color {
         switch viewModel.heatingState {
-        case .heating, .boostMode:  return DS.Palette.accent
+        case .heating, .boosting:   return DS.Palette.accent
         case .ready:                return .green
         case .cooling:              return .blue
-        case .standby, .off, .none: return .secondary
+        case .standby, .ovenOff,
+             .tempSetMode, .none:   return .secondary
         }
     }
 

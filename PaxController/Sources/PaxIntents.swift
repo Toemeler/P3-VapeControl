@@ -115,33 +115,3 @@ struct PaxStatusIntent: AppIntent {
         return .result(dialog: IntentDialog(stringLiteral: summary))
     }
 }
-
-// MARK: - Lock Screen buttons
-
-/// The Lock Screen card's temperature buttons. A `LiveActivityIntent` is the
-/// one kind that runs in the app's process rather than the widget's, which is
-/// what makes a Bluetooth write from the Lock Screen possible at all.
-@available(iOS 17.0, *)
-struct PaxQuickTemperatureIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Set PAX temperature"
-    /// Reachable from the Lock Screen card, not something to offer in the
-    /// Shortcuts gallery — `SetPaxTemperatureIntent` is the one to use there.
-    static var isDiscoverable: Bool = false
-
-    @Parameter(title: "Temperature (°C)", default: 193)
-    var celsius: Int
-
-    init() {}
-    init(celsius: Int) { self.celsius = celsius }
-
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        PaxIntentBridge.setTemperature?(PaxIntentBridge.clamp(celsius))
-        return .result()
-    }
-}
-
-/// The presets the Lock Screen card offers, in °C.
-enum PaxQuickTemperatures {
-    static let all = [180, 193, 204, 215]
-}

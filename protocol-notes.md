@@ -134,14 +134,22 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 | `0xFE` | `StatusUpdate` | Host → Device | 8 bytes LE `uint64` bitfield; request device send current values of indicated attributes |
 
 ### HeatingState values
-| Byte | State |
-|------|-------|
-| `0x00` | Off |
-| `0x01` | Standby |
-| `0x02` | Heating |
-| `0x03` | Ready (at temperature) |
-| `0x05` | Cooling |
-| `0x08` | Boost mode |
+Taken from the official PAX web app's own `HeatingStates` enum (mirrored in
+[PBRE](https://github.com/josephburt/PBRE), `src/pax/shared/enums/HeatingStates.ts`).
+
+| Byte | State | Meaning |
+|------|-------|---------|
+| `0x00` | Heating | Oven warming up to the set point |
+| `0x01` | Ready | At (or near) the set point |
+| `0x02` | Boosting | Lip detection: boosting while you draw |
+| `0x03` | Cooling | Lip detection: settling back after a draw |
+| `0x04` | Standby | Dropped to standby because the device has not moved |
+| `0x05` | Oven off | |
+| `0x06` | TempSetMode | Temperature being chosen on the device itself |
+
+Earlier revisions of this file listed `0x00` as Off, `0x02` as Heating and
+`0x05` as Cooling. Every entry was wrong, which is why a PAX warming up
+reported "Off" and one on the charger reported "Cooling".
 
 ### Temperature encoding
 ```

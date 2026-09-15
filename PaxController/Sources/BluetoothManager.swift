@@ -55,6 +55,19 @@ final class BluetoothManager: NSObject {
     private var writeChar: CBCharacteristic?
     private var notifyChar: CBCharacteristic?
     private var writeCharProps: CBCharacteristicProperties = []
+    /// Generic Access' Device Name, when the device exposes it.
+    private var deviceNameChar: CBCharacteristic?
+
+    /// Whether this device lets the name be written over Generic Access. Most
+    /// do not; the ones that do are the only place a rename can actually stick
+    /// without the vendor's own attribute answering.
+    var deviceNameWritable: Bool {
+        guard let props = deviceNameChar?.properties else { return false }
+        return props.contains(.write) || props.contains(.writeWithoutResponse)
+    }
+
+    /// The name the device advertises, which is what the scan list shows.
+    var advertisedName: String? { connectedPeripheral?.name }
 
     override init() {
         super.init()
@@ -146,7 +159,9 @@ final class BluetoothManager: NSObject {
     func discoverServices() {
         guard let p = connectedPeripheral else { return }
         p.delegate = self
-        p.discoverServices([PaxUUIDs.serviceUUID, CBUUID(string: "180A")])
+        p.discoverServices([PaxUUIDs.serviceUUID,
+                            PaxUUIDs.deviceInfoService,
+                            PaxUUIDs.genericAccessService])
     }
 
     // MARK: - discoverCharacteristics()
@@ -157,12 +172,28 @@ final class BluetoothManager: NSObject {
             p.discoverCharacteristics(
                 [PaxUUIDs.readCharUUID, PaxUUIDs.writeCharUUID, PaxUUIDs.notifyCharUUID],
                 for: service)
-        } else if service.uuid == CBUUID(string: "180A") {
+        } else if service.uuid == PaxUUIDs.deviceInfoService {
             p.discoverCharacteristics(
                 [PaxUUIDs.serialNumberChar, PaxUUIDs.modelNumberChar,
                  PaxUUIDs.firmwareRevChar, PaxUUIDs.manufacturerChar],
                 for: service)
+        } else if service.uuid == PaxUUIDs.genericAccessService {
+            p.discoverCharacteristics([PaxUUIDs.deviceNameChar], for: service)
         }
+    }
+
+    /// Writes Generic Access' Device Name, if this device allows it. Returns
+    /// false when there is nothing to write to, so the caller can fall back to
+    /// the vendor attribute rather than reporting a rename that never left.
+    @discardableResult
+    func writeDeviceName(_ name: String) -> Bool {
+        guard let p = connectedPeripheral, let char = deviceNameChar,
+              deviceNameWritable, let data = name.data(using: .utf8) else { return false }
+        let type: CBCharacteristicWriteType =
+            char.properties.contains(.write) ? .withResponse : .withoutResponse
+        p.writeValue(data, for: char, type: type)
+        p.readValue(for: char)
+        return true
     }
 
     // MARK: - writeCommand()
@@ -222,6 +253,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
         readChar = nil
         writeChar = nil
         notifyChar = nil
+        deviceNameChar = nil
         writeCharProps = []
     }
 
@@ -292,6 +324,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
             readChar = nil
             writeChar = nil
             notifyChar = nil
+            deviceNameChar = nil
             writeCharProps = []
             delegate?.bluetoothDidDisconnect(error: msg)
         }
@@ -344,6 +377,9 @@ extension BluetoothManager: CBPeripheralDelegate {
                 case PaxUUIDs.notifyCharUUID:
                     notifyChar = char
                     p.setNotifyValue(true, for: char)
+                case PaxUUIDs.deviceNameChar:
+                    deviceNameChar = char
+                    p.readValue(for: char)
                 case PaxUUIDs.serialNumberChar, PaxUUIDs.modelNumberChar,
                      PaxUUIDs.firmwareRevChar, PaxUUIDs.manufacturerChar:
                     p.readValue(for: char)

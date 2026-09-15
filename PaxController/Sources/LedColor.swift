@@ -44,6 +44,39 @@ struct LedColor: Identifiable, Equatable {
         LedColor(name: "White",  red: 0xFF, green: 0xFF, blue: 0xFF),
     ]
 
+    /// The colours each PAX state starts out with: a cool wake-up, a warm-up
+    /// that runs green through orange, light blue once it is holding
+    /// temperature, and a soft orange in standby. Eight entries, colour 1 then
+    /// colour 2 for startup, heating, regulating and standby.
+    static let cleanStateHexes = [
+        "#7FD6FF", "#FFFFFF",   // startup: light blue waking to white
+        "#2EB82E", "#FF6A00",   // heating: green climbing to orange
+        "#7FD6FF", "#7FD6FF",   // at temperature: steady light blue
+        "#A34D00", "#FF8A3D",   // standby: a soft orange, breathing
+    ]
+
+    /// Where the warm-up ramp sits at `progress` (0 at the start of the
+    /// heat-up, 1 at the set point): green, through yellow, to orange.
+    static func warmUp(progress: Double) -> LedColor {
+        let p = min(1, max(0, progress))
+        let green  = LedColor(name: "Warm-up", red: 0x2E, green: 0xB8, blue: 0x2E)
+        let yellow = LedColor(name: "Warm-up", red: 0xFF, green: 0xD0, blue: 0x00)
+        let orange = LedColor(name: "Warm-up", red: 0xFF, green: 0x6A, blue: 0x00)
+        return p < 0.5
+            ? blend(green, yellow, p / 0.5)
+            : blend(yellow, orange, (p - 0.5) / 0.5)
+    }
+
+    private static func blend(_ a: LedColor, _ b: LedColor, _ t: Double) -> LedColor {
+        func mix(_ x: UInt8, _ y: UInt8) -> UInt8 {
+            UInt8((Double(x) + (Double(y) - Double(x)) * t).rounded())
+        }
+        return LedColor(name: "Warm-up",
+                        red: mix(a.red, b.red),
+                        green: mix(a.green, b.green),
+                        blue: mix(a.blue, b.blue))
+    }
+
     static func fromHex(_ hex: String) -> LedColor? {
         var s = hex
         if s.hasPrefix("#") { s.removeFirst() }
