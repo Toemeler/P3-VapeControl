@@ -50,14 +50,18 @@ A packet is a **multiple of 16 bytes, at least 32**:
 > whole-packet reading decodes them, and all three turn out to be
 > `ColorTheme` reports that the split was silently discarding.
 >
-> Plaintext beyond the meaningful payload is zero padding for the first
-> 16-byte block, but a longer ciphertext can decrypt to uninitialised
-> firmware buffer after that — read only the bytes a message type defines.
+> **Plaintext beyond the payload is random, not zero padding.** Captured
+> replies show uninitialised buffer straight after the value: `battery` comes
+> back as `03 64 8B B2 78 DE …`, `lockStatus` as `06 00 98 DC 43 BA …`. So a
+> payload's length cannot be inferred by stripping trailing zeros — read
+> exactly the bytes the message type defines and ignore the rest. The 32 zero
+> bytes in a default `ColorTheme` are real data (four zeroed modes), not padding.
 
-Decrypted plaintext structure (16 bytes):
+Decrypted plaintext structure:
 ```
-[ message type: 1 byte ][ payload: up to 15 bytes ][ zero padding ]
+[ message type: 1 byte ][ payload ][ uninitialised bytes to the block boundary ]
 ```
+The trailing bytes are whatever was in the device's buffer — see the note above.
 
 All multi-byte values are **little-endian**.
 
@@ -105,18 +109,18 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 | `0x09` | `Time` | Both | Unknown format |
 | `0x0A` | `DisplayName` | Both | 1 byte length + UTF-8 string |
 | `0x0D` | `Replay` | Both | Unknown |
-| `0x0F` | `GameMode` | Both | Unknown — supported by PAX 3 fw 2.0.4 |
-| `0x12` | `LogSyncRequest` | Both | Unknown |
+| `0x0F` | `GameMode` | Both | Unknown — supported by PAX 3 fw 2.0.4, which reports `0x00` |
 | `0x11` | `HeaterRanges` | Device → Host | Unknown format |
+| `0x12` | `LogSyncRequest` | Both | Unknown |
 | `0x13` | `DynamicMode` | Both | 1 byte mode ID (PAX 3) |
 | `0x14` | `ColorTheme` | Both | **33 bytes: mode count + 4 modes × 8** (see below) |
 | `0x15` | `Brightness` | Both | **1 byte, 0…128** (not 0–100). PAX 3 reported `0x80` = full |
 | `0x17` | `HapticMode` | Both | Byte 0 is amplitude, 0…128. PAX 3 reports **6 bytes** (`2F 04 02 04 01 00`); the rest are undecoded |
 | `0x18` | `SupportedAttributes` | Device → Host | 8 bytes LE `uint64` bitfield; bit N set = attribute N supported |
 | `0x19` | `HeatingParams` | Both | Unknown |
-| `0x1B` | `UiMode` | Both | 1 byte |
-| `0x1C` | `ShellColor` | Device → Host | 1 byte: the casing's own colour. `0`=Onyx Black, `1`=Silver, `2`=Rose Gold, `3`=Sage Teal, `4`=Burgundy. Hardware identity, **not** the LED colour |
-| `0x1E` | `LowSoCMode` | Both | Unknown |
+| `0x1B` | `UiMode` | Both | 1 byte; PAX 3 reports `0x01` |
+| `0x1C` | `ShellColor` | Device → Host | 1 byte: the casing's own colour. `0`=Onyx Black, `1`=Silver, `2`=Rose Gold, `3`=Sage Teal, `4`=Burgundy. Hardware identity, **not** the LED colour. A PAX 3 on fw 2.0.4 answered `0xE5`, outside that range — treat an out-of-range value as unpopulated |
+| `0x1E` | `LowSoCMode` | Both | 1 byte; PAX 3 reports `0x00` |
 | `0x1F` | `CurrentTargetTemp` | Device → Host | 2 bytes LE `uint16`: PID target in °C × 10 (PAX 3) |
 | `0x20` | `HeatingState` | Device → Host | 1 byte; see table below (PAX 3) |
 | `0x24` | `SessionControl` | Both | Unknown |
@@ -211,11 +215,22 @@ exists in the official enum but this firmware does **not** advertise it.
 Attribute numbering below was cross-checked against the official PAX web app's
 own `Messages` enum, which agrees with this table throughout.
 
+**Observed single-byte values** on this device: `Brightness` `0x80` (full,
+scale 0…128), `HapticMode` byte 0 `0x2F` (47/128 ≈ 36%, followed by five
+undecoded bytes `04 02 04 01 00`), `UiMode` `0x01`, `GameMode` `0x00`,
+`LowSoCMode` `0x00`, `ShellColor` `0xE5` (out of range, see above).
+
 **The write characteristic is `writeWithoutResponse`**, so a write is never
 acknowledged — `didWriteValueFor` does not fire. The only way to tell whether
 a write took effect is to read the attribute back and compare.
 
-### ColorTheme (0x14) layout
+### ColorTheme (0x14) layout — confirmed on hardware
+
+Writing this structure works: a PAX 3 on firmware 2.0.4 accepted four
+consecutive colour changes and echoed each one back unchanged, staying
+connected throughout. Getting the mode count right is what makes the
+difference; see the warning below.
+
 
 ```
 [ mode count: 1 byte ][ mode × count ]

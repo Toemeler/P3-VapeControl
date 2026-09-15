@@ -582,9 +582,12 @@ final class PaxDeviceViewModel: ObservableObject {
         case .hapticMode:
             applyHapticReport(packet)
         case .uiMode, .lowSoCMode, .gameMode, .heaterRanges, .heatingParams, .time:
-            // Supported by this firmware but not yet decoded. Log the raw value
-            // rather than dropping it as an unknown type.
-            log("\(packet.type) raw: \(Data(packet.payload.prefix(8)).hexString)", level: .rx)
+            // Supported by this firmware but not yet decoded. Plaintext past the
+            // payload is uninitialised buffer, not zero padding, so log only the
+            // first byte — dumping more just prints noise that looks like data.
+            if let first = packet.payload.first {
+                log("\(packet.type): 0x\(String(format: "%02X", first))", level: .rx)
+            }
         default:
             break
         }
@@ -653,16 +656,18 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     /// Names from the official app's ShellColors enum.
-    static func shellColorLabel(_ index: UInt8) -> String { shellColorName(index) }
+    static func shellColorLabel(_ index: UInt8) -> String {
+        shellColorName(index) ?? String(format: "0x%02X", index)
+    }
 
-    private static func shellColorName(_ index: UInt8) -> String {
+    private static func shellColorName(_ index: UInt8) -> String? {
         switch index {
         case 0: return "Onyx Black"
         case 1: return "Silver"
         case 2: return "Rose Gold"
         case 3: return "Sage Teal"
         case 4: return "Burgundy"
-        default: return "unknown"
+        default: return nil
         }
     }
 
@@ -684,8 +689,16 @@ final class PaxDeviceViewModel: ObservableObject {
         // ShellColor is the casing's own colour, not a setting.
         guard packet.type == .colorTheme else {
             if let index = packet.payload.first, shellColorIndex != index {
-                shellColorIndex = index
-                log("Shell colour: \(Self.shellColorName(index)) (0x\(String(format: "%02X", index)))", level: .info)
+                // The documented enum only runs 0…4. This PAX 3 answers 0xE5,
+                // so report the byte rather than inventing a colour for it.
+                if let name = Self.shellColorName(index) {
+                    shellColorIndex = index
+                    log("Shell colour: \(name)", level: .info)
+                } else {
+                    shellColorIndex = nil
+                    log("ShellColor reported 0x\(String(format: "%02X", index)), outside the documented 0…4 range — ignoring it",
+                        level: .warn)
+                }
             }
             pushSavedColorIfReady()
             return
