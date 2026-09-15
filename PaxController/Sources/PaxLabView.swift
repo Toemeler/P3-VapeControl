@@ -15,6 +15,7 @@ struct PaxLabView: View {
     @State private var writePayload = ""
     @State private var showWriteConfirm = false
     @State private var copied = false
+    @State private var shareText = ""
 
     private var connected: Bool { viewModel.connectionState.isConnected }
 
@@ -27,8 +28,13 @@ struct PaxLabView: View {
             writeLogSection
             reportSection
         }
+        .background(writeConfirmation)
         .navigationTitle("Lab")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { shareText = report() }
+        .onChange(of: lab.samples.count) { _ in shareText = report() }
+        .onChange(of: lab.snapshots.count) { _ in shareText = report() }
+        .onChange(of: lab.writes.count) { _ in shareText = report() }
     }
 
     // MARK: - Sweep
@@ -131,7 +137,7 @@ struct PaxLabView: View {
                     if diffs.isEmpty {
                         Text("Nothing moved.").font(.caption).foregroundStyle(.secondary)
                     }
-                    ForEach(diffs, id: \.attribute) { diff in
+                    ForEach(diffs) { diff in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(String(format: "0x%02X %@", diff.attribute,
                                         PaxMessageType(rawValue: diff.attribute).map { "\($0)" } ?? "unnamed"))
@@ -170,20 +176,24 @@ struct PaxLabView: View {
         } footer: {
             Text("A payload the firmware does not expect can take the device offline: a three-byte write to ColorTheme once made it read a mode count of 255 and walk two kilobytes off a fifteen-byte buffer. Read an attribute first, match the length it reports, and change one byte at a time. Every write is logged before it is sent, so one that kills the link is still on record afterwards.")
         }
-        .confirmationDialog("Write to the device?",
-                            isPresented: $showWriteConfirm, titleVisibility: .visible) {
-            Button("Write it", role: .destructive) {
+    }
+
+    private var writeConfirmation: some View {
+        EmptyView()
+            .confirmationDialog("Write to the device?",
+                                isPresented: $showWriteConfirm, titleVisibility: .visible) {
+                Button("Write it", role: .destructive) {
+                    if let write = parsedWrite {
+                        viewModel.labWrite(attribute: write.attribute, payload: write.payload)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
                 if let write = parsedWrite {
-                    viewModel.labWrite(attribute: write.attribute, payload: write.payload)
+                    Text(String(format: "0x%02X ← %@\n\nIf the PAX goes quiet after this, power-cycle it; the write stays in the log.",
+                                write.attribute, PaxLab.hex(write.payload)))
                 }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            if let write = parsedWrite {
-                Text(String(format: "0x%02X ← %@\n\nIf the PAX goes quiet after this, power-cycle it; the write stays in the log.",
-                            write.attribute, PaxLab.hex(write.payload)))
-            }
-        }
     }
 
     private var parsedWrite: (attribute: UInt8, payload: Data)? {
@@ -249,7 +259,10 @@ struct PaxLabView: View {
             } label: {
                 Label(copied ? "Copied" : "Copy the whole report", systemImage: "doc.on.doc")
             }
-            ShareLink(item: report()) {
+            // The text is built when the screen appears and after anything that
+            // changes it, never inside the body: `ShareLink` wants a value, and
+            // producing one here meant touching published state mid-render.
+            ShareLink(item: shareText) {
                 Label("Share the report", systemImage: "square.and.arrow.up")
             }
         } footer: {
@@ -258,8 +271,7 @@ struct PaxLabView: View {
     }
 
     private func report() -> String {
-        lab.deviceSummary = viewModel.labDeviceSummary
-        return lab.report()
+        lab.report(deviceSummary: viewModel.labDeviceSummary)
     }
 }
 #endif

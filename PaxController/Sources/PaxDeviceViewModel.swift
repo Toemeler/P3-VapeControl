@@ -875,7 +875,7 @@ final class PaxDeviceViewModel: ObservableObject {
     static func interpretation(of payload: Data, id: UInt8) -> String {
         var notes: [String] = []
         if payload.count == 1 {
-            notes.append("\(payload[0]) as a byte")
+            notes.append("\(payload[payload.startIndex]) as a byte")
         }
         if payload.count >= 2, payload.count % 2 == 0 {
             let words = stride(from: 0, to: payload.count, by: 2).map { i -> String in
@@ -907,7 +907,6 @@ final class PaxDeviceViewModel: ObservableObject {
     func labSweep(rounds: Int = 3) {
         guard connectionState.isConnected, !PaxLab.shared.sweepInProgress else { return }
         PaxLab.shared.setSweeping(true)
-        PaxLab.shared.deviceSummary = labDeviceSummary
         log("Lab: sweeping every attribute, \(rounds) rounds", level: .info)
         Task { [weak self] in
             for round in 1...rounds {

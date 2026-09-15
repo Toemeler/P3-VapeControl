@@ -48,7 +48,6 @@ final class PaxLab: ObservableObject {
     @Published private(set) var snapshots: [Snapshot] = []
     @Published private(set) var writes: [WriteRecord] = []
     @Published private(set) var sweepInProgress = false
-    @Published var deviceSummary = ""
 
     private let defaults = UserDefaults.standard
     private let writesKey = "labWriteLog"
@@ -121,18 +120,25 @@ final class PaxLab: ObservableObject {
         persist(snapshots, key: snapshotsKey)
     }
 
+    struct Difference: Identifiable {
+        var id: UInt8 { attribute }
+        let attribute: UInt8
+        let before: String
+        let after: String
+    }
+
     /// Attributes whose value differs between two snapshots, which is where the
     /// meaning of an undecoded attribute shows itself.
-    func differences(_ a: Snapshot, _ b: Snapshot) -> [(attribute: UInt8, before: String, after: String)] {
+    func differences(_ a: Snapshot, _ b: Snapshot) -> [Difference] {
         let keys = Set(a.values.keys).union(b.values.keys)
-        return keys.compactMap { key -> (UInt8, String, String)? in
+        return keys.compactMap { key -> Difference? in
             guard let attribute = UInt8(key) else { return nil }
             let before = a.values[key] ?? "—"
             let after = b.values[key] ?? "—"
             guard before != after else { return nil }
-            return (attribute, before, after)
+            return Difference(attribute: attribute, before: before, after: after)
         }
-        .sorted { $0.0 < $1.0 }
+        .sorted { $0.attribute < $1.attribute }
     }
 
     // MARK: - Writes
@@ -184,8 +190,10 @@ final class PaxLab: ObservableObject {
 
     // MARK: - Report
 
-    /// Everything, as text to paste somewhere useful.
-    func report() -> String {
+    /// Everything, as text to paste somewhere useful. `deviceSummary` is passed
+    /// in rather than stored: this is called from a view body, and assigning to
+    /// a published property there re-runs the body that assigned it.
+    func report(deviceSummary: String) -> String {
         var out = ["PAX lab report", "Taken \(Date())", deviceSummary, ""]
 
         out.append("## Attributes answered (\(answeredAttributes.count))")
