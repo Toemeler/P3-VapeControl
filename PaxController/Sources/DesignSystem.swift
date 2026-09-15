@@ -81,9 +81,11 @@ enum DS {
     /// The oven's usable range. `PaxPresetTemp` sits inside it.
     enum Range {
         static let min: Double = 180
-        /// The ceiling the device itself reports through HeaterRanges (0x11),
-        /// whose ladder ends at 245.0 °C. PAX's own app stopped at 215.
-        static let max: Double = 245
+        /// The device's own HeaterRanges (0x11) ladder runs to 245.0 °C, but the
+        /// dial stops at 225: past about there the oven is scorching rather
+        /// than vaporising, so the last twenty degrees the firmware allows are
+        /// not degrees anyone wants to land on by dragging a ring.
+        static let max: Double = 225
         /// Where PAX's app stopped. The dial marks everything past it, because
         /// plant material scorches somewhere around here and the person turning
         /// the ring should be able to see where they are.

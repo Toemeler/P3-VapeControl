@@ -22,8 +22,9 @@ enum PaxIntentBridge {
     /// Degrees the PAX itself accepts. Kept here rather than imported from the
     /// protocol layer, which the extension does not compile.
     static let minCelsius = 180
-    /// The ceiling the device reports for itself through HeaterRanges.
-    static let maxCelsius = 245
+    /// Matches the dial. The device reports a higher ladder through
+    /// HeaterRanges; this is where the app stops.
+    static let maxCelsius = 225
 
     static func clamp(_ celsius: Int) -> Int {
         min(maxCelsius, max(minCelsius, celsius))
