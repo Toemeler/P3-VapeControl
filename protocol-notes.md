@@ -360,8 +360,8 @@ ever arrives and prefers it as the template.
 > | 0 | `boost` | **stops the oven** — this firmware's heater enable |
 > | 1 | `customTemperature` | kept running |
 > | 2 | `heater` | kept running — *not* the heater here |
-> | 3 | `noLipCooling` | kept running |
-> | 4 | `noLipShutdown` | kept running |
+> | 3 | `noLipCooling` | kept running — and is a lip bit, see below |
+> | 4 | `noLipShutdown` | kept running — and is a lip bit, see below |
 > | 7 | `standby` | kept running |
 >
 > So the official app's bit names do not carry over to PAX 3, and bit 2 — the
@@ -370,10 +370,11 @@ ever arrives and prefers it as the template.
 > was the heater. Bits 5 and 6 are clear in every preset and were not tried;
 > setting them would change how the oven heats rather than ask it a question.
 >
-> What bits 3 and 4 actually *are* on this firmware is still unmeasured. The
-> oven answers "am I heating", which is what identified bit 0; identifying the
-> lip bits needs a different question — take a draw and see whether the device
-> reports Inhaling (0x02) and then Cooling (0x03).
+> **Holding bit 0 on and clearing bits 3 and 4 works**, confirmed on hardware:
+> the oven keeps running and the lip sensor stops driving it. So bits 3 and 4
+> are this firmware's lip bits after all — it is only bits 0 and 2 that the
+> official app's names get wrong for a PAX 3. Bits 5 and 6 are clear in every
+> preset and remain untried.
 
 > **The offset is right; the bit meanings are not.** The oven goes off and
 > comes back on with the switch, reproducibly. The two writes are byte-identical
