@@ -51,4 +51,19 @@ Add [**AutoRefreshApps.shortcut**]({shortcut_url}).
 
 </details>
 
+<details>
+<summary><b>PaxControllerLab.ipa — what the second file is</b></summary>
+
+<br>
+
+The same app with a protocol workbench compiled in, under its own bundle id so
+it installs beside the normal one rather than replacing it. *Settings →
+Diagnostics → Lab*: read every attribute the firmware answers, snapshot the
+device in one state and diff it against another, and write arbitrary attributes.
+
+That last part can take a PAX offline until it is power-cycled. Install this one
+only if that is what you came for.
+
+</details>
+
 <sub>Not affiliated with PAX Labs.</sub>

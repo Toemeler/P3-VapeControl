@@ -317,6 +317,33 @@ jobs:
           echo "sha256=$(shasum -a 256 PaxController.ipa | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "human_size=$(ls -lh PaxController.ipa | awk '{print $5}')" >> "$GITHUB_OUTPUT"
 
+      - name: Build the lab flavour
+        # The same app with its protocol tools compiled in, under its own
+        # bundle id so it installs beside the normal one. It rides along with
+        # every build rather than having a workflow of its own, because a
+        # workflow only becomes manually runnable once it is on the default
+        # branch and this work happens on a feature branch.
+        if: steps.appcheck.outputs.skip != 'true'
+        run: |
+          set -o pipefail
+          rm -rf build/Release-iphoneos
+          .github/scripts/build_app.sh Release iphoneos \
+            de.marcomeissner.PaxControllerLab "PAX Lab" \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS=PAX_LAB 2>&1 | tee lab-build.log
+          .github/scripts/package_ipa.sh \
+            build/Release-iphoneos/PaxController.app PaxControllerLab.ipa
+          # Put the display name back, so nothing downstream sees "PAX Lab".
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName PAX Controller" \
+            PaxController/Resources/Info.plist
+
+      - name: Upload the lab build log when it fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-build-log
+          path: lab-build.log
+          if-no-files-found: ignore
+
       - name: Fetch screenshots for the release
         uses: actions/download-artifact@v4
         with:
@@ -400,7 +427,7 @@ jobs:
           # --target pins the tag to the commit being built, so a branch
           # preview never creates a tag pointing at main.
           gh release create "${{ steps.tag.outputs.tag }}" \
-            PaxController.ipa \
+            PaxController.ipa PaxControllerLab.ipa \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "${{ steps.tag.outputs.title }}" \
