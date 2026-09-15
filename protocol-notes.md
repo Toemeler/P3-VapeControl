@@ -117,7 +117,7 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 | `0x15` | `Brightness` | Both | **1 byte, 0…128** (not 0–100). PAX 3 reported `0x80` = full |
 | `0x17` | `HapticMode` | Both | Byte 0 is amplitude, 0…128. PAX 3 reports **6 bytes** (`2F 04 02 04 01 00`); the rest are undecoded |
 | `0x18` | `SupportedAttributes` | Device → Host | 8 bytes LE `uint64` bitfield; bit N set = attribute N supported |
-| `0x19` | `HeatingParams` | Both | **22 bytes: 11 LE `uint16` words** — the heating algorithm, options bitfield last (see below) |
+| `0x19` | `HeatingParams` | Both | **22 bytes: 11 LE `uint16` words** in the official app — but a PAX 3 stops its oven when sent that layout, so its firmware wants something else (see below) |
 | `0x1B` | `UiMode` | Both | 1 byte; PAX 3 reports `0x01` |
 | `0x1C` | `ShellColor` | Device → Host | 1 byte: the casing's own colour. `0`=Onyx Black, `1`=Silver, `2`=Rose Gold, `3`=Sage Teal, `4`=Burgundy. Hardware identity, **not** the LED colour. A PAX 3 on fw 2.0.4 answered `0xE5`, outside that range — treat an out-of-range value as unpopulated |
 | `0x1E` | `LowSoCMode` | Both | 1 byte; PAX 3 reports `0x00` |
@@ -340,7 +340,27 @@ so in the settings footer rather than presenting this as free.
 advertises the attribute in SupportedAttributes, but the probe's three reads of
 it came back with nothing — so a write cannot be confirmed by reading it back,
 the way every other attribute here was confirmed. The app parses a report if one
-ever arrives and prefers it as the template. The app therefore starts every write from the stock preset for the mode
+ever arrives and prefers it as the template.
+
+> **On hardware, writing this block stops the oven.** A PAX 3 on firmware 2.0.4
+> was sent exactly the layout above — the same 23-byte buffer the official app
+> builds, the stock Standard preset with the three lip bits cleared and the
+> heater bit verified set — and the oven switched off. So this firmware does not
+> read the block the way the official app writes it. What is above is confirmed
+> as *the official app's* layout, read out of its own bundle; it is **not**
+> confirmed as PAX 3's.
+>
+> The likeliest explanation is that the web app is an Era/Era Pro app and the
+> PAX 3's firmware, which predates it, expects a different struct — a different
+> field order, a different length, or an options word somewhere else. If the
+> options word lands where the app puts `StandbyTemperature` (1600, bit 2
+> clear), the device reads the heater as disabled, which is exactly the symptom.
+> That is a guess, and there is no way to test it by reading the attribute back.
+>
+> **Do not write 0x19 without a readback.** Guessing at the layout of the
+> attribute that controls the heater means power-cycling the device on every
+> wrong guess. The app now writes it only on an explicit confirmed tap, keeps a
+> restore on screen, and warns when the oven stops within seconds of a write. The app therefore starts every write from the stock preset for the mode
 the device reports being in, changes only the three lip bits, forces bit 2
 Heater on, and range-checks the result before sending it. The switch in the app
 shows what was last sent, not what the device holds.

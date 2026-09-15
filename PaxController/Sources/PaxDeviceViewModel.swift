@@ -122,6 +122,12 @@ final class PaxDeviceViewModel: ObservableObject {
     /// this firmware advertises HeatingParams (0x19) but has not answered a
     /// read of it in any capture, so writes start from the vendor preset.
     @Published private(set) var deviceHeatingParams: PaxHeatingParams?
+    /// Set when the oven stopped within seconds of a HeatingParams write, which
+    /// is what this firmware was seen to do. The settings screen turns it into
+    /// a warning and a way back rather than leaving the user to guess.
+    @Published private(set) var heatingParamsStoppedOven = false
+    /// When the last 0x19 write went out, so the stop above can be tied to it.
+    private var lastHeatingParamsWrite: Date?
     /// The device's physical shell colour (attribute 0x1C) — hardware identity,
     /// read only. It is not where the LED colour lives.
     @Published private(set) var shellColorIndex: UInt8?
@@ -747,6 +753,16 @@ final class PaxDeviceViewModel: ObservableObject {
                                         targetC: targetTempC ?? currentTargetTempC,
                                         useFahrenheit: settings.useFahrenheit)
         }
+        // A 0x19 write on this firmware has been seen to stop the oven. If the
+        // oven goes off within a few seconds of one, that is almost certainly
+        // the write and not the user, and it is worth saying so plainly.
+        if heatingState == .ovenOff, let written = lastHeatingParamsWrite,
+           Date().timeIntervalSince(written) < 8 {
+            heatingParamsStoppedOven = true
+            log("The oven went off \(String(format: "%.1f", Date().timeIntervalSince(written))) s after the heating-parameters write. The block this app sends is the one the official app sends, so this firmware wants a different one — do not write it again until that is known.",
+                level: .error)
+        }
+
         switch heatingState {
         case .heating:
             // Where this heat-up started from, so the ramp is a fraction of the
@@ -1200,17 +1216,12 @@ final class PaxDeviceViewModel: ObservableObject {
             // back over the change that was just made.
             self.deviceHeatingParams = nil
         }
-        // A Dynamic Mode *is* a block of heating parameters, lip settings
-        // included — the official app writes both attributes for one mode
-        // change. So whichever way this firmware handles a bare 0x13 write,
-        // the block has to be re-asserted afterwards: if the device applied
-        // the preset, it just turned lip detection back on, and if it did not,
-        // the block is still the old mode's.
-        guard !settings.lipDetectionEnabled else { return }
-        Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            self?.applyLipDetection(reason: "after a mode change")
-        }
+        // A mode change would be the moment to re-assert the lip setting, since
+        // a Dynamic Mode is itself a block of heating parameters. That is not
+        // done: a 0x19 write to this firmware has been seen to stop the oven,
+        // so until the layout it actually wants is known, nothing writes that
+        // attribute except a deliberate tap. The switch says it does not
+        // survive a mode change rather than quietly trying to make it.
     }
 
     // MARK: - Lip detection
@@ -1268,6 +1279,8 @@ final class PaxDeviceViewModel: ObservableObject {
             return
         }
         let block = params
+        lastHeatingParamsWrite = Date()
+        heatingParamsStoppedOven = false
         enqueue {
             try self.sendPacket(PaxPacket.setHeatingParams(block))
             self.log("Lip detection \(enabled ? "on" : "off") \(reason) — wrote HeatingParams from the \(mode.label) preset: \(block.summary)",
@@ -1284,6 +1297,8 @@ final class PaxDeviceViewModel: ObservableObject {
         settings.lipDetectionEnabled = true
         deviceHeatingParams = nil
         guard params.isPlausible else { return }
+        lastHeatingParamsWrite = Date()
+        heatingParamsStoppedOven = false
         enqueue {
             try self.sendPacket(PaxPacket.setHeatingParams(params))
             self.log("Restored the stock \(mode.label) heating parameters: \(params.summary)", level: .tx)
@@ -1301,15 +1316,13 @@ final class PaxDeviceViewModel: ObservableObject {
         guard params != deviceHeatingParams else { return }
         deviceHeatingParams = params
         log("HeatingParams: \(params.summary)", level: .rx)
-        // The switch is not moved to match. A report that disagrees is far
-        // more likely to be a mode change having replaced the block than the
-        // user having changed their mind on the device — there is no way to
-        // change this on the device. So it is said out loud and re-asserted.
+        // A report is worth everything here — it is the only thing that could
+        // settle what this firmware's block actually looks like — but it does
+        // not trigger a write. Nothing writes 0x19 without a tap.
         let deviceSaysOn = !params.options.isDisjoint(with: PaxHeatingParams.Options.lipDetection)
-        guard deviceSaysOn != settings.lipDetectionEnabled else { return }
-        log("The device reports lip detection \(deviceSaysOn ? "on" : "off"), which is not what the app last asked for — writing it back",
+        settings.lipDetectionEnabled = deviceSaysOn
+        log("The device reports lip detection \(deviceSaysOn ? "on" : "off") — the switch now follows it",
             level: .info)
-        applyLipDetection(reason: "the device had it the other way")
     }
 
     func clearLog() { debugLog.removeAll() }
@@ -1508,19 +1521,6 @@ final class PaxDeviceViewModel: ObservableObject {
             log("LED attribute(s) available: \(colorSupported.map { "\($0)" }.joined(separator: ", "))", level: .info)
         }
         pushSavedColorIfReady()
-        // A lip-detection switch left off has to be re-asserted on every
-        // connection: the parameters are the device's to keep, and a mode
-        // change or a firmware reset puts the stock ones back. The delay lets
-        // the device's own HeatingParams report, if this firmware ever sends
-        // one, land first so the write starts from it.
-        if !settings.lipDetectionEnabled, supported.contains(PaxMessageType.heatingParams.rawValue) {
-            Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                guard let self, self.connectionState.isConnected,
-                      !self.settings.lipDetectionEnabled else { return }
-                self.applyLipDetection(reason: "on connect")
-            }
-        }
     }
 
     /// The official app writes HapticMode as a single amplitude byte, but this
@@ -1837,6 +1837,8 @@ final class PaxDeviceViewModel: ObservableObject {
         supportedAttributes.removeAll()
         deviceColorTheme = nil
         deviceHeatingParams = nil
+        heatingParamsStoppedOven = false
+        lastHeatingParamsWrite = nil
         shellColorIndex = nil
         ledBrightness = nil
         hapticAmplitude = nil

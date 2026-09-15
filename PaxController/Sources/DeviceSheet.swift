@@ -12,6 +12,8 @@ struct DeviceSheet: View {
     /// the field under the user's cursor mid-rename.
     @State private var draftName: String = ""
     @FocusState private var nameFieldFocused: Bool
+    @State private var confirmingLipDetection = false
+    @State private var pendingLipDetection = false
 
     private var unit: TemperatureUnit { settings.temperatureUnit }
 
@@ -110,28 +112,44 @@ struct DeviceSheet: View {
         }
     }
 
-    /// The lip sensor's hold over the oven. HeatingParams (0x19) is written
-    /// wholesale and this firmware has not answered a read of it in any
-    /// capture, so the switch is a record of what the app last sent rather than
-    /// a reading — the footer says so rather than implying the device
-    /// confirmed anything.
+    /// The lip sensor's hold over the oven — and, on this firmware, the one
+    /// control in the app that has been seen to stop the oven. So nothing here
+    /// writes without a tap and a confirmation, the way back is always on
+    /// screen, and the copy says what is actually known rather than what the
+    /// protocol notes predicted.
     @ViewBuilder
     private var ovenSection: some View {
         Section {
             Toggle("Lip detection", isOn: Binding(
                 get: { viewModel.lipDetectionEnabled },
-                set: { viewModel.setLipDetection($0) }))
+                set: { wanted in
+                    pendingLipDetection = wanted
+                    confirmingLipDetection = true
+                }))
                 .disabled(!viewModel.canSetLipDetection)
-            if !viewModel.lipDetectionEnabled {
+            if viewModel.canSetLipDetection {
                 Button("Restore factory heating settings") {
                     viewModel.restoreStockHeatingParams()
                 }
-                .disabled(!viewModel.canSetLipDetection)
+            }
+            if viewModel.heatingParamsStoppedOven {
+                Label("The oven went off right after that write. Restore the factory settings above, and switch the PAX off and on again.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
             }
         } header: {
             Text("Oven")
         } footer: {
             Text(lipDetectionNote)
+        }
+        .alert("Write heating parameters?", isPresented: $confirmingLipDetection) {
+            Button("Cancel", role: .cancel) { }
+            Button("Write", role: .destructive) {
+                viewModel.setLipDetection(pendingLipDetection)
+            }
+        } message: {
+            Text("This rewrites the whole heating algorithm, not one setting — it is the same block the official app sends, but this PAX has been seen to switch its oven off on receiving it. If that happens, restore the factory settings and power-cycle the PAX.")
         }
     }
 
@@ -141,10 +159,9 @@ struct DeviceSheet: View {
                 ? "This PAX does not report the heating parameters attribute, so lip detection cannot be changed from here."
                 : "Connect to the PAX to change this."
         }
-        let base = viewModel.lipDetectionEnabled
-            ? "The PAX raises the temperature while it senses a draw, then cools and switches off when it stops sensing one."
-            : "The oven holds the set point whether or not it senses a draw — no boost on a draw, and no cooling when the lips leave it. It also no longer switches itself off a few minutes after the last draw: it still drops to the standby temperature when the device stops moving, but from there it stays warm until it is switched off by hand or the battery runs down."
-        return base + " Written as part of the heating parameters, which a mode change replaces — the app re-sends it after every mode change and on every connection. The PAX does not report this attribute back, so the switch shows what was last sent, not a reading."
+        return "With lip detection off the oven holds the set point whether or not it senses a draw — no boost, no cooling when the lips leave it, and no power-off a few minutes later. "
+            + "Experimental: this PAX has answered a write of the heating parameters by stopping the oven, so the layout its firmware wants is evidently not the one the official app sends. "
+            + "Nothing is written unless you tap, the setting does not survive a mode change or a reconnect, and the PAX never reports this attribute back — so the switch shows what was last sent, not a reading."
     }
 
     // MARK: - LED color
