@@ -295,6 +295,62 @@ number — for Time (0x09), also what that would be as a Unix timestamp.
 Nothing is written. Every packet it sends is a StatusUpdate request, which is
 the same read the app already does every three seconds.
 
+## Read off a real PAX 3 with the lab build
+
+Firmware 2.0.4, serial PXVQH51N. Everything below is from the device itself.
+
+### There is no log service on a PAX 3
+
+The official PAX web app reads session history from a service of its own —
+`64F50300-EFDC-11E6-BC64-92361F002671`, with `LogRead` (`…01`) and `LogNotify`
+(`…02`) — by subscribing to the notify, writing `LogSyncRequest` (0x12) as a
+little-endian 32-bit timestamp and a one-byte offset, then reading `LogRead`
+until it comes back empty. Events are eight bytes: a 24-bit value, a type code,
+then a 32-bit timestamp.
+
+**This PAX 3 does not have that service.** A full GATT enumeration returns only
+Device Information (0x180A) and the PAX service (`8E320200…`). That is also why
+0x12 never answers as an attribute: on this hardware there is nothing behind it.
+The log service is presumably an Era or Era Pro feature.
+
+### Complete GATT map of a PAX 3
+
+| Service | Characteristic | Properties | Value |
+|---------|----------------|------------|-------|
+| 180A | 2A23 SystemId | read | `D5 12 E7 FE FF 56 34 12` |
+| 180A | 2A24 Model | read | `PAX3` |
+| 180A | 2A25 Serial | read | the serial the key derives from |
+| 180A | 2A26 Firmware | read | `2.0.4` |
+| 180A | 2A27 Hardware | read | `F.0.0` |
+| 180A | 2A29 Manufacturer | read | `PAX Labs, Inc` |
+| 8E320200 | 8E320201 Read | read | encrypted packets |
+| 8E320200 | 8E320202 Write | writeNoResp | encrypted packets |
+| 8E320200 | 8E320203 Notify | read, notify | one byte, "there is something to read" |
+
+The advertisement carries the service UUID and nothing else — no manufacturer
+data, so there is no state to be had without connecting.
+
+### Time (0x09) — decoded
+
+Four bytes, little-endian, a Unix timestamp. Confirmed by capturing it five
+times over ten minutes: the device's clock advanced 0, 22, 45, 66 and 608
+seconds against wall-clock gaps of 0, 20, 44, 64 and 608. The absolute value is
+whatever last set it and can be years out; the ticking is real seconds.
+
+### CurrentTargetTemp (0x1F) overshoots the set point
+
+With the set point at 215.0 °C, the working target read 226.2 °C during a draw
+(HeatingState 0x02, lip detection) and 213.0 °C while cooling. So 0x02 is the
+user's set point and 0x1F is what the heater is actually aiming at, which the
+firmware raises above the set point mid-draw. That 226.2 sits inside the ladder
+HeaterRanges reports, between 223.0 and 235.0.
+
+### Attributes above 63 exist and cannot be swept
+
+The official app addresses 0x41, 0x4D, 0x50–0x53, 0x6D–0x70, 0x78, 0x88 and
+0x8C. StatusUpdate is a 64-bit bitfield, so no status request can ever ask for
+them. None are in this PAX 3's SupportedAttributes.
+
 ## Open Uncertainties
 
 1. **Maximum packet length**: ColorTheme proves plaintext longer than one block

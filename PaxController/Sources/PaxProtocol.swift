@@ -75,6 +75,25 @@ enum PaxMessageType: UInt8 {
 
     /// 0…128 on the wire for brightness and haptic amplitude.
     static let amplitudeMax: Double = 128
+
+    /// How many payload bytes an attribute actually carries, where that is
+    /// known. Everything after this is uninitialised buffer, so a value read
+    /// while it was changing — a temperature, the clock — has to be cut here
+    /// rather than reported with its noise attached.
+    var payloadLength: Int? {
+        switch self {
+        case .actualTemp, .heaterSetPoint, .currentTargetTemp:  return 2
+        case .battery, .lockStatus, .chargeStatus, .gameMode,
+             .dynamicMode, .brightness, .uiMode, .shellColor,
+             .lowSoCMode, .heatingState, .podInserted:          return 1
+        case .time:                                             return 4
+        case .heaterRanges:                                     return 12
+        case .colorTheme:                                       return PaxColorTheme.payloadSize
+        case .hapticMode:                                       return 6
+        case .supportedAttribs:                                 return 8
+        default:                                                return nil
+        }
+    }
 }
 
 // MARK: - Heating State

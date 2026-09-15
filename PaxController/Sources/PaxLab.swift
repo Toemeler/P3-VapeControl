@@ -151,6 +151,12 @@ final class PaxLab: ObservableObject {
     /// noise behind it.
     func stable(_ attribute: UInt8) -> Data? {
         guard let list = samples[attribute], let first = list.first else { return nil }
+        // A known length settles it without needing the reads to agree.
+        if let length = PaxMessageType(rawValue: attribute)?.payloadLength,
+           first.count >= length {
+            let head = Data(first.prefix(length))
+            if list.allSatisfy({ Data($0.prefix(length)) == head }) { return head }
+        }
         guard list.count > 1 else { return first }
         var shortest = first
         for sample in list.dropFirst() {
@@ -164,9 +170,15 @@ final class PaxLab: ObservableObject {
         return shortest
     }
 
-    /// The most recent read, which is the right value for anything that moves
-    /// between reads — the temperature, the clock.
-    func latest(_ attribute: UInt8) -> Data? { samples[attribute]?.last }
+    /// The most recent read, cut to the attribute's real length where that is
+    /// known. Without the cut, a value that was moving while it was read comes
+    /// back with fifteen bytes of uninitialised buffer attached, and two
+    /// snapshots then differ in noise rather than in anything the device did.
+    func latest(_ attribute: UInt8) -> Data? {
+        guard let sample = samples[attribute]?.last else { return nil }
+        guard let length = PaxMessageType(rawValue: attribute)?.payloadLength else { return sample }
+        return Data(sample.prefix(length))
+    }
 
     /// True when the reads disagreed from the first byte, which means the value
     /// changes rather than that it is empty.

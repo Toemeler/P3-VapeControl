@@ -899,7 +899,11 @@ final class PaxDeviceViewModel: ObservableObject {
                 | (UInt32(payload[payload.startIndex + 2]) << 16)
                 | (UInt32(payload[payload.startIndex + 3]) << 24)
             let date = Date(timeIntervalSince1970: TimeInterval(epoch))
-            notes.append("LE 32-bit: \(epoch)" + (id == 0x09 ? " (\(date) as a Unix time)" : ""))
+            // Confirmed on hardware: the device's clock advances in step with
+            // real seconds, whatever absolute date it happens to be set to.
+            notes.append(id == PaxMessageType.time.rawValue
+                         ? "device clock \(date), \(epoch) seconds"
+                         : "LE 32-bit: \(epoch)")
         }
         return notes.isEmpty ? "" : " — " + notes.joined(separator: "; ")
     }
