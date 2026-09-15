@@ -132,16 +132,14 @@ struct DeviceSheet: View {
         }
     }
 
-    /// A one-byte LED value is an index into the device's own themes, so a
-    /// custom colour can only ever pick the nearest preset slot.
     private var deviceLedStatus: String {
         guard viewModel.deviceLedColorSupported else {
             return "This PAX does not expose its LEDs over Bluetooth, so only the app is themed."
         }
-        if viewModel.ledValueByteCount == 1 {
-            return "This PAX takes a preset theme rather than a colour, so the swatches map to its themes and a custom colour uses the nearest one."
+        guard let theme = viewModel.deviceColorTheme else {
+            return "Waiting for this PAX to report its colour theme."
         }
-        return "This PAX reports an LED attribute the app can write."
+        return "Setting all \(theme.modes.count) LED states — startup, heating, regulating and standby — to the chosen colour."
     }
 
     private func swatch(_ preset: LedColor) -> some View {

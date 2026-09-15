@@ -150,10 +150,13 @@ struct PaxCrypto {
     }
 
     static func encrypt(plaintext: Data, key: SymmetricKey) throws -> Data {
-        // Pad or truncate to 16 bytes
-        var block = Data(count: 16)
-        let copyLen = min(plaintext.count, 16)
-        block.replaceSubrange(0..<copyLen, with: plaintext.prefix(copyLen))
+        // Pad up to a whole number of 16-byte blocks. Not a fixed single block:
+        // ColorTheme carries 34 bytes (type + mode count + 4 modes × 8), and
+        // truncating that to 16 would hand the device a mode count with no
+        // modes behind it.
+        let blockCount = max(1, (plaintext.count + 15) / 16)
+        var block = Data(count: blockCount * 16)
+        block.replaceSubrange(0..<plaintext.count, with: plaintext)
 
         // Generate random 16-byte IV
         var ivBytes = [UInt8](repeating: 0, count: 16)
@@ -249,11 +252,9 @@ struct PaxPacket {
     }
 
     func encode(key: SymmetricKey) throws -> Data {
-        var plaintext = Data([type.rawValue]) + payload
-        if plaintext.count < 16 {
-            plaintext.append(contentsOf: Data(repeating: 0, count: 16 - plaintext.count))
-        }
-        return try PaxCrypto.encrypt(plaintext: plaintext.prefix(16), key: key)
+        // PaxCrypto.encrypt pads to whole blocks, so a longer payload such as
+        // ColorTheme's survives intact.
+        try PaxCrypto.encrypt(plaintext: Data([type.rawValue]) + payload, key: key)
     }
 
     static func decode(data: Data, key: SymmetricKey) throws -> (packet: PaxPacket, plaintext: Data) {

@@ -106,13 +106,13 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 | `0x0A` | `DisplayName` | Both | 1 byte length + UTF-8 string |
 | `0x11` | `HeaterRanges` | Device → Host | Unknown format |
 | `0x13` | `DynamicMode` | Both | 1 byte mode ID (PAX 3) |
-| `0x14` | `ColorTheme` | Both | **1 byte: theme index** (PAX 3 fw 2.0.4 reported `0x04`) |
+| `0x14` | `ColorTheme` | Both | **33 bytes: mode count + 4 modes × 8** (see below) |
 | `0x15` | `Brightness` | Both | 1 byte (0–100?) |
 | `0x17` | `HapticMode` | Both | 1 byte mode ID |
 | `0x18` | `SupportedAttributes` | Device → Host | 8 bytes LE `uint64` bitfield; bit N set = attribute N supported |
 | `0x19` | `HeatingParams` | Both | Unknown |
 | `0x1B` | `UiMode` | Both | 1 byte |
-| `0x1C` | `ShellColor` | Both | Unknown |
+| `0x1C` | `ShellColor` | Device → Host | 1 byte: the casing's own colour. `0`=Onyx Black, `1`=Silver, `2`=Rose Gold, `3`=Sage Teal, `4`=Burgundy. Hardware identity, **not** the LED colour |
 | `0x1E` | `LowSoCMode` | Both | Unknown |
 | `0x1F` | `CurrentTargetTemp` | Device → Host | 2 bytes LE `uint16`: PID target in °C × 10 (PAX 3) |
 | `0x20` | `HeatingState` | Device → Host | 1 byte; see table below (PAX 3) |
@@ -197,12 +197,29 @@ anything is written, rather than guessing and writing blind.
 acknowledged — `didWriteValueFor` does not fire. The only way to tell whether
 a write took effect is to read the attribute back and compare.
 
-**ColorTheme is an index, not a colour.** The device reports a single byte
-(`0x04` here). Writing a 3-byte RGB payload to it was followed, in two
-consecutive sessions, by `The connection has timed out unexpectedly` about two
-seconds later — while a session that wrote only `ShellColor` stayed up for over
-a minute. Treat a mis-sized write to a supported attribute as capable of
-knocking the device off the link.
+### ColorTheme (0x14) layout
+
+```
+[ mode count: 1 byte ][ mode × count ]
+mode = [ color1 R G B ][ color2 R G B ][ animation ][ frequency ]   // 8 bytes
+```
+
+Four modes, in order: **startup, heating, regulating, standby**. With the type
+byte in front that is 34 bytes of plaintext, which is why a ColorTheme packet
+arrives as a 64-byte read (48 bytes of ciphertext + 16 byte IV).
+
+The device here reported `14 04` followed by 32 zero bytes: mode count 4, and
+all four modes zeroed. `animation` and `frequency` semantics are not known —
+preserve whatever the device reports rather than inventing values.
+
+Full RGB is supported; this is not a palette of preset themes.
+
+> **A malformed write can take the device down.** Sending a 3-byte RGB payload
+> to `ColorTheme` makes the device read byte 1 as the mode count — `0xFF` in one
+> case — and walk 255 × 8 bytes off the end of a 15-byte buffer. In two
+> consecutive sessions the device powered off and the link dropped about two
+> seconds later, while a session that never wrote `ColorTheme` stayed up for
+> over a minute. Get the count right.
 
 ## Open Uncertainties
 

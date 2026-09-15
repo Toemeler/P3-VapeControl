@@ -22,6 +22,7 @@
 		AA000041 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000041 /* AppSettings.swift */; };
 		AA000042 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000042 /* LiveActivityController.swift */; };
 		AA000043 /* PaxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000043 /* PaxActivityAttributes.swift */; };
+		AA000044 /* PaxColorTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000044 /* PaxColorTheme.swift */; };
 		AA000050 /* PaxLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000050 /* PaxLiveActivityBundle.swift */; };
 		AA000051 /* PaxStatusLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000051 /* PaxStatusLiveActivity.swift */; };
 		AA000052 /* PaxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000043 /* PaxActivityAttributes.swift */; };
@@ -71,6 +72,7 @@
 		AB000041 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		AB000042 /* LiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityController.swift; sourceTree = "<group>"; };
 		AB000043 /* PaxActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxActivityAttributes.swift; sourceTree = "<group>"; };
+		AB000044 /* PaxColorTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxColorTheme.swift; sourceTree = "<group>"; };
 		AB000050 /* PaxLiveActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxLiveActivityBundle.swift; sourceTree = "<group>"; };
 		AB000051 /* PaxStatusLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxStatusLiveActivity.swift; sourceTree = "<group>"; };
 		AB000052 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -135,6 +137,7 @@
 				AB000041 /* AppSettings.swift */,
 				AB000042 /* LiveActivityController.swift */,
 				AB000043 /* PaxActivityAttributes.swift */,
+				AB000044 /* PaxColorTheme.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -270,6 +273,7 @@
 				AA000041 /* AppSettings.swift in Sources */,
 				AA000042 /* LiveActivityController.swift in Sources */,
 				AA000043 /* PaxActivityAttributes.swift in Sources */,
+				AA000044 /* PaxColorTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

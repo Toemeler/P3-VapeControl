@@ -104,9 +104,12 @@ final class PaxDeviceViewModel: ObservableObject {
     // MARK: LED capability, discovered from the device
     /// Attribute IDs the device reported via SupportedAttributes (0x18).
     @Published private(set) var supportedAttributes: Set<UInt8> = []
-    /// Payload the device reported for each LED attribute, so a write can echo
-    /// the same shape rather than invent one.
-    private var ledAttributeShapes: [UInt8: Data] = [:]
+    /// The theme the device last reported, used as the template for a write so
+    /// each mode's animation and frequency are preserved rather than invented.
+    @Published private(set) var deviceColorTheme: PaxColorTheme?
+    /// The device's physical shell colour (attribute 0x1C) — hardware identity,
+    /// read only. It is not where the LED colour lives.
+    @Published private(set) var shellColorIndex: UInt8?
     /// The write we are waiting to confirm by reading the attribute back.
     private var pendingLedWrite: (attribute: UInt8, payload: Data)?
     /// Send the saved colour as soon as we learn the device can accept one.
@@ -124,24 +127,12 @@ final class PaxDeviceViewModel: ObservableObject {
     /// Which attribute to use for LED color, preferring the one the device
     /// actually answered with. nil means it never reported either, so there is
     /// nothing sensible to write.
-    /// Whether the connected device reported an LED attribute we can write.
-    var deviceLedColorSupported: Bool { ledAttribute != nil }
-
-    /// How many bytes the device's LED value carries, once it has reported one.
-    /// A single byte is a theme index, so arbitrary colours cannot reach it.
-    var ledValueByteCount: Int? {
-        ledAttribute.flatMap { ledAttributeShapes[$0.rawValue]?.count }
-    }
-
-    private var ledAttribute: PaxMessageType? {
-        for candidate in [PaxMessageType.colorTheme, .shellColor]
-        where ledAttributeShapes[candidate.rawValue] != nil || supportedAttributes.contains(candidate.rawValue) {
-            return candidate
-        }
-        // A device that never answered the capability query still gets one
-        // labelled attempt — the read-back that follows it reveals the real
-        // shape if the attribute does exist after all.
-        return capabilityQueryUnanswered ? .colorTheme : nil
+    /// Whether the device will accept an LED colour. ColorTheme is the only
+    /// writable one — ShellColor just states which colour the casing is.
+    var deviceLedColorSupported: Bool {
+        deviceColorTheme != nil
+            || supportedAttributes.contains(PaxMessageType.colorTheme.rawValue)
+            || capabilityQueryUnanswered
     }
 
     // MARK: Private
@@ -329,7 +320,7 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     private func sendLedColorToDevice(_ color: LedColor) {
-        guard let attribute = ledAttribute else {
+        guard deviceLedColorSupported else {
             // Tapping a colour in the moment between connecting and the
             // capability reply landing must not be lost — queue it instead.
             if !capabilitiesKnown {
@@ -341,40 +332,17 @@ final class PaxDeviceViewModel: ObservableObject {
             }
             return
         }
-        let payload = ledPayload(for: color, attribute: attribute)
-        pendingLedWrite = (attribute.rawValue, payload)
+        // Every mode gets the chosen colour, with each mode's animation and
+        // frequency carried over from whatever the device reported.
+        let theme = PaxColorTheme.solid(color, basedOn: deviceColorTheme)
+        let payload = theme.payload
+        pendingLedWrite = (PaxMessageType.colorTheme.rawValue, payload)
         enqueue {
-            try self.sendPacket(PaxPacket.setLedColor(attribute: attribute, payload: payload))
-            self.log("Wrote \(attribute) = \(payload.hexString) for \(color.hex)", level: .tx)
-            // The write characteristic is writeWithoutResponse, so no ACK can
-            // ever come back. Reading the attribute again is the only way to
-            // find out whether the device took it.
-            try self.sendPacket(PaxPacket.statusRequest(attributes: [attribute]))
-        }
-    }
-
-    /// Builds a payload matching the shape the device reported for this
-    /// attribute. A 1-byte value is a theme index, not a color, so the chosen
-    /// preset's position is sent instead of RGB.
-    private func ledPayload(for color: LedColor, attribute: PaxMessageType) -> Data {
-        let rgb = Data([color.red, color.green, color.blue])
-        guard let known = ledAttributeShapes[attribute.rawValue], !known.isEmpty else {
-            return rgb
-        }
-        switch known.count {
-        case 1:
-            let index = LedColor.presets.firstIndex { $0.hex == color.hex } ?? 0
-            return Data([UInt8(index)])
-        case 3:
-            return rgb
-        default:
-            var padded = rgb
-            if padded.count > known.count {
-                padded = Data(padded.prefix(known.count))
-            } else {
-                padded.append(contentsOf: known.dropFirst(padded.count))
-            }
-            return padded
+            try self.sendPacket(PaxPacket.setLedColor(attribute: .colorTheme, payload: payload))
+            self.log("Wrote colorTheme for \(color.hex) — \(theme.summary)", level: .tx)
+            // writeWithoutResponse can never ACK, so read it back to find out
+            // whether the device took it.
+            try self.sendPacket(PaxPacket.statusRequest(attributes: [.colorTheme]))
         }
     }
 
@@ -625,8 +593,20 @@ final class PaxDeviceViewModel: ObservableObject {
         pushSavedColorIfReady()
     }
 
+    /// Names from the official app's ShellColors enum.
+    private static func shellColorName(_ index: UInt8) -> String {
+        switch index {
+        case 0: return "Onyx Black"
+        case 1: return "Silver"
+        case 2: return "Rose Gold"
+        case 3: return "Sage Teal"
+        case 4: return "Burgundy"
+        default: return "unknown"
+        }
+    }
+
     private func pushSavedColorIfReady() {
-        guard pushColorOnceDiscovered, ledAttribute != nil else { return }
+        guard pushColorOnceDiscovered, deviceLedColorSupported else { return }
         pushColorOnceDiscovered = false
         let color = settings.ledColor
         log("Applying saved LED color \(color.name) (\(color.hex)) now that the device is ready", level: .info)
@@ -636,34 +616,41 @@ final class PaxDeviceViewModel: ObservableObject {
     /// The device reporting its current LED value is the only reliable source
     /// for the payload's length and encoding, so record it verbatim.
     private func applyLedAttributeReport(_ packet: PaxPacket) {
-        // The value lives in the first 16-byte plaintext block; a longer read
-        // decrypts to that plus uninitialised firmware buffer, so look only at
-        // the first block and drop its zero padding. ColorTheme comes back as a
-        // single byte — a theme index, not a colour.
-        var meaningful = Data(packet.payload.prefix(15))
-        while meaningful.count > 1, meaningful.last == 0 { meaningful.removeLast() }
-        let trimmed = meaningful
-        let previous = ledAttributeShapes[packet.type.rawValue]
-        ledAttributeShapes[packet.type.rawValue] = trimmed
-
         // A value arriving for an attribute the bitfield did not list still
         // proves the device implements it.
         capabilitiesKnown = true
+
+        // ShellColor is the casing's own colour, not a setting.
+        guard packet.type == .colorTheme else {
+            if let index = packet.payload.first, shellColorIndex != index {
+                shellColorIndex = index
+                log("Shell colour: \(Self.shellColorName(index)) (0x\(String(format: "%02X", index)))", level: .info)
+            }
+            pushSavedColorIfReady()
+            return
+        }
+
+        let reported = Data(packet.payload.prefix(PaxColorTheme.payloadSize))
+        guard let theme = PaxColorTheme(payload: reported) else {
+            log("ColorTheme payload did not parse: \(reported.hexString)", level: .warn)
+            pushSavedColorIfReady()
+            return
+        }
+        let previous = deviceColorTheme
+        deviceColorTheme = theme
 
         // Judge this report against any write already outstanding *before*
         // starting a new one — pushing first would compare the fresh write
         // against the old value that just arrived and always cry foul.
         if let pending = pendingLedWrite, pending.attribute == packet.type.rawValue {
             pendingLedWrite = nil
-            if trimmed.prefix(pending.payload.count) == pending.payload {
-                log("✔ Device accepted \(packet.type) = \(trimmed.hexString)", level: .info)
+            if theme.payload == pending.payload {
+                log("✔ Device accepted colorTheme — \(theme.summary)", level: .info)
             } else {
-                log("✘ Device ignored the \(packet.type) write — asked for \(pending.payload.hexString), still reports \(trimmed.hexString)",
-                    level: .warn)
+                log("✘ Device ignored the colorTheme write — still reports \(theme.summary)", level: .warn)
             }
-        } else if previous != trimmed {
-            log("Current \(packet.type) value: \(trimmed.hexString) (\(trimmed.count) B) — a write must match this shape",
-                level: .info)
+        } else if previous != theme {
+            log("Current colorTheme (\(theme.modes.count) modes): \(theme.summary)", level: .info)
         }
 
         pushSavedColorIfReady()
@@ -728,7 +715,8 @@ final class PaxDeviceViewModel: ObservableObject {
         paxCharNotifying    = false
         pendingCommands.removeAll()
         supportedAttributes.removeAll()
-        ledAttributeShapes.removeAll()
+        deviceColorTheme = nil
+        shellColorIndex = nil
         pendingLedWrite = nil
         pushColorOnceDiscovered = false
         capabilitiesKnown = false
