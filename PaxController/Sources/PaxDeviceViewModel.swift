@@ -932,13 +932,36 @@ final class PaxDeviceViewModel: ObservableObject {
             level: .info)
     }
 
+    /// Attributes the lab will not write, whatever is typed.
+    ///
+    /// The PAX is a heating element and a lithium cell, and the only attribute
+    /// that can aim either of them somewhere unsafe is the set point — so it
+    /// is set through the normal control, which stays inside the range the
+    /// device documents, and never from here. The encryption attributes are
+    /// the other two: garbage written there could leave a session this app
+    /// cannot re-establish, which is the one failure a power cycle might not
+    /// undo.
+    static let labUnwritableAttributes: [UInt8: String] = [
+        0x02: "HeaterSetPoint aims the heater. Use the dial, which stays inside the documented range.",
+        0x1F: "CurrentTargetTemp is the heater's working set point. Use the dial.",
+        0x31: "EncryptionExchange could leave a session that cannot be re-established.",
+        0x32: "EncryptionPacket could leave a session that cannot be re-established.",
+    ]
+
     /// Writes an arbitrary attribute. This is the dangerous one, and the
     /// reason this build exists: it is written to the lab's log before it
     /// leaves, so a payload that takes the device offline is still on record
     /// when the app comes back.
     func labWrite(attribute: UInt8, payload: Data) {
         guard connectionState.isConnected else { return }
-        PaxLab.shared.noteWrite(attribute: attribute, payload: payload)
+        if let reason = Self.labUnwritableAttributes[attribute] {
+            log(String(format: "Lab: refusing to write 0x%02X — %@", attribute, reason), level: .warn)
+            return
+        }
+        // Recorded before the write so the value can be put back afterwards,
+        // including after a power cycle.
+        let previous = PaxLab.shared.stable(attribute)
+        PaxLab.shared.noteWrite(attribute: attribute, payload: payload, previous: previous)
         enqueue {
             try self.sendRawPlaintext(Data([attribute]) + payload)
             self.log(String(format: "Lab: wrote 0x%02X ← %@", attribute, PaxLab.hex(payload)), level: .tx)

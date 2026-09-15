@@ -61,8 +61,19 @@ it installs beside the normal one rather than replacing it. *Settings →
 Diagnostics → Lab*: read every attribute the firmware answers, snapshot the
 device in one state and diff it against another, and write arbitrary attributes.
 
-That last part can take a PAX offline until it is power-cycled. Install this one
-only if that is what you came for.
+Reading is safe: the sweep and the snapshots ask the PAX for values, which is
+the same request the app already makes every three seconds, and cannot change
+anything on it. Writing can, and a payload the firmware mishandles can take the
+device offline until it is power-cycled.
+
+The set point and the encryption attributes cannot be written from the lab at
+all — one aims a heating element, the others could leave a session that no power
+cycle re-establishes. Everything else warns when the length does not match what
+the device reported, keeps the value the attribute held beforehand so it can be
+put back, and is written to a log before it is sent, so a write that kills the
+link is still on record afterwards.
+
+Install this one only if that is what you came for.
 
 </details>
 

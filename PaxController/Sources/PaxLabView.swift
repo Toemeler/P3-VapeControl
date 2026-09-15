@@ -21,6 +21,7 @@ struct PaxLabView: View {
 
     var body: some View {
         List {
+            safetySection
             sweepSection
             attributesSection
             snapshotSection
@@ -35,6 +36,16 @@ struct PaxLabView: View {
         .onChange(of: lab.samples.count) { _ in shareText = report() }
         .onChange(of: lab.snapshots.count) { _ in shareText = report() }
         .onChange(of: lab.writes.count) { _ in shareText = report() }
+    }
+
+    private var safetySection: some View {
+        Section {
+            Label("Reading is safe. Writing is not.", systemImage: "info.circle")
+                .font(.caption.weight(.semibold))
+            Text("The sweep and the snapshots only ask the PAX for values — the same request the app already makes every three seconds — and cannot change anything on it. Writes can, and one that the firmware mishandles can take the device offline until it is power-cycled. Keep it in sight and off the charger while you experiment.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     // MARK: - Sweep
@@ -168,13 +179,24 @@ struct PaxLabView: View {
             TextField("Payload bytes, e.g. 01 or 00 0A", text: $writePayload)
                 .autocorrectionDisabled()
                 .font(.system(.body, design: .monospaced))
+            if let warning = writeWarning {
+                Label(warning, systemImage: writeRefused ? "hand.raised.fill" : "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(writeRefused ? Color.red : Color.orange)
+            }
             Button("Write") { showWriteConfirm = true }
-                .disabled(!connected || parsedWrite == nil)
-                .foregroundStyle(.red)
+                .disabled(!connected || parsedWrite == nil || writeRefused)
+                .foregroundStyle(writeRefused ? Color.secondary : Color.red)
         } header: {
             Text("Write")
         } footer: {
-            Text("A payload the firmware does not expect can take the device offline: a three-byte write to ColorTheme once made it read a mode count of 255 and walk two kilobytes off a fifteen-byte buffer. Read an attribute first, match the length it reports, and change one byte at a time. Every write is logged before it is sent, so one that kills the link is still on record afterwards.")
+            Text("""
+                 A payload the firmware does not expect can take the device offline: a three-byte write to ColorTheme once made a PAX read a mode count of 255 and walk two kilobytes off a fifteen-byte buffer. It came back on a power cycle, and everything seen so far does — but treat that as luck, not as a rule.
+
+                 Sweep first so the device has told you how long the attribute is, match that length, and change one byte at a time. The value each attribute held before a write is kept, so any experiment can be put back.
+
+                 The set point and the encryption attributes cannot be written from here at all: one aims a heating element, the others could leave a session that no power cycle re-establishes.
+                 """)
         }
     }
 
@@ -190,10 +212,38 @@ struct PaxLabView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 if let write = parsedWrite {
-                    Text(String(format: "0x%02X ← %@\n\nIf the PAX goes quiet after this, power-cycle it; the write stays in the log.",
-                                write.attribute, PaxLab.hex(write.payload)))
+                    Text(String(format: "0x%02X ← %@%@\n\nKeep the PAX in sight while you do this. If it goes quiet, power-cycle it; the write and the value it had before stay in the log.",
+                                write.attribute,
+                                PaxLab.hex(write.payload),
+                                writeWarning.map { "\n\n\($0)" } ?? ""))
                 }
             }
+    }
+
+    /// What the device itself last reported for the attribute being written,
+    /// which is the length a write should match.
+    private var knownLength: Int? {
+        guard let write = parsedWrite else { return nil }
+        return lab.stable(write.attribute)?.count
+    }
+
+    private var writeWarning: String? {
+        guard let write = parsedWrite else { return nil }
+        if let reason = PaxDeviceViewModel.labUnwritableAttributes[write.attribute] {
+            return reason
+        }
+        guard let known = knownLength else {
+            return "This attribute has not been read yet, so there is nothing to match the length against. Sweep first."
+        }
+        if known != write.payload.count {
+            return "The device reports \(known) bytes for this attribute and you have typed \(write.payload.count). A length the firmware does not expect is what took a PAX offline over ColorTheme."
+        }
+        return nil
+    }
+
+    private var writeRefused: Bool {
+        guard let write = parsedWrite else { return true }
+        return PaxDeviceViewModel.labUnwritableAttributes[write.attribute] != nil
     }
 
     private var parsedWrite: (attribute: UInt8, payload: Data)? {
@@ -220,6 +270,14 @@ struct PaxLabView: View {
                         Text(outcomeText(write.outcome))
                             .font(.caption2)
                             .foregroundStyle(outcomeColor(write.outcome))
+                        if let previous = write.previousHex,
+                           let bytes = PaxLab.bytes(fromHex: previous) {
+                            Button("Put back \(previous)") {
+                                viewModel.labWrite(attribute: write.attribute, payload: bytes)
+                            }
+                            .font(.caption2)
+                            .disabled(!connected)
+                        }
                     }
                 }
                 Button("Clear the write log", role: .destructive) { lab.clearWrites() }

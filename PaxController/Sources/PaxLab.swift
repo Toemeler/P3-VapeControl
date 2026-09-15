@@ -32,6 +32,8 @@ final class PaxLab: ObservableObject {
         var attribute: UInt8
         var payloadHex: String
         var outcome: Outcome
+        /// What the attribute read before this write, so it can be put back.
+        var previousHex: String?
 
         enum Outcome: String, Codable {
             case pending
@@ -145,11 +147,12 @@ final class PaxLab: ObservableObject {
 
     /// Written down before the packet leaves, so a write that kills the link is
     /// still on record when the app comes back.
-    func noteWrite(attribute: UInt8, payload: Data) {
+    func noteWrite(attribute: UInt8, payload: Data, previous: Data? = nil) {
         writes.append(WriteRecord(at: Date(),
                                   attribute: attribute,
                                   payloadHex: Self.hex(payload),
-                                  outcome: .pending))
+                                  outcome: .pending,
+                                  previousHex: previous.map(Self.hex)))
         if writes.count > 200 { writes.removeFirst(writes.count - 200) }
         persistWrites()
 
