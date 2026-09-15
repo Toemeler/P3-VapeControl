@@ -1244,14 +1244,13 @@ final class PaxDeviceViewModel: ObservableObject {
 
     /// Turns the lip sensor's hold over the oven on or off.
     ///
-    /// Three of the eight option bits are the lip sensor: the boost while a
-    /// draw is detected, the cooldown that starts when it stops seeing one, and
-    /// the shutdown that follows. Clearing all three leaves the oven holding
-    /// the set point regardless of the sensor — and takes the three-minute
-    /// power-off with it, since that timer is the shutdown bit. What is left is
-    /// the no-motion drop to the standby temperature, which is not an off. The
-    /// settings footer says this plainly; it is the user's call to make, not
-    /// one to make quietly for them.
+    /// In the official app's naming, three of the eight option bits are the lip
+    /// sensor: the boost while a draw is detected, the cooldown that starts
+    /// when it stops seeing one, and the shutdown that follows. On this
+    /// firmware one of those three is the heater instead — clearing all three
+    /// stops the oven — so whichever bit the probe identifies is held back from
+    /// the write. Until it has run, the write is the official app's and the
+    /// oven is expected to stop.
     func setLipDetection(_ enabled: Bool) {
         settings.lipDetectionEnabled = enabled
         applyLipDetection(reason: enabled ? "on" : "off")
@@ -1268,24 +1267,17 @@ final class PaxDeviceViewModel: ObservableObject {
         if enabled {
             params.options.formUnion(PaxHeatingParams.Options.lipDetection)
         } else {
-            params.options.subtract(PaxHeatingParams.Options.lipDetection)
+            params.options.subtract(lipBitsToClear)
         }
         // The same word carries the bit that decides whether the oven heats at
-        // all. A write that cleared it would look like a dead device.
+        // all. A write that cleared it would look like a dead device — which is
+        // exactly what happened before the probe existed.
         params.options.insert(.heater)
-        guard params.isPlausible else {
-            log("Refusing to write HeatingParams: the assembled block is outside the range every stock preset lives in (\(params.summary))",
-                level: .error)
-            return
+        if let bit = settings.heaterOptionBit {
+            params.options.insert(PaxHeatingParams.Options(rawValue: 1 << UInt16(bit)))
         }
-        let block = params
-        lastHeatingParamsWrite = Date()
         heatingParamsStoppedOven = false
-        enqueue {
-            try self.sendPacket(PaxPacket.setHeatingParams(block))
-            self.log("Lip detection \(enabled ? "on" : "off") \(reason) — wrote HeatingParams from the \(mode.label) preset: \(block.summary)",
-                     level: .tx)
-        }
+        writeHeatingParams(params, note: "lip detection \(enabled ? "on" : "off") \(reason), from the \(mode.label) preset")
     }
 
     /// Puts the current mode's factory heating parameters back, lip detection
@@ -1296,12 +1288,134 @@ final class PaxDeviceViewModel: ObservableObject {
         let params = PaxHeatingParams.stock(for: mode)
         settings.lipDetectionEnabled = true
         deviceHeatingParams = nil
-        guard params.isPlausible else { return }
-        lastHeatingParamsWrite = Date()
         heatingParamsStoppedOven = false
+        writeHeatingParams(params, note: "restoring the stock \(mode.label) preset")
+    }
+
+    /// The lip bits, less whichever one this firmware uses for the heater. The
+    /// official app's naming says that is bit 2 and that these three are safe;
+    /// this PAX says otherwise, and the probe is what settles it.
+    private var lipBitsToClear: PaxHeatingParams.Options {
+        var bits = PaxHeatingParams.Options.lipDetection
+        if let bit = settings.heaterOptionBit {
+            bits.remove(PaxHeatingParams.Options(rawValue: 1 << UInt16(bit)))
+        }
+        return bits
+    }
+
+    // MARK: - Option bit probe
+
+    struct HeatingBitResult: Identifiable {
+        let bit: Int
+        let stoppedOven: Bool
+        var id: Int { bit }
+        var label: String {
+            "bit \(bit) (\(PaxHeatingParams.Options.name(ofBit: bit))) — "
+                + (stoppedOven ? "stops the oven" : "oven kept running")
+        }
+    }
+
+    @Published private(set) var bitProbeRunning = false
+    @Published private(set) var bitProbeStep: String?
+    @Published private(set) var bitProbeResults: [HeatingBitResult] = []
+    private var bitProbeTask: Task<Void, Never>?
+
+    /// The probe needs the oven running, because "the oven stopped" is the
+    /// whole measurement. There is no point starting it against a cold device.
+    var canProbeHeatingBits: Bool {
+        guard canSetLipDetection, !bitProbeRunning else { return false }
+        switch heatingState {
+        case .heating, .ready, .boosting, .cooling: return true
+        default: return false
+        }
+    }
+
+    /// Clears one option bit at a time and watches what the oven does, putting
+    /// the stock block back after each. HeatingParams never answers a read, so
+    /// this is the only readback there is: the device cannot say what it holds,
+    /// but it can say whether it is still heating.
+    ///
+    /// Only bits the stock preset sets are tried. Clearing a bit that is
+    /// already clear would prove nothing, and setting one that the preset
+    /// leaves off — the two ramp bits — would be changing how the oven heats
+    /// rather than asking it a question.
+    func probeHeatingOptionBits() {
+        guard canProbeHeatingBits else { return }
+        let mode = dynamicMode ?? .standard
+        let stock = PaxHeatingParams.stock(for: mode)
+        let bits = (0..<8).filter { stock.options.contains(PaxHeatingParams.Options(rawValue: 1 << UInt16($0))) }
+        bitProbeResults = []
+        bitProbeRunning = true
+        heatingParamsStoppedOven = false
+        log("Bit probe: \(mode.label) stock options are 0x\(String(format: "%02X", stock.options.rawValue)); clearing bits \(bits.map(String.init).joined(separator: ", ")) one at a time",
+            level: .info)
+        bitProbeTask = Task { [weak self] in
+            for bit in bits {
+                guard let self, !Task.isCancelled, self.connectionState.isConnected else { break }
+                self.bitProbeStep = "Clearing bit \(bit) (\(PaxHeatingParams.Options.name(ofBit: bit)))"
+                var probed = stock
+                probed.options.remove(PaxHeatingParams.Options(rawValue: 1 << UInt16(bit)))
+                self.writeHeatingParams(probed, note: "probe: bit \(bit) cleared")
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard !Task.isCancelled else { break }
+                let stopped = self.heatingState == .ovenOff
+                self.bitProbeResults.append(HeatingBitResult(bit: bit, stoppedOven: stopped))
+                self.log("Bit probe: bit \(bit) cleared → oven \(stopped ? "stopped" : "still running") (state \(String(describing: self.heatingState)))",
+                         level: stopped ? .warn : .info)
+                // Put it back before moving on, whatever happened, so the next
+                // measurement starts from the same place and the device is
+                // never left a bit down.
+                self.bitProbeStep = "Restoring after bit \(bit)"
+                self.writeHeatingParams(stock, note: "probe: restoring after bit \(bit)")
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+            }
+            guard let self else { return }
+            self.finishBitProbe()
+        }
+    }
+
+    func cancelBitProbe() {
+        bitProbeTask?.cancel()
+        bitProbeTask = nil
+        bitProbeRunning = false
+        bitProbeStep = nil
+        // Whatever it was in the middle of, leave the device on stock.
+        restoreStockHeatingParams()
+    }
+
+    private func finishBitProbe() {
+        bitProbeRunning = false
+        bitProbeStep = nil
+        bitProbeTask = nil
+        let stoppers = bitProbeResults.filter(\.stoppedOven).map(\.bit)
+        if stoppers.count == 1, let bit = stoppers.first {
+            settings.heaterOptionBit = bit
+            log("Bit probe: bit \(bit) is this firmware's heater enable — it is the only one that stopped the oven. Lip detection will leave it alone from now on.",
+                level: .info)
+        } else if stoppers.isEmpty {
+            settings.heaterOptionBit = nil
+            log("Bit probe: no single bit stopped the oven. Either the oven was not running throughout, or the heater is not in this word at all.",
+                level: .warn)
+        } else {
+            settings.heaterOptionBit = nil
+            log("Bit probe: \(stoppers.count) bits stopped the oven (\(stoppers.map(String.init).joined(separator: ", "))). That is not a heater enable — run it again with the oven left running the whole time.",
+                level: .warn)
+        }
+        restoreStockHeatingParams()
+    }
+
+    /// One place that actually puts a block on the wire, so every write is
+    /// range-checked and logged the same way.
+    private func writeHeatingParams(_ params: PaxHeatingParams, note: String) {
+        guard params.isPlausible else {
+            log("Refusing to write HeatingParams (\(note)): outside the range every stock preset lives in", level: .error)
+            return
+        }
+        lastHeatingParamsWrite = Date()
         enqueue {
             try self.sendPacket(PaxPacket.setHeatingParams(params))
-            self.log("Restored the stock \(mode.label) heating parameters: \(params.summary)", level: .tx)
+            self.log("HeatingParams write (\(note)): options 0x\(String(format: "%02X", params.options.rawValue)) — \(params.summary)",
+                     level: .tx)
         }
     }
 

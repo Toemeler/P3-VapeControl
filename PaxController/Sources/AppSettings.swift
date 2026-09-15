@@ -21,6 +21,7 @@ final class AppSettings: ObservableObject {
         static let nickname        = "deviceNickname"
         static let paletteVersion  = "ledPaletteVersion"
         static let lipDetection    = "lipDetectionEnabled"
+        static let heaterBit       = "heaterOptionBit"
     }
 
     /// Drives `DS.Palette.accent`, so it re-themes the dial, chips and buttons.
@@ -90,6 +91,17 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(lipDetectionEnabled, forKey: Key.lipDetection) }
     }
 
+    /// Which bit of HeatingParams' options word this device uses for the
+    /// heater, found by the probe. The official app's naming says bit 2; this
+    /// PAX 3 stops its oven when one of the three "lip" bits is cleared, so the
+    /// naming does not hold here and the measurement wins. Nil until measured.
+    @Published var heaterOptionBit: Int? {
+        didSet {
+            if let bit = heaterOptionBit { defaults.set(bit, forKey: Key.heaterBit) }
+            else { defaults.removeObject(forKey: Key.heaterBit) }
+        }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -111,6 +123,7 @@ final class AppSettings: ObservableObject {
         // ships with, so an install that has never touched this matches what
         // the PAX does out of the box.
         lipDetectionEnabled = defaults.object(forKey: Key.lipDetection) as? Bool ?? true
+        heaterOptionBit     = defaults.object(forKey: Key.heaterBit) as? Int
         // On by default: the four states carry the palette below, which is
         // what makes the PAX show what it is doing rather than one flat colour.
         perModeLedColors    = defaults.object(forKey: Key.perModeColors) as? Bool ?? true

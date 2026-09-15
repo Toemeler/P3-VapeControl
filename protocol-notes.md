@@ -350,17 +350,22 @@ ever arrives and prefers it as the template.
 > as *the official app's* layout, read out of its own bundle; it is **not**
 > confirmed as PAX 3's.
 >
-> The likeliest explanation is that the web app is an Era/Era Pro app and the
-> PAX 3's firmware, which predates it, expects a different struct — a different
-> field order, a different length, or an options word somewhere else. If the
-> options word lands where the app puts `StandbyTemperature` (1600, bit 2
-> clear), the device reads the heater as disabled, which is exactly the symptom.
-> That is a guess, and there is no way to test it by reading the attribute back.
+> **The offset is right; the bit meanings are not.** The oven goes off and
+> comes back on with the switch, reproducibly. The two writes are byte-identical
+> except the options word at offset 21, so the device is reading that word,
+> at that offset, and acting on it — the field order and the length hold. What
+> does not hold is the naming. Clearing bits 0, 3 and 4 together stops the oven,
+> so **one of those three is this firmware's heater enable**, not bit 2.
 >
-> **Do not write 0x19 without a readback.** Guessing at the layout of the
-> attribute that controls the heater means power-cycling the device on every
-> wrong guess. The app now writes it only on an explicit confirmed tap, keeps a
-> restore on screen, and warns when the oven stops within seconds of a write. The app therefore starts every write from the stock preset for the mode
+> That also gives back the readback the attribute refuses. 0x19 never answers a
+> read, but the oven answers: clear one bit, see whether it stops. The app does
+> this as *Find the heater bit* — one bit at a time, the stock block written
+> back after each, about a minute with the oven left running. Whichever bit
+> stops the oven is held out of every later write.
+>
+> Until that measurement exists for a device, writing 0x19 costs a power cycle
+> per wrong guess, so the app writes it only on a confirmed tap, keeps a restore
+> on screen, and warns when the oven stops within seconds of a write. The app therefore starts every write from the stock preset for the mode
 the device reports being in, changes only the three lip bits, forces bit 2
 Heater on, and range-checks the result before sending it. The switch in the app
 shows what was last sent, not what the device holds.

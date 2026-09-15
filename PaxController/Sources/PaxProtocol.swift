@@ -537,6 +537,23 @@ struct PaxHeatingParams: Equatable {
         /// Everything the lip sensor drives: the boost on a draw, and the
         /// cooling and shutdown that follow when it stops detecting one.
         static let lipDetection: Options = [.boost, .noLipCooling, .noLipShutdown]
+
+        /// What the official app calls each bit. The names are its own; this
+        /// PAX 3 plainly does not agree about all of them, so the probe reports
+        /// by bit number with the name only as a label.
+        static func name(ofBit bit: Int) -> String {
+            switch bit {
+            case 0: return "boost"
+            case 1: return "customTemperature"
+            case 2: return "heater"
+            case 3: return "noLipCooling"
+            case 4: return "noLipShutdown"
+            case 5: return "rampContinue"
+            case 6: return "ramp"
+            case 7: return "standby"
+            default: return "bit \(bit)"
+            }
+        }
     }
 
     var standbyTemperature: UInt16

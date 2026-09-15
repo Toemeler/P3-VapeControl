@@ -143,13 +143,38 @@ struct DeviceSheet: View {
         } footer: {
             Text(lipDetectionNote)
         }
+
+        Section {
+            if viewModel.bitProbeRunning {
+                HStack {
+                    ProgressView()
+                    Text(viewModel.bitProbeStep ?? "Working")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Button("Stop", role: .destructive) { viewModel.cancelBitProbe() }
+            } else {
+                Button("Find the heater bit") { viewModel.probeHeatingOptionBits() }
+                    .disabled(!viewModel.canProbeHeatingBits)
+            }
+            ForEach(viewModel.bitProbeResults) { result in
+                Label(result.label,
+                      systemImage: result.stoppedOven ? "flame.slash" : "flame")
+                    .font(.footnote)
+                    .foregroundStyle(result.stoppedOven ? Color.orange : Color.secondary)
+            }
+        } header: {
+            Text("Heating parameter bits")
+        } footer: {
+            Text(bitProbeNote)
+        }
         .alert("Write heating parameters?", isPresented: $confirmingLipDetection) {
             Button("Cancel", role: .cancel) { }
             Button("Write", role: .destructive) {
                 viewModel.setLipDetection(pendingLipDetection)
             }
         } message: {
-            Text("This rewrites the whole heating algorithm, not one setting — it is the same block the official app sends, but this PAX has been seen to switch its oven off on receiving it. If that happens, restore the factory settings and power-cycle the PAX.")
+            Text(confirmLipDetectionMessage)
         }
     }
 
@@ -159,9 +184,35 @@ struct DeviceSheet: View {
                 ? "This PAX does not report the heating parameters attribute, so lip detection cannot be changed from here."
                 : "Connect to the PAX to change this."
         }
-        return "With lip detection off the oven holds the set point whether or not it senses a draw — no boost, no cooling when the lips leave it, and no power-off a few minutes later. "
-            + "Experimental: this PAX has answered a write of the heating parameters by stopping the oven, so the layout its firmware wants is evidently not the one the official app sends. "
-            + "Nothing is written unless you tap, the setting does not survive a mode change or a reconnect, and the PAX never reports this attribute back — so the switch shows what was last sent, not a reading."
+        let head = "With lip detection off the oven holds the set point whether or not it senses a draw — no boost, no cooling when the lips leave it, and no power-off a few minutes later. "
+        let tail = "Nothing is written unless you tap, the setting does not survive a mode change or a reconnect, and the PAX never reports this attribute back — so the switch shows what was last sent, not a reading."
+        guard settings.heaterOptionBit != nil else {
+            return head
+                + "This PAX stops its oven when sent the bits the official app calls the lip sensor, so one of them is its heater. Run \u{201C}Find the heater bit\u{201D} below before using this switch. "
+                + tail
+        }
+        return head + tail
+    }
+
+    private var confirmLipDetectionMessage: String {
+        settings.heaterOptionBit == nil
+            ? "This rewrites the whole heating algorithm, not one setting, and on this PAX it has stopped the oven — the heater bit has not been identified yet. Run \u{201C}Find the heater bit\u{201D} first. If the oven does stop, restore the factory settings and power-cycle the PAX."
+            : "This rewrites the whole heating algorithm, not one setting. The heater bit found on this PAX is left alone, so the oven should keep running. If it does not, restore the factory settings below."
+    }
+
+    private var bitProbeNote: String {
+        if let bit = settings.heaterOptionBit {
+            return "Measured on this PAX: bit \(bit) is the heater. Lip detection leaves it alone, so the switch above should no longer stop the oven."
+        }
+        if viewModel.bitProbeRunning {
+            return "Clearing one option bit at a time and watching whether the oven stops, putting the factory block back after each. About a minute. Leave the PAX heating and do not put it down."
+        }
+        guard viewModel.canSetLipDetection else {
+            return "Connect to the PAX to run this."
+        }
+        return viewModel.canProbeHeatingBits
+            ? "The PAX never reports its heating parameters back, so the oven itself is the only readback there is: clear one option bit, see whether the oven stops. That identifies which bit this firmware uses for the heater, which is the bit lip detection has to leave alone. Start the oven first and leave it running."
+            : "Start the oven and leave it heating, then run this. “The oven stopped” is the measurement, so there is nothing to measure against a cold PAX."
     }
 
     // MARK: - LED color
