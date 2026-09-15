@@ -34,6 +34,14 @@ on:
 permissions:
   contents: write
 
+env:
+  # Generated files follow the ref being built; a tag build writes to the
+  # default branch, since a tag is not a place to commit to.
+  TARGET_BRANCH: >-
+    ${{ github.ref_type == 'tag'
+        && github.event.repository.default_branch
+        || github.ref_name }}
+
 concurrency:
   # A newer build supersedes whatever is still running on the same ref, because
   # those race to commit screenshots and the feed to one branch. Other refs are

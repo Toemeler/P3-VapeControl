@@ -9,6 +9,10 @@
 # checkout mid-rebase, which is how this step used to fail.
 set -euo pipefail
 
+# Which branch the generated files belong on. Defaults to the checked-out ref
+# so a trial run on a side branch cannot write to the default branch.
+BRANCH=${TARGET_BRANCH:-main}
+
 MESSAGE=$1
 shift
 
@@ -19,10 +23,10 @@ for path in "$@"; do
   cp -R "$path" "$STAGING/$(dirname "$path")/"
 done
 
-# FETCH_HEAD, not origin/main: actions/checkout configures a narrow refspec,
-# so the remote-tracking ref can be stale and resetting to it would silently
-# drop a commit another job just pushed.
-git fetch -q origin main
+# FETCH_HEAD, not origin/$BRANCH: actions/checkout configures a narrow
+# refspec, so the remote-tracking ref can be stale and resetting to it would
+# silently drop a commit another job just pushed.
+git fetch -q origin "$BRANCH"
 git reset -q --hard FETCH_HEAD
 
 for path in "$@"; do
@@ -40,4 +44,4 @@ if git diff --cached --quiet; then
   exit 0
 fi
 git commit -q -m "$MESSAGE"
-git push origin HEAD:main
+git push origin "HEAD:$BRANCH"
