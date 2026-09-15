@@ -283,7 +283,9 @@ struct ThemedTarget: View {
                 stepButton("minus", delta: -1, shape: shape)
                 VStack(spacing: 1) {
                     targetValue(size: 25)
-                    Text(t.labelText("Target"))
+                    // A caption under a value, not a section header: it stays
+                    // sentence case whatever the theme does to its labels.
+                    Text("Target")
                         .font(t.body(12))
                         .foregroundStyle(t.muted)
                 }
