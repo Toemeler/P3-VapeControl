@@ -51,20 +51,23 @@
     </div>
   </div>
 
-  <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 0 16px;">
-    <div style="height: 72px; border-radius: 24px; background: #17181A; overflow: hidden; position: relative; display: flex; align-items: center;">
-      <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 95%; border-radius: 24px;
-                  background: linear-gradient(100deg, #1F8F43 0%, #30D158 62%, #45E06B 100%); overflow: hidden;">
-        <div style="position: absolute; top: 0; bottom: 0; width: 90px; background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0) 100%); animation: sheen 3.4s linear infinite;"></div>
+  <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 22px;">
+    <div style="position: relative; width: 116px; height: 116px; display: flex; align-items: center; justify-content: center;">
+      <svg width="116" height="116" viewBox="0 0 116 116" style="position: absolute; inset: 0;">
+        <circle cx="58" cy="58" r="50" fill="none" stroke="#212123" stroke-width="9" stroke-linecap="round"
+                stroke-dasharray="235.6 314.2" transform="rotate(135 58 58)"/>
+        <circle cx="58" cy="58" r="50" fill="none" stroke="#30D158" stroke-width="9" stroke-linecap="round"
+                stroke-dasharray="223.8 314.2" transform="rotate(135 58 58)" style="animation: creep 3s ease-in-out infinite;"/>
+      </svg>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px;">
+        <svg width="14" height="18" viewBox="0 0 11 14" fill="#30D158" style="animation: bolt 1.9s ease-in-out infinite;"><path d="M6.4 0 0 8h4l-.6 6L11 6H6.8z"/></svg>
+        <div style="font-size: 25px; font-weight: 600; letter-spacing: -0.6px; font-variant-numeric: tabular-nums;">95%</div>
       </div>
-      <div style="position: relative; display: flex; align-items: center; gap: 11px; padding-left: 22px;">
-        <svg width="17" height="21" viewBox="0 0 11 14" fill="#062A12" style="animation: bolt 1.9s ease-in-out infinite;"><path d="M6.4 0 0 8h4l-.6 6L11 6H6.8z"/></svg>
-        <div style="font-size: 30px; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; color: #052A11;">95%</div>
-      </div>
-      <div style="flex-grow: 1;"></div>
-      <div style="position: relative; padding-right: 20px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; color: rgba(5,42,17,0.55);">CHARGING</div>
     </div>
-    <div style="font-size: 13px; color: rgba(235,235,245,0.5); padding-left: 4px;">Temperature and modes come back off the charger.</div>
+    <div style="display: flex; flex-direction: column; gap: 5px;">
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 1.3px; color: #30D158;">CHARGING</div>
+      <div style="font-size: 15px; color: rgba(235,235,245,0.6); line-height: 20px; text-wrap: pretty; max-width: 150px;">Controls return off the charger.</div>
+    </div>
   </div>
 
   <div style="height: 34px;"></div>

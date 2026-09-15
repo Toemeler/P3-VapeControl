@@ -4,15 +4,15 @@
     { "id": "page-2", "name": "Lock Screen" }
   ],
   "artboards": [
-    { "file": "Main.dc.html", "title": "A · Charge ring", "page": "page-1", "x": 0, "y": 0, "w": 390, "h": 844 },
-    { "file": "ChargeQuiet.dc.html", "title": "B · Dial stays, card below", "page": "page-1", "x": 500, "y": 0, "w": 390, "h": 844 },
-    { "file": "ChargeMinimal.dc.html", "title": "C · Nothing but charging", "page": "page-1", "x": 1000, "y": 0, "w": 390, "h": 844 },
+    { "file": "Main.dc.html", "title": "B1 · The charge is the object", "page": "page-1", "x": 0, "y": 0, "w": 390, "h": 844 },
+    { "file": "ChargeRingEcho.dc.html", "title": "B2 · A second ring", "page": "page-1", "x": 500, "y": 0, "w": 390, "h": 844 },
+    { "file": "ChargeType.dc.html", "title": "B3 · Type and a hairline", "page": "page-1", "x": 1000, "y": 0, "w": 390, "h": 844 },
     { "file": "LockUsing.dc.html", "title": "Using / heating", "page": "page-2", "x": 0, "y": 0, "w": 440, "h": 640 },
     { "file": "LockCharging.dc.html", "title": "Charging", "page": "page-2", "x": 560, "y": 0, "w": 440, "h": 640 },
     { "file": "LockScanning.dc.html", "title": "Scanning / waiting", "page": "page-2", "x": 1120, "y": 0, "w": 440, "h": 620 }
   ],
   "annotations": [
-    { "id": "charge-brief", "page": "page-1", "x": 0, "y": -150, "w": 700, "text": "Charging in the app — the oven is off, so temperature controls and heating modes have nothing to act on.\n\nA keeps the dial and re-points it at the battery. B keeps the dial meaning temperature and puts charging in a card where the controls were. C drops everything else." },
+    { "id": "charge-brief", "page": "page-1", "x": 0, "y": -176, "w": 760, "text": "B is settled: the dial keeps meaning temperature, dimmed, and the charging state takes the space the controls had. These are three shapes for that space.\n\nThe old card showed 95% twice and drew a battery whose fill animated up and down, which says the wrong thing. Each of these states the charge once, and the only motion means current flowing, not a level changing." },
     { "id": "lock-brief", "page": "page-2", "x": 0, "y": -170, "w": 760, "text": "Lock Screen, three states of one card.\n\nThe question running through all of them: should the three states share one skeleton so the eye learns a single layout (U-A, C-A, S-A), or should each state take the shape that suits it (C-B's battery, S-B's one line)?\n\nMixing is fine — but a shared skeleton only pays off if you take it in all three." },
     { "id": "lock-note", "page": "page-2", "x": 1120, "y": 660, "w": 440, "text": "No buttons on any of these: you said you did not need them, and iOS only allows them from 17 anyway." }
   ],
