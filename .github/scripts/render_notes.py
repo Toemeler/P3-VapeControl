@@ -104,15 +104,20 @@ def main(out_path):
     with open(os.path.join(".github", "release-notes-template.md")) as fh:
         template = fh.read()
 
-    # The landing page carries the one-tap "Add to SideStore" button, so the
-    # notes link that rather than spelling out the feed URL.
-    pages_url = source_url.rsplit("/", 1)[0] + "/"
+    # The one-tap button lives on the Pages landing page - GitHub strips the
+    # sidestore:// link it wraps, so it cannot go in the notes directly. With
+    # Pages off there is no page to link to, and the URL is spelled out instead.
+    pages_url = os.environ.get("PAGES_URL", "").strip().rstrip("/")
+    if pages_url:
+        add_source = f"**[Add to SideStore]({pages_url}/)**"
+    else:
+        add_source = f"Add this source in SideStore:\n\n`{source_url}`"
 
     notes = template.format(
         version=os.environ["VERSION"],
         size=os.environ.get("IPA_SIZE", ""),
         source_url=source_url,
-        pages_url=pages_url,
+        add_source=add_source,
         icon_url=f"{base}/icon.png",
         gallery=gallery(f"{base}/screenshots", "screenshots"),
         shortcut_url=shortcut_url,

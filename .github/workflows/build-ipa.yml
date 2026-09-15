@@ -33,6 +33,8 @@ on:
 
 permissions:
   contents: write
+  # Read-only, purely to ask whether Pages is serving; see the feed step.
+  pages: read
 
 env:
   # Generated files follow the ref being built; a tag build writes to the
@@ -347,8 +349,18 @@ jobs:
           SHA256: ${{ steps.package.outputs.sha256 }}
           TAG: ${{ steps.tag.outputs.tag }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # The one-tap "Add to SideStore" button needs the Pages landing page,
+          # and the short feed URL needs Pages too. Neither may be advertised
+          # before Pages actually serves, so ask - and on any doubt fall back to
+          # raw.githubusercontent.com, which needs nothing switched on.
+          PAGES_URL=$(gh api "repos/${{ github.repository }}/pages" \
+            --jq '.html_url' 2>/dev/null || true)
+          export PAGES_URL
+          echo "Pages: ${PAGES_URL:-not enabled}"
+
           python3 .github/scripts/make_icon.py icon.png
           python3 .github/scripts/make_source.py .
           echo "--- source feed ---"
@@ -360,6 +372,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
           SOURCE_URL: ${{ steps.feed.outputs.source_url }}
+          PAGES_URL: ${{ steps.feed.outputs.pages_url }}
           SHORTCUT_URL: ${{ vars.SHORTCUT_URL }}
           SCREENSHOT_SHA: ${{ needs.screenshots.outputs.sha }}
           IPA_SIZE: ${{ steps.package.outputs.human_size }}
@@ -412,8 +425,14 @@ jobs:
         id: facts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
+          PAGES_URL=$(gh api "repos/${{ github.repository }}/pages" \
+            --jq '.html_url' 2>/dev/null || true)
+          export PAGES_URL
+          echo "Pages: ${PAGES_URL:-not enabled}"
+
           python3 .github/scripts/release_facts.py
 
       - name: Publish the refreshed notes
@@ -423,6 +442,7 @@ jobs:
           VERSION: ${{ steps.facts.outputs.version }}
           IPA_SIZE: ${{ steps.facts.outputs.human_size }}
           SOURCE_URL: ${{ steps.facts.outputs.source_url }}
+          PAGES_URL: ${{ steps.facts.outputs.pages_url }}
           SCREENSHOT_SHA: ${{ needs.screenshots.outputs.sha }}
         run: |
           set -euo pipefail
