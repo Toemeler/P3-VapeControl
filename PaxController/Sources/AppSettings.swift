@@ -19,6 +19,7 @@ final class AppSettings: ObservableObject {
         static let readyAlert      = "notifyWhenReady"
         static let warmUpGradient  = "warmUpGradient"
         static let nickname        = "deviceNickname"
+        static let paletteVersion  = "ledPaletteVersion"
     }
 
     /// Drives `DS.Palette.accent`, so it re-themes the dial, chips and buttons.
@@ -104,11 +105,23 @@ final class AppSettings: ObservableObject {
         let stored = defaults.stringArray(forKey: Key.modeColors) ?? []
         let valid = stored.count == Self.modeSlotCount
             && stored.allSatisfy { LedColor.fromHex($0) != nil }
-        modeLedHexes = valid ? stored : LedColor.cleanStateHexes
+        // Eight identical colours were never chosen by anyone: builds before
+        // this palette existed seeded the states from the single accent colour,
+        // which left every state flat orange — including the one that is meant
+        // to go light blue at temperature. Adopt the shipped palette instead,
+        // once, and leave a hand-picked palette alone.
+        let autoSeeded = valid && Set(stored.map { $0.uppercased() }).count == 1
+        let superseded = autoSeeded && defaults.integer(forKey: Key.paletteVersion) < Self.paletteVersion
+        modeLedHexes = (valid && !superseded) ? stored : LedColor.cleanStateHexes
+        defaults.set(Self.paletteVersion, forKey: Key.paletteVersion)
     }
 
     /// Four modes, two colours each.
     static let modeSlotCount = PaxColorTheme.modeCount * 2
+
+    /// Bumped when the shipped palette changes, so an install carrying an
+    /// auto-seeded one picks the new colours up.
+    static let paletteVersion = 2
 
     /// The colour pair for one mode, as `PaxColorTheme.perMode` wants them.
     func modeColors(_ mode: Int) -> (LedColor, LedColor) {

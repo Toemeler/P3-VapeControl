@@ -726,7 +726,9 @@ final class PaxDeviceViewModel: ObservableObject {
         case .heating:
             // Where this heat-up started from, so the ramp is a fraction of the
             // climb rather than of the whole scale — a PAX picked up warm
-            // should not sit on green all the way.
+            // should not sit on green all the way. Often nil at this point,
+            // since the state usually arrives before the first temperature
+            // does; `updateWarmUpColor` latches it as soon as one turns up.
             warmUpStartTempC = actualTempC
             lastWarmUpHex = nil
             updateWarmUpColor()
@@ -753,6 +755,12 @@ final class PaxDeviceViewModel: ObservableObject {
         guard let actual = actualTempC,
               let target = targetTempC ?? currentTargetTempC, target > 0 else { return }
 
+        // Latch the baseline here rather than only when the state changes. The
+        // heating report routinely arrives before the first temperature does,
+        // and `warmUpStartTempC ?? actual` then re-based the ramp on every
+        // reading — progress came out zero every time, which is why it sat on
+        // green for the whole heat-up.
+        if warmUpStartTempC == nil { warmUpStartTempC = actual }
         let start = warmUpStartTempC ?? actual
         let span = target - start
         // A heat-up that starts within a degree of the set point has no ramp
@@ -771,7 +779,8 @@ final class PaxDeviceViewModel: ObservableObject {
         enqueue {
             try self.sendPacket(PaxPacket.setLedColor(attribute: .colorTheme, payload: payload))
         }
-        log("Warm-up \(Int(stepped * 100))% → \(color.hex)", level: .tx)
+        log(String(format: "Warm-up %d%% → %@ (%.1f of %.1f→%.1f)",
+                   Int(stepped * 100), color.hex, actual, start, target), level: .tx)
     }
 
     // MARK: - Attribute probe
