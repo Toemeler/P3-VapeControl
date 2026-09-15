@@ -21,6 +21,8 @@ final class AppSettings: ObservableObject {
         static let nickname        = "deviceNickname"
         static let paletteVersion  = "ledPaletteVersion"
         static let lipDetection    = "lipDetectionEnabled"
+        static let lipCooling      = "lipCoolingEnabled"
+        static let lipShutdown     = "lipShutdownEnabled"
         static let heaterBit       = "heaterOptionBit"
     }
 
@@ -82,14 +84,27 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(modeLedHexes, forKey: Key.modeColors) }
     }
 
-    /// Whether the lip sensor is allowed to drive the oven: the boost on a
-    /// draw, and the cooling and shutdown that follow when it stops seeing one.
-    /// This one is not a preference the app acts on but a record of what was
-    /// last written to the device — HeatingParams (0x19) is write-only on this
-    /// firmware, so nothing can read back whether it took.
-    @Published var lipDetectionEnabled: Bool {
-        didSet { defaults.set(lipDetectionEnabled, forKey: Key.lipDetection) }
+    /// The two halves of what the lip sensor does, kept apart because they are
+    /// worth wanting separately: the cooldown is the annoyance a water-pipe
+    /// adapter runs into, while the shutdown is the thing that stops a
+    /// forgotten oven running. Neither is a preference the app acts on — both
+    /// are a record of what was last written, since HeatingParams (0x19) is
+    /// write-only on this firmware and nothing can read back whether it took.
+    ///
+    /// The third bit the official app groups with these is bit 0, which on a
+    /// PAX 3 turns out to be the heater itself, so there is no boost bit here
+    /// to offer.
+    @Published var lipCoolingEnabled: Bool {
+        didSet { defaults.set(lipCoolingEnabled, forKey: Key.lipCooling) }
     }
+
+    @Published var lipShutdownEnabled: Bool {
+        didSet { defaults.set(lipShutdownEnabled, forKey: Key.lipShutdown) }
+    }
+
+    /// Lip detection as one idea, for the places that only care whether the
+    /// sensor drives the oven at all.
+    var lipDetectionEnabled: Bool { lipCoolingEnabled && lipShutdownEnabled }
 
     /// Which bit of HeatingParams' options word this device uses for the
     /// heater, found by the probe. The official app's naming says bit 2; this
@@ -121,8 +136,11 @@ final class AppSettings: ObservableObject {
         warmUpGradient      = defaults.object(forKey: Key.warmUpGradient) as? Bool ?? true
         // On is the device's own default, and the one every vendor preset
         // ships with, so an install that has never touched this matches what
-        // the PAX does out of the box.
-        lipDetectionEnabled = defaults.object(forKey: Key.lipDetection) as? Bool ?? true
+        // the PAX does out of the box. An install that set the single switch
+        // before it was split inherits its value for both halves.
+        let lipLegacy = defaults.object(forKey: Key.lipDetection) as? Bool ?? true
+        lipCoolingEnabled  = defaults.object(forKey: Key.lipCooling) as? Bool ?? lipLegacy
+        lipShutdownEnabled = defaults.object(forKey: Key.lipShutdown) as? Bool ?? lipLegacy
         heaterOptionBit     = defaults.object(forKey: Key.heaterBit) as? Int
         // On by default: the four states carry the palette below, which is
         // what makes the PAX show what it is doing rather than one flat colour.

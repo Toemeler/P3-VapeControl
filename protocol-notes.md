@@ -500,9 +500,13 @@ them. None are in this PAX 3's SupportedAttributes.
    16-bit words land near 1800 and 2150 (180.0 °C and 215.0 °C), and this is
    the attribute that would say whether that ceiling can be raised.
 
-4. **DynamicMode (0x13)**: Known PAX 3 values are Standard (`0x00`), Boost (`0x01`),
-   Efficiency (`0x02`), Stealth (`0x03`), and Flavor (`0x04`). Their exact heating
-   algorithms remain device-controlled and are not fully documented.
+4. **DynamicMode (0x13)**: PAX 3 values are Standard (`0x00`), Boost (`0x01`),
+   Efficiency (`0x02`), Stealth (`0x03`), and Flavor (`0x04`). The algorithms are
+   no longer a mystery — each mode *is* a HeatingParams block, and all five are
+   tabulated above, read out of the official app's own bundle. What is still
+   unconfirmed is whether this firmware applies a mode's preset from the mode
+   byte alone; the official app never finds out, because it writes both
+   attributes. This app now does the same.
 
 5. **HapticMode (0x17)**: Byte 0 is amplitude on the same 0…128 scale as
    Brightness (this PAX reports `0x2F`). The app writes that one byte, which is
@@ -514,7 +518,11 @@ them. None are in this PAX 3's SupportedAttributes.
 
 7. **Endianness of HeatingState**: Assumed 1-byte, no multi-byte values documented. Some unknown states may exist between the known values.
 
-8. **Write response timing**: Whether the device requires a delay between consecutive write commands is not documented. This app writes one packet at a time and relies on CoreBluetooth's `.withResponse` write type.
+8. **Write response timing**: Whether the device requires a delay between
+   consecutive write commands is not documented, and there is no acknowledgement
+   to pace against: the write characteristic is `writeWithoutResponse`, so
+   `didWriteValueFor` never fires. This app writes one packet at a time and
+   confirms a write, where it can, by reading the attribute back.
 
 9. **Session re-keying**: Whether the session key changes between connections (it shouldn't, as it is derived purely from a static serial number) is unconfirmed.
 
