@@ -15,22 +15,32 @@ struct TemperatureDial<Center: View>: View {
     let onScrub: (Double) -> Void
     /// Called once when the finger lifts, so only one packet is written.
     let onCommit: (Double) -> Void
+    /// How far apart the readings behind `current` are. The arc interpolates
+    /// over slightly longer than this, so it is still travelling towards one
+    /// reading when the next arrives.
+    let cadence: Double
     private let center: Center
     @State private var isScrubbing = false
 
     init(current: Double?,
          target: Double,
          accent: Color,
+         cadence: Double = 1,
          onScrub: @escaping (Double) -> Void,
          onCommit: @escaping (Double) -> Void,
          @ViewBuilder center: () -> Center) {
         self.current = current
         self.target = target
         self.accent = accent
+        self.cadence = cadence
         self.onScrub = onScrub
         self.onCommit = onCommit
         self.center = center()
     }
+
+    /// Long enough to carry the arc into the next reading, short enough that it
+    /// is never chasing one that has already been replaced.
+    private var travel: Double { min(1.4, cadence * 1.15) }
 
     private var side: CGFloat { DS.Dial.canvas }
     private var mid: CGFloat { side / 2 }
@@ -82,7 +92,7 @@ struct TemperatureDial<Center: View>: View {
             // Linear, and just longer than the gap between readings, so the arc
             // is still travelling towards one temperature when the next
             // arrives: it moves continuously rather than stepping and settling.
-            .animation(.linear(duration: 1.15), value: current)
+            .animation(.linear(duration: travel), value: current)
     }
 
     /// The climb from cold to the bottom of the scale, on a ring of its own
@@ -101,7 +111,7 @@ struct TemperatureDial<Center: View>: View {
             // Fades out as the main arc takes over, rather than vanishing the
             // moment the oven crosses 180.
             .opacity(celsius >= DS.Range.min ? 0 : 1)
-            .animation(.linear(duration: 1.15), value: current)
+            .animation(.linear(duration: travel), value: current)
     }
 
     /// Past where PAX's own app stopped. Drawn on the track so the end of the

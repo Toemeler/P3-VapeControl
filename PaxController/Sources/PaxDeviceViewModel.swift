@@ -186,6 +186,10 @@ final class PaxDeviceViewModel: ObservableObject {
     private var pollTimer: AnyCancellable?
     /// The faster, smaller poll behind the dial's movement.
     private var temperatureTimer: AnyCancellable?
+    private var sinceTemperatureRequest: TimeInterval = 0
+    /// Whether anyone is looking. Polling four times a second at a dial nobody
+    /// can see is two batteries spent on nothing.
+    private var appIsActive = true
     /// A scan reports each peripheral once and iOS suppresses the repeats. A
     /// PAX that is switched off and on again during one scan can therefore go
     /// unreported for as long as that scan lasts, which is what makes it look
@@ -400,6 +404,12 @@ final class PaxDeviceViewModel: ObservableObject {
 
     /// Foreground pass: picks discovery back up where iOS suspended it, but
     /// leaves a disconnect the user asked for alone.
+    /// Foreground and background, from the scene phase.
+    func setActive(_ active: Bool) {
+        appIsActive = active
+        if active { sinceTemperatureRequest = temperatureCadence }
+    }
+
     func resumeDiscoveryIfIdle() {
         guard !automationPaused else { return }
         attemptAutoConnect()
@@ -1575,11 +1585,39 @@ final class PaxDeviceViewModel: ObservableObject {
                 self.requestFullStatus()
             }
         temperatureTimer?.cancel()
-        temperatureTimer = Timer.publish(every: 1, on: .main, in: .common)
+        sinceTemperatureRequest = 0
+        // Ticks at the fastest rate the dial ever needs; each tick decides
+        // whether this is a moment worth asking about.
+        temperatureTimer = Timer.publish(every: Self.temperatureTick, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                self?.requestTemperature()
+                self?.temperatureTickFired()
             }
+    }
+
+    /// The shortest gap between temperature readings. Four a second: a PAX 3
+    /// climbs about two degrees in that time, so every reading is new, and the
+    /// link carries it without noticing — a connection interval is tens of
+    /// milliseconds, and the request is one packet that needs no acknowledgement.
+    private static let temperatureTick: TimeInterval = 0.25
+
+    /// How often to actually ask, by what the oven is doing. An oven climbing
+    /// towards its set point earns every reading; one sitting in standby does
+    /// not, and the radio runs down two batteries rather than one.
+    var temperatureCadence: TimeInterval {
+        guard appIsActive else { return 3 }
+        switch heatingState {
+        case .heating, .boosting, .cooling: return Self.temperatureTick
+        case .ready:                        return 1
+        default:                            return 2
+        }
+    }
+
+    private func temperatureTickFired() {
+        sinceTemperatureRequest += Self.temperatureTick
+        guard sinceTemperatureRequest >= temperatureCadence - 0.01 else { return }
+        sinceTemperatureRequest = 0
+        requestTemperature()
     }
 
     /// The smallest useful question: where the oven is, where it is heading,

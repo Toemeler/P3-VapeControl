@@ -30,6 +30,7 @@ struct ContentView: View {
                 // start one, so retry the start whenever we are foregrounded —
                 // and pick discovery back up, since iOS suspends a scan that was
                 // running when the app went away.
+                viewModel.setActive(phase == .active)
                 if phase == .active {
                     viewModel.refreshLiveActivity()
                     viewModel.resumeDiscoveryIfIdle()

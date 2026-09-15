@@ -114,6 +114,7 @@ struct ControlView: View {
             current: viewModel.actualTempC,
             target: viewModel.customTargetTempC,
             accent: DS.Palette.accent,
+            cadence: viewModel.temperatureCadence,
             onScrub: { viewModel.customTargetTempC = $0 },
             onCommit: { celsius in
                 guard canSendCommands else { return }
