@@ -37,6 +37,9 @@ protocol BluetoothManagerDelegate: AnyObject {
     /// made, so the view model can decide whether to try reconnecting to the
     /// last-known device.
     func bluetoothReadyForAutoConnect()
+    /// iOS relaunched the app with a peripheral that is not connected. The
+    /// connect has been re-issued; nothing will happen until the PAX shows up.
+    func bluetoothRestoredPendingConnect(name: String)
 }
 
 // MARK: - BluetoothManager (pure BLE transport)
@@ -107,7 +110,14 @@ final class BluetoothManager: NSObject {
     /// (`retrievePeripherals(withIdentifiers:)`, which still requires the
     /// device to be in range/advertising to actually connect).
     func autoConnect(toKnownIdentifier id: UUID) -> ScannedDevice? {
-        guard centralManager.state == .poweredOn, connectedPeripheral == nil else { return nil }
+        guard centralManager.state == .poweredOn else { return nil }
+        // A peripheral left over from an earlier session is not necessarily the
+        // one we are after; while it is held, the connect below never happens.
+        if let held = connectedPeripheral, held.identifier != id {
+            centralManager.cancelPeripheralConnection(held)
+            connectedPeripheral = nil
+        }
+        guard connectedPeripheral == nil else { return nil }
 
         if let already = centralManager.retrieveConnectedPeripherals(
             withServices: [PaxUUIDs.serviceUUID]).first(where: { $0.identifier == id }) {
@@ -193,11 +203,26 @@ extension BluetoothManager: CBCentralManagerDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         Task { @MainActor in
             let available = central.state == .poweredOn
+            // Everything CoreBluetooth vended dies with the radio: the
+            // peripheral objects are invalid and every pending connect is
+            // dropped. Holding on to one is what makes an auto-connect after a
+            // Bluetooth or Airplane-mode toggle look armed when in fact
+            // nothing is waiting, and the app then sits at "Waiting for PAX…"
+            // for ever.
+            if !available { invalidate() }
             delegate?.bluetoothDidUpdatePower(available: available)
             if available {
                 delegate?.bluetoothReadyForAutoConnect()
             }
         }
+    }
+
+    private func invalidate() {
+        connectedPeripheral = nil
+        readChar = nil
+        writeChar = nil
+        notifyChar = nil
+        writeCharProps = []
     }
 
     /// Called before `centralManagerDidUpdateState` when iOS relaunches the app
@@ -216,6 +241,14 @@ extension BluetoothManager: CBCentralManagerDelegate {
             if peripheral.state == .connected {
                 delegate?.bluetoothDidConnect()
                 discoverServices()
+            } else {
+                // Restored as disconnected or still pending. Re-issuing is a
+                // no-op for a request iOS is already holding, and the only way
+                // back for one it dropped — and without it this peripheral
+                // would sit in `connectedPeripheral` blocking every later
+                // auto-connect attempt.
+                centralManager.connect(peripheral, options: nil)
+                delegate?.bluetoothRestoredPendingConnect(name: peripheral.name ?? "PAX")
             }
         }
     }

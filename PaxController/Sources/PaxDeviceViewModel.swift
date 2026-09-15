@@ -156,6 +156,29 @@ final class PaxDeviceViewModel: ObservableObject {
     private var serialReady = false
     private var pendingCommands: [() throws -> Void] = []
     private var pollTimer: AnyCancellable?
+    /// A scan reports each peripheral once and iOS suppresses the repeats. A
+    /// PAX that is switched off and on again during one scan can therefore go
+    /// unreported for as long as that scan lasts, which is what makes it look
+    /// like the app cannot see a device that is plainly advertising. Restarting
+    /// the scan on a slow cycle clears the suppression.
+    private var rescanTimer: AnyCancellable?
+    /// Armed when the scan sees the very device a pending connect is waiting
+    /// for: proof that it is advertising, so a request that still has not
+    /// landed shortly afterwards is stale rather than merely patient.
+    private var pendingConnectWatchdog: Task<Void, Never>?
+    /// Polls sent since the device last answered. A PAX switched off at the
+    /// button can leave iOS holding the link open for half a minute before the
+    /// supervision timeout fires, and the app spends that time showing a
+    /// connection that is already gone — and, worse, not looking for the
+    /// device coming back. Counted in polls rather than measured in seconds
+    /// because the timer does not fire while the app is suspended: elapsed time
+    /// would read as silence after any spell in the background.
+    private var unansweredPolls = 0
+    /// Guards the handshake itself. A connect that lands but never finishes —
+    /// stale GATT handles after a power cycle are the usual reason — leaves the
+    /// app sitting in `.discoveringServices` for good, since every recovery
+    /// path keys off being disconnected.
+    private var connectWatchdog: Task<Void, Never>?
     /// Distinguishes "the user tapped Disconnect" from "the device went away",
     /// because only the latter should re-arm the auto-reconnect.
     private var userInitiatedDisconnect = false
@@ -226,12 +249,28 @@ final class PaxDeviceViewModel: ObservableObject {
         default:            break
         }
         bluetooth.scan()
+        scheduleRescan()
         log("Scanning for PAX devices…", level: .info)
+    }
+
+    /// Restarts the scan periodically. Nothing is logged: this is housekeeping,
+    /// and at this interval it would drown the log it is meant to explain.
+    private func scheduleRescan() {
+        rescanTimer?.cancel()
+        rescanTimer = Timer.publish(every: 12, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self, self.isScanning, !self.connectionState.isConnected else { return }
+                self.bluetooth.stopScan()
+                self.bluetooth.scan()
+            }
     }
 
     private func stopScan() {
         guard isScanning else { return }
         bluetooth.stopScan()
+        rescanTimer?.cancel()
+        rescanTimer = nil
         isScanning = false
         if case .scanning = connectionState { connectionState = .idle }
         log("Scan stopped", level: .info)
@@ -252,6 +291,7 @@ final class PaxDeviceViewModel: ObservableObject {
         automationPaused = false
         connectionState = .connecting
         bluetooth.connect(to: device)
+        armConnectWatchdog()
         log("Connecting to \(device.name) [\(device.id)]", level: .info)
     }
 
@@ -355,7 +395,58 @@ final class PaxDeviceViewModel: ObservableObject {
             log("Found \(device.name), but \(rememberedDeviceName ?? "another PAX") is the remembered device — tap to use this one", level: .info)
             return
         }
+        if connectionState == .waitingForDevice {
+            armPendingConnectWatchdog(for: device)
+            return
+        }
         log("Auto-connecting to \(device.name)", level: .info)
+        connect(to: device)
+    }
+
+    /// The pending connect deserves first refusal: iOS holds it below the app
+    /// and it survives backgrounding, which a scan does not. But a request the
+    /// system quietly dropped looks exactly like one that is still waiting, and
+    /// it never recovers on its own — so once the device is seen advertising,
+    /// the request has a few seconds to make good on it.
+    private func armPendingConnectWatchdog(for device: ScannedDevice) {
+        guard pendingConnectWatchdog == nil else { return }
+        log("\(device.name) is advertising while a reconnect is pending", level: .ble)
+        pendingConnectWatchdog = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.pendingConnectDidGoStale(device)
+        }
+    }
+
+    private func armConnectWatchdog() {
+        connectWatchdog?.cancel()
+        connectWatchdog = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.connectDidStall()
+        }
+    }
+
+    private func connectDidStall() {
+        connectWatchdog = nil
+        switch connectionState {
+        case .connecting, .discoveringServices, .awaitingSerial: break
+        default: return
+        }
+        log("Stuck at \(connectionState.displayString) for 15 s — starting over", level: .warn)
+        bluetooth.cancelPendingConnect()
+        resetDeviceState()
+        connectionState = .idle
+        attemptAutoConnect()
+        startDiscoveryIfDisconnected()
+    }
+
+    private func pendingConnectDidGoStale(_ device: ScannedDevice) {
+        pendingConnectWatchdog = nil
+        guard connectionState == .waitingForDevice else { return }
+        log("The pending reconnect never landed — connecting to \(device.name) directly", level: .warn)
+        bluetooth.cancelPendingConnect()
+        connectionState = .idle
         connect(to: device)
     }
 
@@ -591,6 +682,7 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     private func handlePacket(_ data: Data) {
+        unansweredPolls = 0
         guard let key = sessionKey else {
             log("RX [no key yet] \(data.hexString)", level: .warn)
             return
@@ -822,6 +914,8 @@ final class PaxDeviceViewModel: ObservableObject {
         // running the ready sequence again re-sends every capability request.
         guard connectionState != .ready else { return }
         log("PAX service confirmed + serial ready — entering ready state", level: .info)
+        connectWatchdog?.cancel()
+        connectWatchdog = nil
         connectionState = .ready
         userInitiatedDisconnect = false
         rememberCurrentDevice()
@@ -839,11 +933,26 @@ final class PaxDeviceViewModel: ObservableObject {
     private func startPolling() {
         // Poll every 3 s — PAX 3 firmware only sends temp/battery in response to requests.
         pollTimer?.cancel()
+        unansweredPolls = 0
         pollTimer = Timer.publish(every: 3, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                self?.requestFullStatus()
+                guard let self else { return }
+                self.unansweredPolls += 1
+                self.failOverIfSilent()
+                self.requestFullStatus()
             }
+    }
+
+    /// A working device answers every poll within a few hundred milliseconds,
+    /// so seven in a row unanswered means the link is dead whatever iOS still
+    /// says. Tearing it down here starts the reconnect instead of waiting on a
+    /// supervision timeout that may be another 20 s away.
+    private func failOverIfSilent() {
+        guard connectionState.isConnected, unansweredPolls >= 7 else { return }
+        log("No reply to the last \(unansweredPolls) status requests — dropping the link and looking for the PAX again", level: .warn)
+        unansweredPolls = 0
+        bluetooth.disconnect()
     }
 
     private func stopPolling() {
@@ -889,6 +998,11 @@ final class PaxDeviceViewModel: ObservableObject {
         ledWriteDebounce = nil
         capabilityTimeout?.cancel()
         capabilityTimeout = nil
+        pendingConnectWatchdog?.cancel()
+        pendingConnectWatchdog = nil
+        connectWatchdog?.cancel()
+        connectWatchdog = nil
+        unansweredPolls = 0
     }
 
     func log(_ message: String, level: DebugEntry.Level = .info) {
@@ -908,7 +1022,11 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
         // would wipe the fixture straight after init.
         guard !demoMode else { return }
         if !available {
+            // iOS drops every pending connect with the radio, so the reconnect
+            // that was armed is gone; power-on re-arms it from scratch.
             isScanning = false
+            rescanTimer?.cancel()
+            rescanTimer = nil
             connectionState = .idle
             resetDeviceState()
         }
@@ -929,6 +1047,11 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
         // A pending auto-connect can complete while a scan is still running;
         // the radio has no reason to keep looking now.
         stopScan()
+        pendingConnectWatchdog?.cancel()
+        pendingConnectWatchdog = nil
+        // Covers the pending-connect path too, which reaches this point without
+        // ever going through `connect(to:)`.
+        armConnectWatchdog()
         connectionState = .discoveringServices
     }
 
@@ -966,6 +1089,15 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
         // to update an activity but never to start one.
         attemptAutoConnect()
         startDiscoveryIfDisconnected()
+        refreshLiveActivity()
+    }
+
+    /// iOS relaunched the app in the background for a device that is not
+    /// connected. `BluetoothManager` has already re-issued the request.
+    func bluetoothRestoredPendingConnect(name: String) {
+        log("iOS restored the session for \(name) — reconnect re-armed", level: .ble)
+        guard !connectionState.isConnected else { return }
+        connectionState = .waitingForDevice
         refreshLiveActivity()
     }
 
