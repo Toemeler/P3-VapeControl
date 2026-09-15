@@ -1,0 +1,55 @@
+{
+  "artboards": [
+    { "file": "Current.dc.html",    "title": "Today, at the same reading", "x": 0,    "y": 0,    "w": 390, "h": 844 },
+    { "file": "Main.dc.html",       "title": "A · Werkstatt",         "x": 490,  "y": 0,    "w": 390, "h": 844 },
+    { "file": "Editorial.dc.html",  "title": "B · Editorial",         "x": 980,  "y": 0,    "w": 390, "h": 844 },
+    { "file": "Native.dc.html",     "title": "C · Native",            "x": 0,    "y": 1240, "w": 390, "h": 844 },
+    { "file": "Thermal.dc.html",    "title": "D · Thermal",           "x": 490,  "y": 1240, "w": 390, "h": 844 },
+    { "file": "Instrument.dc.html", "title": "E · Instrument",        "x": 980,  "y": 1240, "w": 390, "h": 844 }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -340,
+      "w": 1370,
+      "text": "Five design languages for the control screen, not five coats of paint on the current one.\n\nAll six frames show the same moment so they can be compared honestly: connected, 78% battery, oven at 193.4 °C, target 193, Standard mode, 193° preset live. Real values, real range (180–225, marked past 215), real mode names.\n\nWhat makes today's screen read as sci-fi is not the dial — it is four things at once: saturated orange on near-black, a glowing 26 pt arc, tracked-out caps (READY) and a neon green status dot. Each direction below drops all four and replaces them with a different idea of what an instrument looks like. Pick one and we take it the rest of the way — states, light and dark, charging, the Lock Screen card."
+    },
+    {
+      "id": "note-a",
+      "x": 490,
+      "y": 890,
+      "w": 390,
+      "text": "A · WERKSTATT — Braun functionalism\n\nWarm grey chassis, matte plates, 4 pt corners everywhere, lowercase labels, one accent (vermilion) reserved for the one thing you set: the target. The dial becomes a printed linear scale — a solid bar for what the oven is, a vermilion index for what you asked for, a hatched band past 215 instead of a brown glow. Modes become a five-position switch.\n\nWhy: reads as a tool you'd buy, not an app you downloaded. Ages well.\nTradeoff: the big circular dial is gone, and with it drag-the-ring scrubbing — a linear scale needs a different gesture. Also a light-first design, so dark mode is real work rather than a token swap."
+    },
+    {
+      "id": "note-b",
+      "x": 980,
+      "y": 890,
+      "w": 390,
+      "text": "B · EDITORIAL — Swiss page, no chrome\n\nNo cards, no fills, no corners. Hairline rules and typography do all the work: the reading is set at 122 px in a display serif, and modes become a contents list. One ink-red accent, used four times on the whole screen.\n\nWhy: the most distinctive of the five, and the furthest from anything that looks like a gadget app. Very hard to make look cheap.\nTradeoff: the least conventional — tap targets are implied by rules rather than drawn, which asks more of the user. A serif in a hardware app is a taste call, so say early if it is not yours."
+    },
+    {
+      "id": "note-c",
+      "x": 0,
+      "y": 2130,
+      "w": 390,
+      "text": "C · NATIVE — look like the phone, not like an app\n\nStock iOS: large title, inset grouped cards, a system slider for the target, a segmented control for presets, a checkmark list for modes. System colors, system type, system metrics. The accent only appears on controls.\n\nWhy: professional by disappearing. Fastest to build, free accessibility, Dynamic Type and light/dark, and it will still look right after the next iOS redesign.\nTradeoff: no character at all — nothing here says PAX, or says heat. And the temperature stops being the screen; it becomes a row in a card."
+    },
+    {
+      "id": "note-d",
+      "x": 490,
+      "y": 2130,
+      "w": 390,
+      "text": "D · THERMAL — the oven as a column of heat\n\nStays dark, but warm graphite rather than black, and drops the ring entirely. The oven is a vertical vessel filled from cold (30 °C) to now, so a glance tells you how far through the warm-up you are — something the current arc cannot show, since it only starts at 180. Ember gradient in the column, nowhere else. Flat keys, 3 pt corners, the live mode lit along one edge.\n\nWhy: the only direction where the main graphic carries information the number doesn't. Keeps the dark screen you already have.\nTradeoff: closest to today, so it is the smallest change of the five — if the goal is \"not that\", this may not go far enough. Condensed type needs care at small sizes."
+    },
+    {
+      "id": "note-e",
+      "x": 980,
+      "y": 2130,
+      "w": 390,
+      "text": "E · INSTRUMENT — a printed gauge, not a glowing one\n\nKeeps the circle, throws away the neon: an ivory face with every degree printed, a brushed steel bezel, a slender red needle for the oven and a red bezel index for your target — exactly how a real gauge separates \"is\" from \"set\". The digital reading sits in a window below the hub. Presets are printed chips; modes are a selector with the live position raised.\n\nWhy: keeps the dial you clearly like as the identity of the app, while looking machined rather than animated. Charging and battery have obvious homes as sub-dials.\nTradeoff: the most decorative of the five, and skeuomorphic — done badly this goes kitsch fast. Also the most work to build and animate well."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}
