@@ -12,6 +12,15 @@ set -euo pipefail
 MESSAGE=$1
 shift
 
+# This script rewrites main, so it checks for itself rather than trusting every
+# caller to be gated. A build on a feature branch still produces its IPA and
+# screenshots; it just does not push generated files onto main.
+DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
+if [ "${GITHUB_REF_TYPE:-}" != "tag" ] && [ "${GITHUB_REF_NAME:-$DEFAULT_BRANCH}" != "$DEFAULT_BRANCH" ]; then
+  echo "commit_generated.sh: on '${GITHUB_REF_NAME:-unknown}', not '$DEFAULT_BRANCH' — skipping the push to $DEFAULT_BRANCH"
+  exit 0
+fi
+
 STAGING=$(mktemp -d)
 for path in "$@"; do
   [ -e "$path" ] || continue

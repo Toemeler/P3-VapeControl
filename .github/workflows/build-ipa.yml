@@ -163,7 +163,13 @@ jobs:
           ls -lh screenshots
 
       - name: Commit screenshots
-        if: steps.check.outputs.skip != 'true'
+        # commit_generated.sh pushes to main, so only the default branch and
+        # release tags may run it. A feature branch builds and screenshots
+        # itself without rewriting main's README or screenshots.
+        if: >-
+          steps.check.outputs.skip != 'true'
+          && (github.ref_type == 'tag'
+              || github.ref_name == github.event.repository.default_branch)
         env:
           DEVICE: ${{ steps.sim.outputs.device_name }}
           RUNTIME: ${{ steps.sim.outputs.runtime_name }}
@@ -306,12 +312,23 @@ jobs:
         if: steps.appcheck.outputs.skip != 'true'
         id: tag
         run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
           if [ "${{ github.ref_type }}" = "tag" ]; then
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
             echo "title=PaxController ${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          else
+            echo "prerelease=" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_name }}" = "$DEFAULT_BRANCH" ]; then
             echo "tag=build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
             echo "title=PaxController build #${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "prerelease=" >> "$GITHUB_OUTPUT"
+          else
+            # A branch build is a preview: tagged at the branch commit and
+            # marked prerelease, so GitHub never reports it as the latest
+            # release and the SideStore feed keeps pointing at real builds.
+            echo "tag=preview-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "title=Preview #${{ github.run_number }} (${{ github.ref_name }})" >> "$GITHUB_OUTPUT"
+            echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload IPA as run artifact (non-fatal, short retention)
@@ -354,16 +371,24 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/render_notes.py notes.md
+          # --target pins the tag to the commit being built, so a branch
+          # preview never creates a tag pointing at main.
           gh release create "${{ steps.tag.outputs.tag }}" \
             PaxController.ipa \
             --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
             --title "${{ steps.tag.outputs.title }}" \
-            --notes-file notes.md
+            --notes-file notes.md \
+            ${{ steps.tag.outputs.prerelease }}
 
       - name: Refresh the archived shortcut
         # Off by default: the committed file is what users get, and iCloud is
-        # not a dependency the release build should have.
-        if: inputs.refresh_shortcut
+        # not a dependency the release build should have. Commits to main, so
+        # it is restricted to the default branch and tags like the rest.
+        if: >-
+          inputs.refresh_shortcut
+          && (github.ref_type == 'tag'
+              || github.ref_name == github.event.repository.default_branch)
         run: |
           set -euo pipefail
           python3 .github/scripts/fetch_shortcut.py \
@@ -374,7 +399,12 @@ jobs:
           .github/scripts/commit_generated.sh "Update the archived shortcut" shortcut
 
       - name: Commit source feed
-        if: steps.appcheck.outputs.skip != 'true'
+        # The feed and the build stamp describe the published release, so a
+        # branch preview must not rewrite them on main.
+        if: >-
+          steps.appcheck.outputs.skip != 'true'
+          && (github.ref_type == 'tag'
+              || github.ref_name == github.event.repository.default_branch)
         # Committed rather than deployed with actions/deploy-pages: the Actions
         # token is not allowed to create the Pages site itself. This makes the
         # feed reachable over raw.githubusercontent.com immediately, and over
@@ -395,8 +425,12 @@ jobs:
 
       - name: Refresh the notes on the existing release
         # No new release is cut when the app is unchanged, but wording changes
-        # should still reach the published one.
-        if: steps.appcheck.outputs.skip == 'true'
+        # should still reach the published one. Only from the default branch:
+        # a preview must not rewrite the notes of a published release.
+        if: >-
+          steps.appcheck.outputs.skip == 'true'
+          && (github.ref_type == 'tag'
+              || github.ref_name == github.event.repository.default_branch)
         id: facts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -405,7 +439,10 @@ jobs:
           python3 .github/scripts/release_facts.py
 
       - name: Publish the refreshed notes
-        if: steps.appcheck.outputs.skip == 'true'
+        if: >-
+          steps.appcheck.outputs.skip == 'true'
+          && (github.ref_type == 'tag'
+              || github.ref_name == github.event.repository.default_branch)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.facts.outputs.version }}
