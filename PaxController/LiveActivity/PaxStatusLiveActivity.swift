@@ -25,6 +25,7 @@ struct PaxStatusLiveActivity: Widget {
                     Text(context.state.actualTempText)
                         .font(.caption.monospacedDigit())
                         .foregroundColor(accent)
+                        .contentTransition(.numericText())
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack {
@@ -43,6 +44,7 @@ struct PaxStatusLiveActivity: Widget {
                 Text(context.state.isConnected ? context.state.batteryText : "--")
                     .font(.caption2.monospacedDigit())
                     .foregroundColor(accent)
+                    .contentTransition(.numericText())
             } minimal: {
                 Image(systemName: context.state.statusIcon)
                     .foregroundColor(accent)
@@ -91,11 +93,13 @@ private struct LockScreenCard: View {
                         .font(.caption)
                     Text(state.batteryText)
                         .font(.subheadline.monospacedDigit())
+                        .contentTransition(.numericText())
                 }
                 if state.isConnected {
                     Text("\(state.actualTempText) → \(state.targetTempText)")
                         .font(.caption.monospacedDigit())
                         .foregroundColor(.secondary)
+                        .contentTransition(.numericText())
                 }
             }
         }

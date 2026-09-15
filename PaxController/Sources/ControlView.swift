@@ -7,7 +7,18 @@ struct ControlView: View {
     @EnvironmentObject var settings: AppSettings
     @Binding var showDeviceSheet: Bool
 
+    @State private var searchBreath = false
+
     private var unit: TemperatureUnit { settings.temperatureUnit }
+
+    private var isSearching: Bool {
+        switch viewModel.connectionState {
+        case .scanning, .waitingForDevice, .connecting, .discoveringServices, .awaitingSerial:
+            return true
+        default:
+            return false
+        }
+    }
 
     private var canSendCommands: Bool {
         viewModel.connectionState.isConnected && viewModel.paxServiceConfirmed
@@ -26,10 +37,13 @@ struct ControlView: View {
             topBar
             if viewModel.connectionState.isConnected {
                 connected
+                    .transition(.opacity)
             } else {
                 disconnected
+                    .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.4), value: viewModel.connectionState.isConnected)
         .background(DS.Palette.canvas)
     }
 
@@ -43,6 +57,14 @@ struct ControlView: View {
                 Circle()
                     .fill(connectionColor)
                     .frame(width: DS.Metric.statusDot, height: DS.Metric.statusDot)
+                    // Breathing while it looks, steady once it has found it.
+                    .opacity(isSearching && searchBreath ? 0.35 : 1)
+                    .animation(isSearching
+                               ? .easeInOut(duration: 1.1).repeatForever(autoreverses: true)
+                               : .easeOut(duration: 0.25),
+                               value: searchBreath)
+                    .onAppear { searchBreath = isSearching }
+                    .onChange(of: isSearching) { searchBreath = $0 }
                 Text(viewModel.connectionState.isConnected
                      ? (viewModel.displayName ?? "PAX")
                      : viewModel.statusHeadline)
@@ -55,7 +77,10 @@ struct ControlView: View {
 
             if let battery = viewModel.batteryLevel {
                 HStack(spacing: 5) {
-                    Text("\(battery)%").monospacedDigit()
+                    Text("\(battery)%")
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .animation(.easeOut(duration: 0.4), value: battery)
                     if viewModel.isCharging == true {
                         Image(systemName: "bolt.fill").font(.system(size: 11))
                     }
@@ -168,6 +193,10 @@ struct ControlView: View {
                     .font(.system(size: 66, weight: .semibold))
                     .monospacedDigit()
                     .tracking(-2.3)
+                    // Readings arrive twice a second; snapping between them
+                    // reads as a counter, rolling reads as an instrument.
+                    .contentTransition(.numericText())
+                    .animation(.easeOut(duration: 0.35), value: viewModel.actualTempC)
                 Text(unit.symbol)
                     .font(.system(size: 21, weight: .semibold))
                     .foregroundStyle(.secondary)
@@ -203,6 +232,8 @@ struct ControlView: View {
                     .font(.system(size: 25, weight: .semibold))
                     .monospacedDigit()
                     .tracking(-0.5)
+                    .contentTransition(.numericText())
+                    .animation(.easeOut(duration: 0.25), value: viewModel.customTargetTempC)
                 Text("Target")
                     .font(.system(size: 12))
                     .tracking(0.2)
@@ -227,7 +258,7 @@ struct ControlView: View {
                 .frame(width: DS.Metric.stepButton, height: DS.Metric.stepButton)
                 .background(DS.Palette.fill, in: Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle(scale: 0.9))
         .foregroundStyle(Color.primary)
         .disabled(!controlsActive)
         .opacity(controlsActive ? 1 : 0.32)
@@ -252,8 +283,9 @@ struct ControlView: View {
                                     in: Capsule())
                         .foregroundStyle(isActive ? DS.Palette.accent : Color.primary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle())
                 .disabled(!controlsActive)
+                .animation(.spring(response: 0.32, dampingFraction: 0.72), value: isActive)
             }
         }
         .padding(.horizontal, DS.Metric.gutter)
@@ -294,8 +326,9 @@ struct ControlView: View {
                                                          style: .continuous))
                         .foregroundStyle(isActive ? Color.white : Color.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableButtonStyle(scale: 0.95))
                     .disabled(!controlsActive)
+                    .animation(.spring(response: 0.34, dampingFraction: 0.7), value: isActive)
                 }
             }
             .padding(.horizontal, DS.Metric.gutter)

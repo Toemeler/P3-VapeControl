@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The thermostat dial: the filled arc is the oven's current temperature, the
 /// white marker is where the target sits, and the four dots are the PAX
@@ -58,6 +59,20 @@ struct TemperatureDial<Center: View>: View {
     /// charges. Started on appear so the rotation is already running whenever
     /// the ring becomes visible.
     @State private var chargeSpin = false
+    /// 0 while the rings are absent, 1 once they have drawn themselves on.
+    /// Every trim is multiplied by it, so one value stages the whole arrival.
+    @State private var reveal: Double = 0
+    /// Runs once when the oven reaches temperature.
+    @State private var readySweep = false
+    /// Drives the slow pulse of a nearly flat battery.
+    @State private var lowBreath = false
+    /// The last whole degree the finger crossed, so a detent fires per degree
+    /// rather than per touch event.
+    @State private var lastDetent: Int?
+
+    private let detent = UIImpactFeedbackGenerator(style: .light)
+    private let landed = UIImpactFeedbackGenerator(style: .medium)
+    private let arrived = UINotificationFeedbackGenerator()
 
     private var side: CGFloat { DS.Dial.canvas }
     private var mid: CGFloat { side / 2 }
@@ -71,11 +86,29 @@ struct TemperatureDial<Center: View>: View {
             batteryRing
             warmUp
             progress
+            readyHighlight
             presetTicks
             targetMarker
             center
         }
-        .onAppear { chargeSpin = true }
+        .onAppear {
+            chargeSpin = true
+            detent.prepare()
+            landed.prepare()
+            // The rings draw themselves on rather than appearing complete. It
+            // happens every time the device is picked up, which makes it the
+            // moment in this app most worth spending on.
+            withAnimation(.easeOut(duration: 0.75)) { reveal = 1 }
+            if isLowBattery { lowBreath = true }
+        }
+        .onChange(of: isLowBattery) { low in lowBreath = low }
+        .onChange(of: heatingState) { state in
+            guard state == .ready else { return }
+            // Reaching temperature is what the device is for. One sweep, once.
+            arrived.notificationOccurred(.success)
+            readySweep = false
+            withAnimation(.easeInOut(duration: 1.05)) { readySweep = true }
+        }
         .frame(width: side, height: side)
         .contentShape(Circle())
         .gesture(scrub)
@@ -94,7 +127,7 @@ struct TemperatureDial<Center: View>: View {
 
     private var track: some View {
         Circle()
-            .trim(from: 0, to: CGFloat(sweepFraction))
+            .trim(from: 0, to: CGFloat(sweepFraction) * reveal)
             .stroke(DS.Palette.track,
                     style: StrokeStyle(lineWidth: DS.Dial.stroke, lineCap: .round))
             .rotationEffect(.degrees(DS.Dial.startAngle))
@@ -129,11 +162,11 @@ struct TemperatureDial<Center: View>: View {
             let filled = CGFloat(min(100, max(0, level))) / 100
             ZStack {
                 Circle()
-                    .trim(from: 0, to: CGFloat(sweepFraction))
+                    .trim(from: 0, to: CGFloat(sweepFraction) * reveal)
                     .stroke(DS.Palette.track.opacity(0.5),
                             style: StrokeStyle(lineWidth: batteryStroke, lineCap: .round))
                 Circle()
-                    .trim(from: 0, to: CGFloat(sweepFraction) * filled)
+                    .trim(from: 0, to: CGFloat(sweepFraction) * filled * reveal)
                     .stroke(batteryColour,
                             style: StrokeStyle(lineWidth: batteryStroke, lineCap: .round))
                 if isCharging {
@@ -158,9 +191,31 @@ struct TemperatureDial<Center: View>: View {
             }
             .rotationEffect(.degrees(DS.Dial.startAngle))
             .frame(width: diameter, height: diameter)
+            .animation(.easeOut(duration: 0.75).delay(0.24), value: reveal)
             .animation(.easeInOut(duration: 0.9), value: batteryStroke)
             .animation(.easeInOut(duration: 0.9), value: filled)
+            .opacity(lowBreath ? 0.62 : 1)
+            .animation(lowBreath
+                       ? .easeInOut(duration: 2.4).repeatForever(autoreverses: true)
+                       : .easeOut(duration: 0.3),
+                       value: lowBreath)
         }
+    }
+
+    private var isLowBattery: Bool {
+        guard let level = batteryLevel, !isCharging else { return false }
+        return level <= 15
+    }
+
+    /// One highlight travelling the whole arc, the moment the oven arrives.
+    private var readyHighlight: some View {
+        Circle()
+            .trim(from: 0, to: CGFloat(sweepFraction) * 0.07)
+            .stroke(Color.white.opacity(readySweep ? 0 : 0.55),
+                    style: StrokeStyle(lineWidth: DS.Dial.stroke, lineCap: .round))
+            .rotationEffect(.degrees(DS.Dial.startAngle + (readySweep ? DS.Dial.sweep : 0)))
+            .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
+            .allowsHitTesting(false)
     }
 
     // MARK: - Oven
@@ -172,7 +227,7 @@ struct TemperatureDial<Center: View>: View {
 
     private var progress: some View {
         Circle()
-            .trim(from: 0, to: CGFloat(sweepFraction * DS.Range.fraction(of: current ?? DS.Range.min)))
+            .trim(from: 0, to: CGFloat(sweepFraction * DS.Range.fraction(of: current ?? DS.Range.min)) * reveal)
             .stroke(accent,
                     style: StrokeStyle(lineWidth: progressStroke, lineCap: .round))
             .rotationEffect(.degrees(DS.Dial.startAngle))
@@ -186,6 +241,11 @@ struct TemperatureDial<Center: View>: View {
             .animation(heatingState == .boosting
                        ? .easeOut(duration: 3.2) : .easeInOut(duration: 0.7),
                        value: progressStroke)
+            .animation(.easeOut(duration: 0.75), value: reveal)
+            // Brightens under the finger, so the ring reads as grabbed rather
+            // than as a picture being pointed at.
+            .shadow(color: accent.opacity(isScrubbing ? 0.55 : 0), radius: 10)
+            .animation(.easeOut(duration: 0.2), value: isScrubbing)
     }
 
     /// The climb from cold to the bottom of the scale, on a ring of its own
@@ -196,11 +256,12 @@ struct TemperatureDial<Center: View>: View {
         let filled = DS.WarmUp.fraction(of: celsius)
         let diameter = (DS.Dial.radius - DS.Dial.warmUpInset) * 2
         return Circle()
-            .trim(from: 0, to: CGFloat(sweepFraction * filled))
+            .trim(from: 0, to: CGFloat(sweepFraction * filled) * reveal)
             .stroke(accent.opacity(heatingState == .heating ? 0.75 : 0.4),
                     style: StrokeStyle(lineWidth: DS.Dial.warmUpStroke, lineCap: .round))
             .rotationEffect(.degrees(DS.Dial.startAngle))
             .frame(width: diameter, height: diameter)
+            .animation(.easeOut(duration: 0.75).delay(0.12), value: reveal)
             // Fades out as the main arc takes over, rather than vanishing the
             // moment the oven crosses 180.
             .opacity(celsius >= DS.Range.min ? 0 : 1)
@@ -226,6 +287,8 @@ struct TemperatureDial<Center: View>: View {
                 .fill(Color.secondary.opacity(0.55))
                 .frame(width: DS.Dial.tickDot * 2, height: DS.Dial.tickDot * 2)
                 .position(x: anchor.x, y: anchor.y)
+                .opacity(reveal)
+                .animation(.easeOut(duration: 0.4).delay(0.3), value: reveal)
         }
     }
 
@@ -245,8 +308,15 @@ struct TemperatureDial<Center: View>: View {
         // in a straight line, which swings the marker across the dial's middle.
         .offset(x: DS.Dial.radius)
         .rotationEffect(.degrees(degrees(for: target)))
-        // A drag should track the finger exactly; easing it lags behind.
-        .animation(isScrubbing ? nil : .easeOut(duration: 0.18), value: target)
+        .scaleEffect(isScrubbing ? 1.3 : 1)
+        // A drag should track the finger exactly; easing it lags behind. When
+        // the finger is gone the marker springs, because the movement then
+        // stands for something physical arriving rather than data updating.
+        .animation(isScrubbing ? nil : .spring(response: 0.34, dampingFraction: 0.66),
+                   value: target)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isScrubbing)
+        .opacity(reveal)
+        .animation(.easeOut(duration: 0.5).delay(0.25), value: reveal)
     }
 
     // MARK: - Geometry
@@ -270,11 +340,22 @@ struct TemperatureDial<Center: View>: View {
             .onChanged { value in
                 isScrubbing = true
                 guard let celsius = celsius(at: value.location) else { return }
+                // A degree is a detent. Without this the ring is a silent
+                // slider; with it the dial has a mechanism under the thumb.
+                let degree = Int(celsius)
+                if degree != lastDetent {
+                    lastDetent = degree
+                    detent.impactOccurred(intensity: 0.7)
+                    detent.prepare()
+                }
                 onScrub(celsius)
             }
             .onEnded { value in
                 isScrubbing = false
+                lastDetent = nil
                 guard let celsius = celsius(at: value.location) else { return }
+                landed.impactOccurred()
+                landed.prepare()
                 onCommit(celsius)
             }
     }

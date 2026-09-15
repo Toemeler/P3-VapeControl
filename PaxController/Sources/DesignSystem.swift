@@ -114,6 +114,20 @@ enum DS {
     }
 }
 
+/// Gives a control the small give of something being pressed. SwiftUI's plain
+/// style reports nothing at all, which leaves every chip and tile in this app
+/// feeling like a printed label rather than a button.
+struct PressableButtonStyle: ButtonStyle {
+    var scale: CGFloat = 0.94
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .animation(.spring(response: 0.26, dampingFraction: 0.62),
+                       value: configuration.isPressed)
+    }
+}
+
 // MARK: - Shared formatting
 
 enum TemperatureUnit: String {
