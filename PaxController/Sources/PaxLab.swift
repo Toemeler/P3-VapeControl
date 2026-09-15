@@ -50,6 +50,12 @@ final class PaxLab: ObservableObject {
     @Published private(set) var snapshots: [Snapshot] = []
     @Published private(set) var writes: [WriteRecord] = []
     @Published private(set) var sweepInProgress = false
+    /// Sweeps completed since launch, and the count the last snapshot was taken
+    /// from. A snapshot of numbers the device gave us two states ago looks
+    /// exactly like a snapshot of this one, so capturing twice off a single
+    /// sweep is not allowed to happen quietly.
+    @Published private(set) var sweepsCompleted = 0
+    @Published private(set) var lastCapturedSweep = -1
 
     private let defaults = UserDefaults.standard
     private let writesKey = "labWriteLog"
@@ -110,7 +116,15 @@ final class PaxLab: ObservableObject {
 
     var answeredAttributes: [UInt8] { samples.keys.sorted() }
 
-    func setSweeping(_ running: Bool) { sweepInProgress = running }
+    func setSweeping(_ running: Bool) {
+        if sweepInProgress && !running { sweepsCompleted += 1 }
+        sweepInProgress = running
+    }
+
+    /// Whether what is in hand came from a sweep that has not been captured yet.
+    var hasFreshSweep: Bool {
+        sweepsCompleted > 0 && sweepsCompleted != lastCapturedSweep
+    }
 
     func forgetSamples() { samples.removeAll() }
 
@@ -130,6 +144,7 @@ final class PaxLab: ObservableObject {
         snapshots.append(Snapshot(label: label.isEmpty ? "unlabelled" : label,
                                   takenAt: Date(),
                                   values: values))
+        lastCapturedSweep = sweepsCompleted
         persist(snapshots, key: snapshotsKey)
     }
 
@@ -215,6 +230,11 @@ final class PaxLab: ObservableObject {
     func report(deviceSummary: String) -> String {
         var out = ["PAX lab report", "Taken \(Date())", deviceSummary, ""]
 
+        if answeredAttributes.isEmpty {
+            out.append("## No sweep has run since the app was opened")
+            out.append("The attribute list below is from the snapshots only.")
+            out.append("")
+        }
         out.append("## Attributes answered (\(answeredAttributes.count))")
         for attribute in answeredAttributes {
             let name = PaxMessageType(rawValue: attribute).map { "\($0)" } ?? "unnamed"
@@ -229,7 +249,8 @@ final class PaxLab: ObservableObject {
                               attribute, name, payload.count, Self.hex(payload), notes))
         }
 
-        let silent = (UInt8(1)...UInt8(63)).filter { samples[$0] == nil }
+        let silent = answeredAttributes.isEmpty ? []
+            : (UInt8(1)...UInt8(63)).filter { samples[$0] == nil }
         if !silent.isEmpty {
             out.append("")
             out.append("## Never answered")

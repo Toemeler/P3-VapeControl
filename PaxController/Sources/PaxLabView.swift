@@ -65,12 +65,10 @@ struct PaxLabView: View {
             }
             .disabled(!connected || lab.sweepInProgress)
 
-            Button("Forget what was read", role: .destructive) { lab.forgetSamples() }
-                .disabled(lab.samples.isEmpty)
         } header: {
             Text("Sweep")
         } footer: {
-            Text("Asks for all 63 addressable attributes, three times over, in batches. Only the ones this firmware implements answer — silence is an answer too. Three reads separate the payload from the uninitialised bytes behind it.")
+            Text("Asks for all 63 addressable attributes, three times over, in batches, starting from nothing each time. Only the ones this firmware implements answer — silence is an answer too — and three reads separate each payload from the uninitialised bytes behind it.")
         }
     }
 
@@ -120,6 +118,12 @@ struct PaxLabView: View {
 
     private var snapshotSection: some View {
         Section {
+            if !lab.hasFreshSweep {
+                Label("Sweep again before capturing — otherwise this records the sweep you already captured.",
+                      systemImage: "arrow.clockwise")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
             HStack {
                 TextField("heating, charging, lid off…", text: $snapshotLabel)
                     .autocorrectionDisabled()
@@ -127,7 +131,10 @@ struct PaxLabView: View {
                     lab.takeSnapshot(label: snapshotLabel)
                     snapshotLabel = ""
                 }
-                .disabled(lab.answeredAttributes.isEmpty)
+                // A second capture off one sweep records the same numbers under
+                // a different name, which is indistinguishable from a state
+                // that did not change.
+                .disabled(!lab.hasFreshSweep)
             }
 
             ForEach(lab.snapshots) { snapshot in
@@ -166,7 +173,7 @@ struct PaxLabView: View {
         } header: {
             Text("Snapshots")
         } footer: {
-            Text("Sweep, then capture with the PAX in one state; change the state and do it again. The attributes that differ are the ones that mean something about that state — this is how HeatingParams gives up which byte is which.")
+            Text("One sweep, one capture, in that order, once per state: read every attribute, label it, capture, then change the state and sweep again. The attributes that differ between two captures are the ones that mean something about that state.")
         }
     }
 
