@@ -185,13 +185,14 @@ struct DeviceSheet: View {
                 : "Connect to the PAX to change this."
         }
         let head = "With lip detection off the oven holds the set point whether or not it senses a draw — no boost, no cooling when the lips leave it, and no power-off a few minutes later. "
-        let tail = "Nothing is written unless you tap, the setting does not survive a mode change or a reconnect, and the PAX never reports this attribute back — so the switch shows what was last sent, not a reading."
-        guard settings.heaterOptionBit != nil else {
+        guard let bit = settings.heaterOptionBit else {
             return head
                 + "This PAX stops its oven when sent the bits the official app calls the lip sensor, so one of them is its heater. Run \u{201C}Find the heater bit\u{201D} below before using this switch. "
-                + tail
+                + "Until then nothing is written unless you tap, and the setting does not survive a mode change or a reconnect."
         }
-        return head + tail
+        return head
+            + "Bit \(bit) is this PAX\u{2019}s heater and is left alone, so the switch should no longer stop the oven. "
+            + "The setting is re-sent after a mode change and on every connection, since the device does not keep it. The PAX never reports this attribute back, so the switch shows what was last sent, not a reading."
     }
 
     private var confirmLipDetectionMessage: String {

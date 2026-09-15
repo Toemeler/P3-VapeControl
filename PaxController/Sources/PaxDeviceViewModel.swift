@@ -1224,12 +1224,17 @@ final class PaxDeviceViewModel: ObservableObject {
             // back over the change that was just made.
             self.deviceHeatingParams = nil
         }
-        // A mode change would be the moment to re-assert the lip setting, since
-        // a Dynamic Mode is itself a block of heating parameters. That is not
-        // done: a 0x19 write to this firmware has been seen to stop the oven,
-        // so until the layout it actually wants is known, nothing writes that
-        // attribute except a deliberate tap. The switch says it does not
-        // survive a mode change rather than quietly trying to make it.
+        // A Dynamic Mode is itself a block of heating parameters, so a mode
+        // change is the moment the lip setting would be lost. Re-asserting it
+        // is only safe once the probe has found this device's heater bit —
+        // before that, an automatic write is how the oven got switched off with
+        // nothing on screen to say why. So this stays a deliberate tap until
+        // there is a measurement, and becomes automatic after.
+        guard settings.heaterOptionBit != nil, !settings.lipDetectionEnabled else { return }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            self?.applyLipDetection(reason: "after a mode change")
+        }
     }
 
     // MARK: - Lip detection
@@ -1279,11 +1284,12 @@ final class PaxDeviceViewModel: ObservableObject {
         }
         // The same word carries the bit that decides whether the oven heats at
         // all. A write that cleared it would look like a dead device — which is
-        // exactly what happened before the probe existed.
-        params.options.insert(.heater)
-        if let bit = settings.heaterOptionBit {
-            params.options.insert(PaxHeatingParams.Options(rawValue: 1 << UInt16(bit)))
-        }
+        // exactly what happened before the probe existed. The measured bit wins
+        // over the official app's naming, because on this hardware the naming
+        // is what was wrong.
+        params.options.insert(settings.heaterOptionBit.map {
+            PaxHeatingParams.Options(rawValue: 1 << UInt16($0))
+        } ?? .heater)
         heatingParamsStoppedOven = false
         writeHeatingParams(params, note: "lip detection \(enabled ? "on" : "off") \(reason), from the \(mode.label) preset")
     }
@@ -1652,6 +1658,19 @@ final class PaxDeviceViewModel: ObservableObject {
             log("LED attribute(s) available: \(colorSupported.map { "\($0)" }.joined(separator: ", "))", level: .info)
         }
         pushSavedColorIfReady()
+        // Same gate as the mode change: the parameters are the device's to
+        // keep, and it does not keep this one, so a switch left off has to be
+        // re-sent. Only once the heater bit has been measured on this device —
+        // an automatic write without that is what stopped the oven.
+        if settings.heaterOptionBit != nil, !settings.lipDetectionEnabled,
+           supported.contains(PaxMessageType.heatingParams.rawValue) {
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                guard let self, self.connectionState.isConnected,
+                      !self.settings.lipDetectionEnabled else { return }
+                self.applyLipDetection(reason: "on connect")
+            }
+        }
     }
 
     /// The official app writes HapticMode as a single amplitude byte, but this

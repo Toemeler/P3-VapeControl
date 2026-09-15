@@ -117,7 +117,7 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 | `0x15` | `Brightness` | Both | **1 byte, 0…128** (not 0–100). PAX 3 reported `0x80` = full |
 | `0x17` | `HapticMode` | Both | Byte 0 is amplitude, 0…128. PAX 3 reports **6 bytes** (`2F 04 02 04 01 00`); the rest are undecoded |
 | `0x18` | `SupportedAttributes` | Device → Host | 8 bytes LE `uint64` bitfield; bit N set = attribute N supported |
-| `0x19` | `HeatingParams` | Both | **22 bytes: 11 LE `uint16` words** in the official app — but a PAX 3 stops its oven when sent that layout, so its firmware wants something else (see below) |
+| `0x19` | `HeatingParams` | Both | **22 bytes: 11 LE `uint16` words**, options last. Field order confirmed on PAX 3; the option *bit names* are not PAX 3's — bit 0, not bit 2, is its heater enable (see below) |
 | `0x1B` | `UiMode` | Both | 1 byte; PAX 3 reports `0x01` |
 | `0x1C` | `ShellColor` | Device → Host | 1 byte: the casing's own colour. `0`=Onyx Black, `1`=Silver, `2`=Rose Gold, `3`=Sage Teal, `4`=Burgundy. Hardware identity, **not** the LED colour. A PAX 3 on fw 2.0.4 answered `0xE5`, outside that range — treat an out-of-range value as unpopulated |
 | `0x1E` | `LowSoCMode` | Both | 1 byte; PAX 3 reports `0x00` |
@@ -350,6 +350,31 @@ ever arrives and prefers it as the template.
 > as *the official app's* layout, read out of its own bundle; it is **not**
 > confirmed as PAX 3's.
 >
+> **Measured on a PAX 3, firmware 2.0.4: bit 0 is the heater enable.** The
+> probe cleared each of the six bits the Standard preset sets, one at a time,
+> five seconds apart, with the stock block written back between them. Exactly
+> one stopped the oven:
+>
+> | bit | official app's name | this PAX |
+> |-----|--------------------|----------|
+> | 0 | `boost` | **stops the oven** — this firmware's heater enable |
+> | 1 | `customTemperature` | kept running |
+> | 2 | `heater` | kept running — *not* the heater here |
+> | 3 | `noLipCooling` | kept running |
+> | 4 | `noLipShutdown` | kept running |
+> | 7 | `standby` | kept running |
+>
+> So the official app's bit names do not carry over to PAX 3, and bit 2 — the
+> one it calls `heater` — is not it. That is the whole reason the lip switch
+> stopped the oven: `lipDetection` cleared bits 0, 3 and 4 together, and bit 0
+> was the heater. Bits 5 and 6 are clear in every preset and were not tried;
+> setting them would change how the oven heats rather than ask it a question.
+>
+> What bits 3 and 4 actually *are* on this firmware is still unmeasured. The
+> oven answers "am I heating", which is what identified bit 0; identifying the
+> lip bits needs a different question — take a draw and see whether the device
+> reports Inhaling (0x02) and then Cooling (0x03).
+
 > **The offset is right; the bit meanings are not.** The oven goes off and
 > comes back on with the switch, reproducibly. The two writes are byte-identical
 > except the options word at offset 21, so the device is reading that word,
