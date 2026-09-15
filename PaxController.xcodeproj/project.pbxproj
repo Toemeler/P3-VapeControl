@@ -14,6 +14,13 @@
 		AA000007 /* DebugConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000007 /* DebugConsoleView.swift */; };
 		AA000010 /* PaxDeviceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000010 /* PaxDeviceViewModel.swift */; };
 		AA000011 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000011 /* DesignSystem.swift */; };
+		AA0000A0 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000A0 /* AppTheme.swift */; };
+		AA0000A1 /* ThemeCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000A1 /* ThemeCatalog.swift */; };
+		AA0000A2 /* ThemeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000A2 /* ThemeStore.swift */; };
+		AA0000A3 /* ThemeComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000A3 /* ThemeComponents.swift */; };
+		AA0000A4 /* ThemeHeroes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000A4 /* ThemeHeroes.swift */; };
+		AA0000A5 /* ThemeShells.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000A5 /* ThemeShells.swift */; };
+		AA0000A6 /* ThemePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000A6 /* ThemePickerView.swift */; };
 		AA000012 /* TemperatureDial.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000012 /* TemperatureDial.swift */; };
 		AA000013 /* ControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000013 /* ControlView.swift */; };
 		AA000014 /* DeviceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000014 /* DeviceSheet.swift */; };
@@ -69,6 +76,13 @@
 		AB000009 /* PaxController-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "PaxController-Bridging-Header.h"; sourceTree = "<group>"; };
 		AB000010 /* PaxDeviceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxDeviceViewModel.swift; sourceTree = "<group>"; };
 		AB000011 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		AB0000A0 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppTheme.swift; path = Theme/AppTheme.swift; sourceTree = "<group>"; };
+		AB0000A1 /* ThemeCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ThemeCatalog.swift; path = Theme/ThemeCatalog.swift; sourceTree = "<group>"; };
+		AB0000A2 /* ThemeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ThemeStore.swift; path = Theme/ThemeStore.swift; sourceTree = "<group>"; };
+		AB0000A3 /* ThemeComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ThemeComponents.swift; path = Theme/ThemeComponents.swift; sourceTree = "<group>"; };
+		AB0000A4 /* ThemeHeroes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ThemeHeroes.swift; path = Theme/ThemeHeroes.swift; sourceTree = "<group>"; };
+		AB0000A5 /* ThemeShells.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ThemeShells.swift; path = Theme/ThemeShells.swift; sourceTree = "<group>"; };
+		AB0000A6 /* ThemePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ThemePickerView.swift; path = Theme/ThemePickerView.swift; sourceTree = "<group>"; };
 		AB000012 /* TemperatureDial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemperatureDial.swift; sourceTree = "<group>"; };
 		AB000013 /* ControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlView.swift; sourceTree = "<group>"; };
 		AB000014 /* DeviceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSheet.swift; sourceTree = "<group>"; };
@@ -151,6 +165,13 @@
 				AB000047 /* ReadyNotifier.swift */,
 				AB000048 /* PaxLab.swift */,
 				AB000049 /* PaxLabView.swift */,
+				AB0000A0 /* AppTheme.swift */,
+				AB0000A1 /* ThemeCatalog.swift */,
+				AB0000A2 /* ThemeStore.swift */,
+				AB0000A3 /* ThemeComponents.swift */,
+				AB0000A4 /* ThemeHeroes.swift */,
+				AB0000A5 /* ThemeShells.swift */,
+				AB0000A6 /* ThemePickerView.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -291,6 +312,13 @@
 				AA000047 /* ReadyNotifier.swift in Sources */,
 				AA000048 /* PaxLab.swift in Sources */,
 				AA000049 /* PaxLabView.swift in Sources */,
+				AA0000A0 /* AppTheme.swift in Sources */,
+				AA0000A1 /* ThemeCatalog.swift in Sources */,
+				AA0000A2 /* ThemeStore.swift in Sources */,
+				AA0000A3 /* ThemeComponents.swift in Sources */,
+				AA0000A4 /* ThemeHeroes.swift in Sources */,
+				AA0000A5 /* ThemeShells.swift in Sources */,
+				AA0000A6 /* ThemePickerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
