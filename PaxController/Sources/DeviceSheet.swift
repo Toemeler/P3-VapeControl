@@ -209,6 +209,7 @@ struct DeviceSheet: View {
                 row("Remembered", value: name)
                 Button("Forget this device", role: .destructive) {
                     viewModel.forgetRememberedDevice()
+                    dismiss()
                 }
             }
         } header: {

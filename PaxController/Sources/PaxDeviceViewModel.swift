@@ -450,15 +450,29 @@ final class PaxDeviceViewModel: ObservableObject {
         connect(to: device)
     }
 
+    /// Forgetting has to stop the automation too. Clearing the stored device on
+    /// its own achieves nothing: the scan is always running, and with nothing
+    /// remembered the first PAX it finds is adopted — which is the same one,
+    /// a second later. The app stays off the air until the user taps Connect,
+    /// and whatever it connects to then becomes the new remembered device.
     func forgetRememberedDevice() {
         UserDefaults.standard.removeObject(forKey: Self.deviceIDKey)
         UserDefaults.standard.removeObject(forKey: Self.deviceNameKey)
         rememberedDeviceName = nil
+        automationPaused = true
+        userInitiatedDisconnect = true
+        stopScan()
+        scannedDevices.removeAll()
+        pendingConnectWatchdog?.cancel()
+        pendingConnectWatchdog = nil
+        connectWatchdog?.cancel()
+        connectWatchdog = nil
+        // Disconnects a live session and withdraws a pending request alike.
+        let wasConnected = connectionState.isConnected
         bluetooth.cancelPendingConnect()
-        if !connectionState.isConnected { connectionState = .idle }
+        connectionState = wasConnected ? .disconnecting : .idle
         LiveActivityController.shared.end()
-        log("Forgot the remembered device — the next PAX found is the new one", level: .info)
-        startDiscoveryIfDisconnected()
+        log("Forgot the device — nothing will connect until you tap Connect", level: .info)
     }
 
     private func rememberCurrentDevice() {
