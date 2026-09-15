@@ -6,7 +6,7 @@ YAML block scalar inherits the block's indentation and fails to parse.
 
 Usage:
   simctl_helper.py state <udid>   -> Booted / Shutdown / Unknown
-  simctl_helper.py ready <udid>   -> ready / waiting
+  simctl_helper.py ready <udid>   -> "ready: ..." / "waiting: ..."
 """
 import json
 import subprocess
@@ -24,8 +24,8 @@ def find_state(udid):
     return "Unknown"
 
 
-def is_ready(udid, timeout=10):
-    """Whether the device will actually accept an app launch.
+def probe_ready(udid, timeout=10):
+    """Whether the device will actually accept an app launch, and why.
 
     `simctl list` reports Booted well before SpringBoard is running, and
     `simctl launch` aimed into that window blocks rather than failing - which
@@ -33,9 +33,10 @@ def is_ready(udid, timeout=10):
     budget and takes the job down with it. SpringBoard being up is the honest
     signal that the device can host an app.
 
-    Anything short of a clear yes counts as waiting: a spawn that is refused
-    or times out means the device is still busy starting, which is exactly the
-    state the caller is waiting out.
+    Returns (ready, detail). The detail is carried into the workflow's warning
+    so a probe that never succeeds says why, instead of looking like a device
+    that was merely slow - which is exactly how a case-sensitive match on the
+    service name went unnoticed through a whole green run.
     """
     try:
         probe = subprocess.run(
@@ -44,14 +45,24 @@ def is_ready(udid, timeout=10):
             text=True,
             timeout=timeout,
         )
-    except (subprocess.TimeoutExpired, OSError):
-        return False
-    return probe.returncode == 0 and "com.apple.springboard" in probe.stdout
+    except subprocess.TimeoutExpired:
+        return False, "probe timed out"
+    except OSError as exc:
+        return False, f"probe could not run: {exc}"
+
+    if probe.returncode != 0:
+        detail = probe.stderr.strip().splitlines()
+        return False, f"launchctl exited {probe.returncode}: {detail[0] if detail else 'no stderr'}"
+    # Case-insensitive: launchd lists the job as com.apple.SpringBoard.
+    if "springboard" in probe.stdout.lower():
+        return True, "springboard running"
+    return False, "springboard not listed yet"
 
 
 if __name__ == "__main__":
     command, udid = sys.argv[1], sys.argv[2]
     if command == "ready":
-        print("ready" if is_ready(udid) else "waiting")
+        ready, detail = probe_ready(udid)
+        print(f"{'ready' if ready else 'waiting'}: {detail}")
     else:
         print(find_state(udid))

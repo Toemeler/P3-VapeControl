@@ -163,17 +163,20 @@ jobs:
           # Best effort on purpose. If the probe never says ready we carry on
           # and let the launch speak for itself - a false negative here should
           # not fail a build that would otherwise have worked.
-          READY=waiting
+          # The probe reports why it is still waiting, and that reason rides
+          # into the warning below: a probe that can never succeed otherwise
+          # looks identical to a device that is merely slow, and just spends
+          # its whole budget as an accidental sleep.
+          READY="waiting: not probed"
           for _ in $(seq 1 24); do
             READY=$(python3 .github/scripts/simctl_helper.py ready "$UDID")
-            [ "$READY" = "ready" ] && break
+            case "$READY" in ready*) break ;; esac
             sleep 5
           done
-          if [ "$READY" = "ready" ]; then
-            echo "SpringBoard is up; the device can host an app."
-          else
-            echo "::warning::simulator booted but SpringBoard never reported in; launching anyway"
-          fi
+          case "$READY" in
+            ready*) echo "Device can host an app ($READY)." ;;
+            *) echo "::warning::simulator booted but never became ready ($READY); launching anyway" ;;
+          esac
 
           # Clear any status bar override left on this device by an earlier
           # run: simulators persist between runs, and a stale override paints a
