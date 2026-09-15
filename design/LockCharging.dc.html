@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #FF6A00; } a:hover { color: #E05D00; }
+    .lbl { font-size: 12px; font-weight: 700; letter-spacing: 1.2px; color: rgba(235,235,245,0.45); text-transform: uppercase; }
+    .why { font-size: 12px; color: rgba(235,235,245,0.55); line-height: 17px; text-wrap: pretty; }
+    .card { width: 360px; border-radius: 22px; background: rgba(42,42,46,0.82); backdrop-filter: blur(20px); }
+    @keyframes boltL { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    @keyframes shiftL { 0% { transform: translateX(-38px); } 100% { transform: translateX(300px); } }
+  </style>
+</helmet>
+
+<div style="width: 440px; background: linear-gradient(170deg, #05240F 0%, #0B0B0D 55%, #07070A 100%); color: #FFFFFF; padding: 28px 40px 34px; display: flex; flex-direction: column; gap: 30px;">
+
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div class="lbl">C-A · Battery first</div>
+    <div class="card" style="padding: 14px 16px 13px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 20px; background: rgba(48,209,88,0.18); display: flex; align-items: center; justify-content: center;">
+          <svg width="14" height="18" viewBox="0 0 11 14" fill="#30D158" style="animation: boltL 1.8s ease-in-out infinite;"><path d="M6.4 0 0 8h4l-.6 6L11 6H6.8z"/></svg>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 1px;">
+          <div style="font-size: 16px; font-weight: 600;">Paxie</div>
+          <div style="font-size: 13px; color: #30D158; font-weight: 500;">Charging</div>
+        </div>
+        <div style="flex-grow: 1;"></div>
+        <div style="display: flex; align-items: baseline; gap: 2px;">
+          <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.8px; font-variant-numeric: tabular-nums;">95</div>
+          <div style="font-size: 14px; font-weight: 600; color: rgba(235,235,245,0.6);">%</div>
+        </div>
+      </div>
+      <div style="height: 4px; border-radius: 2px; background: rgba(235,235,245,0.18); margin-top: 13px; display: flex; overflow: hidden;">
+        <div style="width: 95%; border-radius: 2px; background: #30D158;"></div>
+      </div>
+    </div>
+    <div class="why">Same skeleton as the heating card, so the eye learns one layout — only the colour and what the bar means change. No temperature at all: the oven is off.</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div class="lbl">C-B · Battery shape</div>
+    <div class="card" style="padding: 15px 18px;">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <div style="width: 52px; height: 26px; border-radius: 7px; border: 2px solid rgba(235,235,245,0.4); padding: 2.5px; display: flex;">
+            <div style="width: 92%; border-radius: 3.5px; background: #30D158;"></div>
+          </div>
+          <div style="width: 3px; height: 9px; border-radius: 0 2px 2px 0; background: rgba(235,235,245,0.4);"></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 1px;">
+          <div style="font-size: 16px; font-weight: 600;">95% · charging</div>
+          <div style="font-size: 13px; color: rgba(235,235,245,0.6);">Paxie · oven off</div>
+        </div>
+        <div style="flex-grow: 1;"></div>
+        <svg width="13" height="17" viewBox="0 0 11 14" fill="#30D158" style="animation: boltL 1.8s ease-in-out infinite;"><path d="M6.4 0 0 8h4l-.6 6L11 6H6.8z"/></svg>
+      </div>
+    </div>
+    <div class="why">A battery that looks like a battery — recognised before it is read. Breaks the shared skeleton, so the card jumps as the state changes.</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div class="lbl">C-C · Quiet line</div>
+    <div class="card" style="padding: 16px 18px 14px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg width="12" height="15" viewBox="0 0 11 14" fill="#30D158" style="animation: boltL 1.8s ease-in-out infinite;"><path d="M6.4 0 0 8h4l-.6 6L11 6H6.8z"/></svg>
+        <div style="font-size: 17px; font-weight: 600; letter-spacing: -0.2px;">Charging Paxie</div>
+        <div style="flex-grow: 1;"></div>
+        <div style="font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: rgba(235,235,245,0.75);">95%</div>
+      </div>
+      <div style="height: 3px; border-radius: 2px; background: rgba(235,235,245,0.14); margin-top: 14px; overflow: hidden;">
+        <div style="width: 60px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, rgba(48,209,88,0) 0%, #30D158 50%, rgba(48,209,88,0) 100%); animation: shiftL 2.6s linear infinite;"></div>
+      </div>
+    </div>
+    <div class="why">One line and a travelling glint. Nothing competes for attention on a Lock Screen you are not using — but the charge level is small.</div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

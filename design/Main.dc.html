@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #FF6A00; } a:hover { color: #E05D00; }
+    @keyframes haloA { 0% { transform: scale(0.75); opacity: 0.55; } 100% { transform: scale(1.9); opacity: 0; } }
+    @keyframes boltA { 0%, 100% { opacity: 1; } 50% { opacity: 0.62; } }
+    @keyframes sweepA { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -1030; } }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #000000; color: #FFFFFF; display: flex; flex-direction: column;">
+
+  <div style="height: 44px;"></div>
+
+  <div style="height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px;">
+    <div style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px 0 12px; background: #2C2C2E; border-radius: 19px;">
+      <div style="width: 8px; height: 8px; border-radius: 4px; background: #30D158;"></div>
+      <div style="font-size: 15px; font-weight: 600;">Paxie</div>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 600;">
+      <div>95%</div>
+      <svg width="11" height="14" viewBox="0 0 11 14" fill="#30D158"><path d="M6.4 0 0 8h4l-.6 6L11 6H6.8z"/></svg>
+    </div>
+    <div style="width: 38px; height: 38px; border-radius: 19px; background: #2C2C2E; display: flex; align-items: center; justify-content: center;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.3a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.7 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.7 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.7h.08A1.7 1.7 0 0 0 10.6 3.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.88V9a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.03z"/></svg>
+    </div>
+  </div>
+
+  <div style="width: 390px; height: 380px; position: relative; display: flex; align-items: center; justify-content: center;">
+    <svg width="380" height="380" viewBox="0 0 380 380" style="position: absolute; top: 0; left: 5px;">
+      <circle cx="190" cy="190" r="164" fill="none" stroke="#39393D" stroke-width="26" stroke-linecap="round"
+              stroke-dasharray="772.8 1030.4" transform="rotate(135 190 190)"/>
+      <circle cx="190" cy="190" r="164" fill="none" stroke="#30D158" stroke-width="26" stroke-linecap="round"
+              stroke-dasharray="734.2 1030.4" transform="rotate(135 190 190)"/>
+      <circle cx="190" cy="190" r="164" fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round"
+              opacity="0.16" stroke-dasharray="90 1030.4" transform="rotate(135 190 190)"
+              style="animation: sweepA 2.6s linear infinite;"/>
+    </svg>
+
+    <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 6px; padding-bottom: 4px;">
+        <svg width="10" height="13" viewBox="0 0 11 14" fill="#30D158" style="animation: boltA 1.8s ease-in-out infinite;"><path d="M6.4 0 0 8h4l-.6 6L11 6H6.8z"/></svg>
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 1.3px; color: #30D158;">CHARGING</div>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 2px;">
+        <div style="font-size: 66px; font-weight: 600; letter-spacing: -2.3px; font-variant-numeric: tabular-nums;">95</div>
+        <div style="font-size: 21px; font-weight: 600; color: rgba(235,235,245,0.6);">%</div>
+      </div>
+      <div style="font-size: 13px; color: rgba(235,235,245,0.6); padding-top: 4px; font-variant-numeric: tabular-nums;">Oven off · 48.0 °C</div>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 0 40px;">
+    <div style="position: relative; width: 116px; height: 116px; display: flex; align-items: center; justify-content: center;">
+      <div style="position: absolute; inset: 0; border-radius: 58px; border: 1.5px solid #30D158; animation: haloA 2.8s ease-out infinite;"></div>
+      <div style="position: absolute; inset: 0; border-radius: 58px; border: 1.5px solid #30D158; animation: haloA 2.8s ease-out infinite 1.4s;"></div>
+      <div style="width: 78px; height: 78px; border-radius: 39px; background: rgba(48,209,88,0.14); display: flex; align-items: center; justify-content: center;">
+        <svg width="30" height="38" viewBox="0 0 11 14" fill="#30D158" style="animation: boltA 1.8s ease-in-out infinite;"><path d="M6.4 0 0 8h4l-.6 6L11 6H6.8z"/></svg>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+      <div style="font-size: 17px; font-weight: 600;">On the charger</div>
+      <div style="font-size: 13px; color: rgba(235,235,245,0.6); text-align: center; text-wrap: pretty; line-height: 18px;">The oven is off. Temperature and modes come back when you pick it up.</div>
+    </div>
+  </div>
+
+  <div style="height: 34px;"></div>
+</div>
+</x-dc>
+</body>
+</html>

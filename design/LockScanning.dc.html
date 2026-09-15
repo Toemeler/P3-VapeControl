@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #FF6A00; } a:hover { color: #E05D00; }
+    .lbl { font-size: 12px; font-weight: 700; letter-spacing: 1.2px; color: rgba(235,235,245,0.45); text-transform: uppercase; }
+    .why { font-size: 12px; color: rgba(235,235,245,0.55); line-height: 17px; text-wrap: pretty; }
+    .card { width: 360px; border-radius: 22px; background: rgba(42,42,46,0.82); backdrop-filter: blur(20px); }
+    @keyframes ringS { 0% { transform: scale(0.5); opacity: 0.6; } 100% { transform: scale(1.5); opacity: 0; } }
+    @keyframes shiftS { 0% { transform: translateX(-60px); } 100% { transform: translateX(340px); } }
+    @keyframes breatheS { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.75; } }
+  </style>
+</helmet>
+
+<div style="width: 440px; background: linear-gradient(170deg, #101018 0%, #0B0B0D 55%, #07070A 100%); color: #FFFFFF; padding: 28px 40px 34px; display: flex; flex-direction: column; gap: 30px;">
+
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div class="lbl">S-A · Last known</div>
+    <div class="card" style="padding: 14px 16px 13px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+          <div style="position: absolute; width: 40px; height: 40px; border-radius: 20px; border: 1.5px solid rgba(235,235,245,0.5); animation: ringS 2.4s ease-out infinite;"></div>
+          <div style="width: 40px; height: 40px; border-radius: 20px; background: rgba(235,235,245,0.1); display: flex; align-items: center; justify-content: center;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,0.75)" stroke-width="1.9" stroke-linecap="round"><path d="M4.5 9a10 10 0 0 1 15 0M7.5 12.4a6 6 0 0 1 9 0"/><circle cx="12" cy="17" r="1.6" fill="rgba(235,235,245,0.75)" stroke="none"/></svg>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 1px;">
+          <div style="font-size: 16px; font-weight: 600;">Waiting for Paxie</div>
+          <div style="font-size: 13px; color: rgba(235,235,245,0.6);">Connects by itself when it is near</div>
+        </div>
+        <div style="flex-grow: 1;"></div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px; opacity: 0.4;">
+          <div style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">95%</div>
+          <div style="font-size: 11px; font-variant-numeric: tabular-nums;">last seen 4m</div>
+        </div>
+      </div>
+      <div style="height: 4px; border-radius: 2px; background: rgba(235,235,245,0.12); margin-top: 13px; overflow: hidden;">
+        <div style="width: 84px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, rgba(235,235,245,0) 0%, rgba(235,235,245,0.5) 50%, rgba(235,235,245,0) 100%); animation: shiftS 2.8s linear infinite;"></div>
+      </div>
+    </div>
+    <div class="why">Keeps the skeleton and the last reading, greyed — the card looks asleep rather than broken, and the moving line says it is still trying.</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div class="lbl">S-B · One line</div>
+    <div class="card" style="padding: 17px 18px;">
+      <div style="display: flex; align-items: center; gap: 11px;">
+        <div style="display: flex; align-items: flex-end; gap: 3px; height: 15px;">
+          <div style="width: 3px; height: 6px; border-radius: 2px; background: rgba(235,235,245,0.8); animation: breatheS 1.8s ease-in-out infinite;"></div>
+          <div style="width: 3px; height: 10px; border-radius: 2px; background: rgba(235,235,245,0.8); animation: breatheS 1.8s ease-in-out infinite 0.3s;"></div>
+          <div style="width: 3px; height: 15px; border-radius: 2px; background: rgba(235,235,245,0.8); animation: breatheS 1.8s ease-in-out infinite 0.6s;"></div>
+        </div>
+        <div style="font-size: 16px; font-weight: 500; color: rgba(235,235,245,0.82);">Looking for Paxie…</div>
+        <div style="flex-grow: 1;"></div>
+      </div>
+    </div>
+    <div class="why">As small as the card can be. Honest about having nothing to report — but it loses the battery reading people glance for.</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div class="lbl">S-C · Dimmed dial</div>
+    <div class="card" style="padding: 13px 18px 13px 14px; opacity: 0.86;">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="position: relative; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;">
+          <svg width="52" height="52" viewBox="0 0 52 52" style="position: absolute; inset: 0;">
+            <circle cx="26" cy="26" r="22" fill="none" stroke="rgba(235,235,245,0.14)" stroke-width="5" stroke-linecap="round" stroke-dasharray="103.7 138.2" transform="rotate(135 26 26)"/>
+            <circle cx="26" cy="26" r="22" fill="none" stroke="rgba(235,235,245,0.45)" stroke-width="5" stroke-linecap="round" stroke-dasharray="16 138.2" transform="rotate(135 26 26)" style="animation: breatheS 2.2s ease-in-out infinite;"/>
+          </svg>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 16px; font-weight: 600; color: rgba(235,235,245,0.85);">Waiting for Paxie</div>
+          <div style="font-size: 13px; color: rgba(235,235,245,0.5);">Last seen 95% · 4 minutes ago</div>
+        </div>
+      </div>
+    </div>
+    <div class="why">The same dial as the heating card, emptied and breathing, so all three states share one shape. Reads as "off" more than "searching".</div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #FF6A00; } a:hover { color: #E05D00; }
+    @keyframes fillB { 0% { width: 18px; } 100% { width: 156px; } }
+    @keyframes boltB { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.45; } }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #000000; color: #FFFFFF; display: flex; flex-direction: column;">
+
+  <div style="height: 44px;"></div>
+
+  <div style="height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px;">
+    <div style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px 0 12px; background: #2C2C2E; border-radius: 19px;">
+      <div style="width: 8px; height: 8px; border-radius: 4px; background: #30D158;"></div>
+      <div style="font-size: 15px; font-weight: 600;">Charging</div>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 600;">
+      <div>95%</div>
+      <svg width="11" height="14" viewBox="0 0 11 14" fill="#30D158"><path d="M6.4 0 0 8h4l-.6 6L11 6H6.8z"/></svg>
+    </div>
+    <div style="width: 38px; height: 38px; border-radius: 19px; background: #2C2C2E; display: flex; align-items: center; justify-content: center;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M4.2 12a7.8 7.8 0 0 1 .3-2.1l-2-1.5 2-3.4 2.3 1a7.8 7.8 0 0 1 1.8-1l.3-2.5h4l.3 2.5c.65.26 1.25.6 1.8 1l2.3-1 2 3.4-2 1.5a7.8 7.8 0 0 1 0 4.2l2 1.5-2 3.4-2.3-1a7.8 7.8 0 0 1-1.8 1l-.3 2.5h-4l-.3-2.5a7.8 7.8 0 0 1-1.8-1l-2.3 1-2-3.4 2-1.5A7.8 7.8 0 0 1 4.2 12z"/></svg>
+    </div>
+  </div>
+
+  <div style="width: 390px; height: 380px; position: relative; display: flex; align-items: center; justify-content: center; opacity: 0.55;">
+    <svg width="380" height="380" viewBox="0 0 380 380" style="position: absolute; top: 0; left: 5px;">
+      <circle cx="190" cy="190" r="164" fill="none" stroke="#39393D" stroke-width="26" stroke-linecap="round"
+              stroke-dasharray="772.8 1030.4" transform="rotate(135 190 190)"/>
+      <circle cx="190" cy="190" r="145" fill="none" stroke="#FF6A00" stroke-width="3.5" stroke-linecap="round"
+              opacity="0.4" stroke-dasharray="82 911.1" transform="rotate(135 190 190)"/>
+    </svg>
+    <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 6px; padding-bottom: 4px;">
+        <div style="width: 8px; height: 8px; border-radius: 4px; background: rgba(235,235,245,0.6);"></div>
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 1.3px; color: rgba(235,235,245,0.6);">OVEN OFF</div>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 2px;">
+        <div style="font-size: 66px; font-weight: 600; letter-spacing: -2.3px; font-variant-numeric: tabular-nums;">48.0</div>
+        <div style="font-size: 21px; font-weight: 600; color: rgba(235,235,245,0.6);">°C</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 16px;">
+    <div style="background: #1C1C1E; border-radius: 22px; padding: 22px 22px 24px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 44px; height: 44px; border-radius: 22px; background: rgba(48,209,88,0.15); display: flex; align-items: center; justify-content: center;">
+          <svg width="16" height="20" viewBox="0 0 11 14" fill="#30D158" style="animation: boltB 1.8s ease-in-out infinite;"><path d="M6.4 0 0 8h4l-.6 6L11 6H6.8z"/></svg>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 17px; font-weight: 600;">Charging</div>
+          <div style="font-size: 13px; color: rgba(235,235,245,0.6);">95% · nearly full</div>
+        </div>
+        <div style="flex-grow: 1;"></div>
+        <div style="font-size: 25px; font-weight: 600; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; color: #30D158;">95%</div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 6px; padding-top: 20px;">
+        <div style="flex-grow: 1; height: 26px; border-radius: 8px; border: 2px solid rgba(235,235,245,0.35); padding: 3px; display: flex; align-items: center;">
+          <div style="height: 100%; width: 156px; border-radius: 4px; background: #30D158; animation: fillB 3.4s ease-in-out infinite alternate;"></div>
+        </div>
+        <div style="width: 4px; height: 11px; border-radius: 0 2px 2px 0; background: rgba(235,235,245,0.35);"></div>
+      </div>
+
+      <div style="font-size: 13px; color: rgba(235,235,245,0.6); padding-top: 16px; line-height: 18px; text-wrap: pretty;">Temperature and heating modes are hidden while it charges — the oven stays off on the charger.</div>
+    </div>
+  </div>
+
+  <div style="height: 34px;"></div>
+</div>
+</x-dc>
+</body>
+</html>

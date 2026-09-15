@@ -1,0 +1,4 @@
+# The canvas that gets published: the design tool's editor is baked into it,
+# so it is 2 MB of machinery around the artboards beside it. Rebuilt from
+# those on every change, never edited by hand.
+pax-charging-and-lock-screen.html
