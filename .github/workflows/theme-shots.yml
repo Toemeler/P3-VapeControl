@@ -8,6 +8,14 @@
 name: Theme screenshots
 
 on:
+  # Dispatch only resolves for workflows on the default branch, and this one
+  # deliberately lives on a feature branch, so the real trigger is a push that
+  # changes a theme -- which is exactly when the images go stale.
+  push:
+    paths:
+      - "PaxController/Sources/Theme/**"
+      - ".github/scripts/capture_screens.py"
+      - ".github/workflows/theme-shots.yml"
   workflow_dispatch:
     inputs:
       themes:
@@ -99,7 +107,7 @@ jobs:
         timeout-minutes: 25
         run: |
           set -euo pipefail
-          THEMES="${{ inputs.themes }}"
+          THEMES="${{ inputs.themes || '' }}"
           if [ -z "$THEMES" ]; then
             # Read the ids out of the catalogue rather than restating them, so
             # a theme added later is captured without editing this file.
@@ -117,7 +125,7 @@ jobs:
             theme-shots $SPECS
           # Half resolution: enough to judge type, spacing and colour, a
           # quarter of the bytes on a branch that only exists to be looked at.
-          for f in theme-shots/*.png; do sips -Z "${{ inputs.scale }}" "$f" >/dev/null; done
+          for f in theme-shots/*.png; do sips -Z "${{ inputs.scale || '1266' }}" "$f" >/dev/null; done
           ls -lh theme-shots
 
       - name: Put them on the scratch branch
