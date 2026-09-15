@@ -113,11 +113,11 @@ struct DeviceSheet: View {
         }
     }
 
-    /// The lip sensor's hold over the oven — and, on this firmware, the one
-    /// control in the app that has been seen to stop the oven. So nothing here
-    /// writes without a tap and a confirmation, the way back is always on
-    /// screen, and the copy says what is actually known rather than what the
-    /// protocol notes predicted.
+    /// The lip sensor's hold over the oven, split into the two things it
+    /// actually does — and the one control in the app that has been seen to
+    /// stop the oven. So nothing here writes without a tap and a confirmation,
+    /// the way back is always on screen, and the copy says what was measured on
+    /// this device rather than what the official app's naming claims.
     @ViewBuilder
     private var ovenSection: some View {
         Section {
@@ -176,6 +176,18 @@ struct DeviceSheet: View {
         } footer: {
             Text(bitProbeNote)
         }
+    }
+
+    /// What the confirmation says, which depends on whether this device has
+    /// been measured. Unmeasured, the honest warning is that the oven is
+    /// expected to stop; measured, it is that the heater bit is held back.
+    private var confirmLipDetectionMessage: String {
+        guard let bit = settings.heaterOptionBit else {
+            return "This rewrites the whole heating algorithm, not one setting, and on this PAX it has stopped the oven \u{2014} the heater bit has not been identified yet. "
+                + "Run \u{201C}Find the heater bit\u{201D} first. If the oven does stop, restore the factory settings and switch the PAX off and on again."
+        }
+        return "This rewrites the whole heating algorithm, not one setting. Bit \(bit), the heater on this PAX, is held out of the write, so the oven should keep running. "
+            + "If it does not, restore the factory settings below."
     }
 
     private enum LipSwitch { case cooling, shutdown }
