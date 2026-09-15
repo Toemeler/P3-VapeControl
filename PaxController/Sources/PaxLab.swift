@@ -56,15 +56,48 @@ final class PaxLab: ObservableObject {
     /// sweep is not allowed to happen quietly.
     @Published private(set) var sweepsCompleted = 0
     @Published private(set) var lastCapturedSweep = -1
+    /// Whether the lab captures on its own. On by default: the states worth
+    /// comparing are the ones the PAX passes through while it is being used,
+    /// and nobody is going to be holding the phone at the moment it reaches
+    /// each of them.
+    @Published var autoCapture: Bool {
+        didSet { defaults.set(autoCapture, forKey: autoCaptureKey) }
+    }
+    /// State descriptions already captured, kept across launches so a state is
+    /// swept once and then left alone.
+    @Published private(set) var capturedStates: Set<String> = []
 
     private let defaults = UserDefaults.standard
     private let writesKey = "labWriteLog"
     private let snapshotsKey = "labSnapshots"
+    private let autoCaptureKey = "labAutoCapture"
+    private let capturedStatesKey = "labCapturedStates"
     private var survivalTimer: Task<Void, Never>?
 
     private init() {
+        autoCapture = defaults.object(forKey: autoCaptureKey) as? Bool ?? true
         writes = decode([WriteRecord].self, from: writesKey) ?? []
         snapshots = decode([Snapshot].self, from: snapshotsKey) ?? []
+        capturedStates = Set(defaults.stringArray(forKey: capturedStatesKey) ?? [])
+    }
+
+    func hasCaptured(_ state: String) -> Bool { capturedStates.contains(state) }
+
+    private func noteCaptured(_ state: String) {
+        capturedStates.insert(state)
+        defaults.set(Array(capturedStates), forKey: capturedStatesKey)
+    }
+
+    /// Captures under a device-state description and remembers that the state
+    /// has been seen, so it is swept once rather than every time it recurs.
+    func captureState(_ state: String) {
+        takeSnapshot(label: state)
+        noteCaptured(state)
+    }
+
+    func forgetCapturedStates() {
+        capturedStates.removeAll()
+        defaults.removeObject(forKey: capturedStatesKey)
     }
 
     // MARK: - Recording
@@ -151,6 +184,7 @@ final class PaxLab: ObservableObject {
     func deleteSnapshots() {
         snapshots.removeAll()
         persist(snapshots, key: snapshotsKey)
+        forgetCapturedStates()
     }
 
     struct Difference: Identifiable {
@@ -259,7 +293,7 @@ final class PaxLab: ObservableObject {
 
         if !snapshots.isEmpty {
             out.append("")
-            out.append("## Snapshots")
+            out.append("## Snapshots (\(autoCapture ? "captured automatically" : "captured by hand"))")
             // Every snapshot in full, and every consecutive pair compared. The
             // earlier version printed one diff and the labels of the rest,
             // which threw away most of what had been captured.

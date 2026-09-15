@@ -157,6 +157,10 @@ final class PaxDeviceViewModel: ObservableObject {
     /// Where the current heat-up started, so the warm-up ramp measures the
     /// climb rather than the whole temperature scale.
     private var warmUpStartTempC: Double?
+    #if PAX_LAB
+    /// Debounces automatic capture while the device settles into a state.
+    private var labAutoCapture: Task<Void, Never>?
+    #endif
     /// The last ramp colour written, so an unchanged step writes nothing.
     private var lastWarmUpHex: String?
     private var probeTask: Task<Void, Never>?
@@ -717,6 +721,9 @@ final class PaxDeviceViewModel: ObservableObject {
     // MARK: - Heating state
 
     private func heatingStateDidChange(from previous: PaxHeatingState?) {
+        #if PAX_LAB
+        labAutoCaptureIfNeeded()
+        #endif
         if settings.notifyWhenReady {
             ReadyNotifier.shared.handle(state: heatingState,
                                         targetC: targetTempC ?? currentTargetTempC,
@@ -904,7 +911,7 @@ final class PaxDeviceViewModel: ObservableObject {
     /// The status request is a 64-bit bitfield, so 1…63 is the whole space;
     /// asking in batches rather than all at once keeps the device from
     /// answering sixty times in one breath.
-    func labSweep(rounds: Int = 3) {
+    func labSweep(rounds: Int = 3, captureAs state: String? = nil) {
         guard connectionState.isConnected, !PaxLab.shared.sweepInProgress else { return }
         PaxLab.shared.setSweeping(true)
         // Start from nothing: samples carried over from the last sweep would be
@@ -926,12 +933,24 @@ final class PaxDeviceViewModel: ObservableObject {
                 self?.log("Lab: sweep round \(round) sent", level: .info)
                 try? await Task.sleep(nanoseconds: 600_000_000)
             }
-            self?.finishLabSweep()
+            self?.finishLabSweep(captureAs: state)
         }
     }
 
-    private func finishLabSweep() {
+    private func finishLabSweep(captureAs state: String?) {
         PaxLab.shared.setSweeping(false)
+        if let state {
+            // The PAX may have moved on while the sweep was running — a
+            // heat-up can finish inside those twelve seconds — and a snapshot
+            // labelled with a state it was no longer in would be worse than no
+            // snapshot at all. The new state triggers its own.
+            if labStateKey == state {
+                PaxLab.shared.captureState(state)
+                log("Lab: captured \"\(state)\"", level: .info)
+            } else {
+                log("Lab: \(state) ended before the sweep did — not captured", level: .info)
+            }
+        }
         let answered = PaxLab.shared.answeredAttributes
         log("Lab: \(answered.count) attributes answered — \(answered.map { String(format: "0x%02X", $0) }.joined(separator: " "))",
             level: .info)
@@ -971,6 +990,31 @@ final class PaxDeviceViewModel: ObservableObject {
             try self.sendRawPlaintext(Data([attribute]) + payload)
             self.log(String(format: "Lab: wrote 0x%02X ← %@", attribute, PaxLab.hex(payload)), level: .tx)
             try self.sendPacket(PaxPacket.statusRequest(rawAttributes: [attribute]))
+        }
+    }
+
+    /// How the device is described for capture purposes: what the oven is
+    /// doing, and whether it is on the charger.
+    var labStateKey: String {
+        let state = heatingState?.description.lowercased() ?? "unknown"
+        return isCharging == true ? "\(state) · charging" : "\(state) · unplugged"
+    }
+
+    /// Sweeps and captures the moment the PAX enters a state that has not been
+    /// captured yet, so the comparison builds itself out of ordinary use.
+    func labAutoCaptureIfNeeded() {
+        guard PaxLab.shared.autoCapture, connectionState.isConnected else { return }
+        guard heatingState != nil, !PaxLab.shared.sweepInProgress else { return }
+        let state = labStateKey
+        guard !PaxLab.shared.hasCaptured(state) else { return }
+        labAutoCapture?.cancel()
+        labAutoCapture = Task { [weak self] in
+            // Let it settle: the device passes through states on its way to
+            // the one it means, and sweeping each of them would sweep for ever.
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard let self, !Task.isCancelled, self.labStateKey == state else { return }
+            self.log("Lab: new state \"\(state)\" — sweeping to capture it", level: .info)
+            self.labSweep(captureAs: state)
         }
     }
 
@@ -1253,7 +1297,13 @@ final class PaxDeviceViewModel: ObservableObject {
             batteryLevel = packet.batteryLevel
             log("Battery: \(packet.batteryLevel.map { "\($0)%" } ?? "nil")", level: .info)
         case .chargeStatus:
-            isCharging = (packet.payload.count >= 1 && packet.payload[0] != 0)
+            let charging = (packet.payload.count >= 1 && packet.payload[packet.payload.startIndex] != 0)
+            if charging != isCharging {
+                isCharging = charging
+                #if PAX_LAB
+                labAutoCaptureIfNeeded()
+                #endif
+            }
         case .heatingState:
             let previousHeatingState = heatingState
             heatingState = packet.heatingState
@@ -1480,6 +1530,10 @@ final class PaxDeviceViewModel: ObservableObject {
         log("PAX service confirmed + serial ready — entering ready state", level: .info)
         if settings.notifyWhenReady { ReadyNotifier.shared.requestAuthorizationIfNeeded() }
         displayName = deviceLabel
+        #if PAX_LAB
+        // The state it is in when the app finds it counts too.
+        labAutoCaptureIfNeeded()
+        #endif
         connectWatchdog?.cancel()
         connectWatchdog = nil
         connectionState = .ready

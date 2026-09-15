@@ -118,6 +118,12 @@ struct PaxLabView: View {
 
     private var snapshotSection: some View {
         Section {
+            Toggle("Capture by itself", isOn: $lab.autoCapture)
+            if lab.autoCapture {
+                Text(autoCaptureStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             if !lab.hasFreshSweep {
                 Label("Sweep again before capturing — otherwise this records the sweep you already captured.",
                       systemImage: "arrow.clockwise")
@@ -173,9 +179,29 @@ struct PaxLabView: View {
         } header: {
             Text("Snapshots")
         } footer: {
-            Text("One sweep, one capture, in that order, once per state: read every attribute, label it, capture, then change the state and sweep again. The attributes that differ between two captures are the ones that mean something about that state.")
+            Text("Left to itself, the lab sweeps and captures whenever the PAX enters a state it has not recorded yet — heating, ready, cooling, standby, on the charger — so the comparison builds itself while you use the thing. Each state is captured once. Capturing by hand is for states the device cannot tell you about, like the lid being off.")
         }
     }
+
+    /// What has been captured, and what the device has not shown yet.
+    private var autoCaptureStatus: String {
+        let captured = lab.capturedStates.sorted()
+        let seen = captured.isEmpty ? "nothing yet" : captured.joined(separator: ", ")
+        let outstanding = Self.statesWorthHaving.filter { wanted in
+            !lab.capturedStates.contains { $0.hasPrefix(wanted) }
+        }
+        let missing = outstanding.isEmpty
+            ? "Every heating state has been seen."
+            : "Still to see: " + outstanding.joined(separator: ", ") + "."
+        return "Captured: \(seen). \(missing)"
+    }
+
+    /// The oven states worth having a reading of. Boosting and the on-device
+    /// temperature picker only happen while the PAX is in someone's hand, which
+    /// is exactly why capturing cannot be a thing you remember to do.
+    private static let statesWorthHaving = [
+        "heating", "ready", "inhaling", "cooling", "standby", "oven off",
+    ]
 
     // MARK: - Writes
 
