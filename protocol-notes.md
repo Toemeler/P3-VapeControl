@@ -365,7 +365,14 @@ ever arrives and prefers it as the template.
 >
 > Until that measurement exists for a device, writing 0x19 costs a power cycle
 > per wrong guess, so the app writes it only on a confirmed tap, keeps a restore
-> on screen, and warns when the oven stops within seconds of a write. The app therefore starts every write from the stock preset for the mode
+> on screen, and warns when the oven stops within seconds of a write.
+>
+> The PAX **blinks yellow-green** in the stopped state rather than going dark,
+> so the device is running and indicating, not crashed. What that pattern means
+> is not established — and note that the app itself drives these LEDs through
+> ColorTheme, including a warm-up gradient that runs green through yellow. The
+> probe therefore holds every LED write back while it runs, so the only thing
+> changing during a measurement is the one option bit. The app therefore starts every write from the stock preset for the mode
 the device reports being in, changes only the three lip bits, forces bit 2
 Heater on, and range-checks the result before sending it. The switch in the app
 shows what was last sent, not what the device holds.

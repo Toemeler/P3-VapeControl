@@ -605,6 +605,14 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     private func sendLedColorToDevice() {
+        // While the probe is running, the heating parameters must be the only
+        // thing changing. The app drives the PAX's own LEDs, so a colour write
+        // landing mid-measurement would be indistinguishable from the device
+        // reacting to the bit — and the LED is what the user is watching.
+        guard !bitProbeRunning else {
+            log("Holding the LED write back while the bit probe runs", level: .info)
+            return
+        }
         let color = settings.ledColor
         guard deviceLedColorSupported else {
             // Tapping a colour in the moment between connecting and the
@@ -1308,10 +1316,14 @@ final class PaxDeviceViewModel: ObservableObject {
     struct HeatingBitResult: Identifiable {
         let bit: Int
         let stoppedOven: Bool
+        /// What the oven said it was doing when the five seconds were up. Worth
+        /// keeping beside the verdict: "stopped" and "went to standby" are
+        /// different answers, and only one of them is about the heater.
+        let state: String
         var id: Int { bit }
         var label: String {
-            "bit \(bit) (\(PaxHeatingParams.Options.name(ofBit: bit))) — "
-                + (stoppedOven ? "stops the oven" : "oven kept running")
+            "bit \(bit) \(PaxHeatingParams.Options.name(ofBit: bit)) — "
+                + (stoppedOven ? "stops the oven" : "kept running") + " (\(state))"
         }
     }
 
@@ -1347,6 +1359,7 @@ final class PaxDeviceViewModel: ObservableObject {
         bitProbeResults = []
         bitProbeRunning = true
         heatingParamsStoppedOven = false
+        ledWriteDebounce?.cancel()
         log("Bit probe: \(mode.label) stock options are 0x\(String(format: "%02X", stock.options.rawValue)); clearing bits \(bits.map(String.init).joined(separator: ", ")) one at a time",
             level: .info)
         bitProbeTask = Task { [weak self] in
@@ -1359,8 +1372,9 @@ final class PaxDeviceViewModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 guard !Task.isCancelled else { break }
                 let stopped = self.heatingState == .ovenOff
-                self.bitProbeResults.append(HeatingBitResult(bit: bit, stoppedOven: stopped))
-                self.log("Bit probe: bit \(bit) cleared → oven \(stopped ? "stopped" : "still running") (state \(String(describing: self.heatingState)))",
+                let state = self.heatingState.map(\.description) ?? "no reading"
+                self.bitProbeResults.append(HeatingBitResult(bit: bit, stoppedOven: stopped, state: state))
+                self.log("Bit probe: bit \(bit) (\(PaxHeatingParams.Options.name(ofBit: bit))) cleared → \(state)",
                          level: stopped ? .warn : .info)
                 // Put it back before moving on, whatever happened, so the next
                 // measurement starts from the same place and the device is
@@ -1379,6 +1393,7 @@ final class PaxDeviceViewModel: ObservableObject {
         bitProbeTask = nil
         bitProbeRunning = false
         bitProbeStep = nil
+        if settings.pushColorToDevice { scheduleLedWrite() }
         // Whatever it was in the middle of, leave the device on stock.
         restoreStockHeatingParams()
     }
@@ -1387,6 +1402,8 @@ final class PaxDeviceViewModel: ObservableObject {
         bitProbeRunning = false
         bitProbeStep = nil
         bitProbeTask = nil
+        // The LEDs were left alone throughout; put the chosen theme back now.
+        if settings.pushColorToDevice { scheduleLedWrite() }
         let stoppers = bitProbeResults.filter(\.stoppedOven).map(\.bit)
         if stoppers.count == 1, let bit = stoppers.first {
             settings.heaterOptionBit = bit
