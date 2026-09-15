@@ -173,13 +173,7 @@ jobs:
           ls -lh screenshots
 
       - name: Commit screenshots
-        # commit_generated.sh pushes to main, so only the default branch and
-        # release tags may run it. A feature branch builds and screenshots
-        # itself without rewriting main's README or screenshots.
-        if: >-
-          steps.check.outputs.skip != 'true'
-          && (github.ref_type == 'tag'
-              || github.ref_name == github.event.repository.default_branch)
+        if: steps.check.outputs.skip != 'true'
         env:
           DEVICE: ${{ steps.sim.outputs.device_name }}
           RUNTIME: ${{ steps.sim.outputs.runtime_name }}
@@ -415,12 +409,8 @@ jobs:
 
       - name: Refresh the archived shortcut
         # Off by default: the committed file is what users get, and iCloud is
-        # not a dependency the release build should have. Commits to main, so
-        # it is restricted to the default branch and tags like the rest.
-        if: >-
-          inputs.refresh_shortcut
-          && (github.ref_type == 'tag'
-              || github.ref_name == github.event.repository.default_branch)
+        # not a dependency the release build should have.
+        if: inputs.refresh_shortcut
         run: |
           set -euo pipefail
           python3 .github/scripts/fetch_shortcut.py \
@@ -431,12 +421,7 @@ jobs:
           .github/scripts/commit_generated.sh "Update the archived shortcut" shortcut
 
       - name: Commit source feed
-        # The feed and the build stamp describe the published release, so a
-        # branch preview must not rewrite them on main.
-        if: >-
-          steps.appcheck.outputs.skip != 'true'
-          && (github.ref_type == 'tag'
-              || github.ref_name == github.event.repository.default_branch)
+        if: steps.appcheck.outputs.skip != 'true'
         # Committed rather than deployed with actions/deploy-pages: the Actions
         # token is not allowed to create the Pages site itself. This makes the
         # feed reachable over raw.githubusercontent.com immediately, and over
@@ -458,7 +443,7 @@ jobs:
       - name: Refresh the notes on the existing release
         # No new release is cut when the app is unchanged, but wording changes
         # should still reach the published one. Only from the default branch:
-        # a preview must not rewrite the notes of a published release.
+        # a preview must never rewrite a published release's notes.
         if: >-
           steps.appcheck.outputs.skip == 'true'
           && (github.ref_type == 'tag'
