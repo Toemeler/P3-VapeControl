@@ -24,21 +24,21 @@
       ],
       "versions": [
         {
-          "version": "1.0.80",
-          "buildVersion": "80",
-          "date": "2026-09-15T20:04:10Z",
-          "localizedDescription": "Automated build preview-80.",
-          "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/preview-80/PaxController.ipa",
-          "size": 1044286,
-          "sha256": "cc98eb1a0fb58ebb20b8f50f2bbfceb0fdc51bdf75c45366cd62c6bf2bb3d6a0",
+          "version": "1.0.86",
+          "buildVersion": "86",
+          "date": "2026-09-15T21:04:04Z",
+          "localizedDescription": "Automated build preview-86.",
+          "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/preview-86/PaxController.ipa",
+          "size": 1043753,
+          "sha256": "c74f7620ea5275e2ce9f1b10a15d3bfff766024e21ad886d9096275b81399874",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "1.0.80",
-      "versionDate": "2026-09-15T20:04:10Z",
-      "versionDescription": "Automated build preview-80.",
-      "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/preview-80/PaxController.ipa",
-      "size": 1044286
+      "version": "1.0.86",
+      "versionDate": "2026-09-15T21:04:04Z",
+      "versionDescription": "Automated build preview-86.",
+      "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/preview-86/PaxController.ipa",
+      "size": 1043753
     }
   ],
   "news": []
