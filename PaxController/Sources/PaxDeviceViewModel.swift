@@ -128,6 +128,16 @@ final class PaxDeviceViewModel: ObservableObject {
     @Published private(set) var heatingParamsStoppedOven = false
     /// When the last 0x19 write went out, so the stop above can be tied to it.
     private var lastHeatingParamsWrite: Date?
+    /// Recent readings, for working out how fast the oven is climbing and how
+    /// fast the battery is filling. Short on purpose: an average over the last
+    /// few seconds tracks a real change, while a longer one smooths it away.
+    private var tempTrail: [(at: Date, value: Double)] = []
+    private var batteryTrail: [(at: Date, value: Double)] = []
+    /// Seconds until the oven reaches its set point, when it is climbing fast
+    /// enough for the estimate to mean anything.
+    @Published private(set) var secondsToReady: Int?
+    /// Seconds until the battery is full, while it is on the charger.
+    @Published private(set) var secondsToFull: Int?
     /// The last time the PAX said anything. The waiting card counts up from it,
     /// so a glance says whether it has just stepped out of range or has been
     /// gone all afternoon.
@@ -775,6 +785,28 @@ final class PaxDeviceViewModel: ObservableObject {
                 level: .error)
         }
 
+        // A session is the stretch between the oven waking and going cold. The
+        // draw counter, the dose limit, the idle timer and the history all hang
+        // off these two transitions.
+        switch heatingState {
+        case .heating, .ready, .boosting, .cooling:
+            beginSession()
+            if heatingState == .boosting, previous != .boosting { recordDraw() }
+            // Any sign of heat means the app is no longer the reason it is off,
+            // whoever turned it back on.
+            ovenPoweredOffByApp = false
+        case .ovenOff:
+            finishSession(pendingEnding ?? .ovenOff)
+            pendingEnding = nil
+        case .standby:
+            // Standby is not an ending — the oven is warm and a draw brings it
+            // straight back — but it is where a forgotten session dies, so the
+            // idle timer keeps running through it.
+            enforceAutoOff()
+        case .tempSetMode, .none:
+            break
+        }
+
         switch heatingState {
         case .heating:
             // Where this heat-up started from, so the ramp is a fraction of the
@@ -1316,23 +1348,272 @@ final class PaxDeviceViewModel: ObservableObject {
     /// field, and nothing goes out that fails the plausibility check.
     private func applyLipSettings(reason: String) {
         let mode = dynamicMode ?? .standard
+        heatingParamsStoppedOven = false
+        writeHeatingParams(composedHeatingParams(ovenOn: true),
+                           note: "\(reason), from the \(mode.label) preset")
+    }
+
+    /// Whichever bit this device keeps the heater in. The measurement wins over
+    /// the official app's naming, because on this hardware the naming is what
+    /// was wrong; with no measurement, the naming is all there is.
+    private var heaterBit: PaxHeatingParams.Options {
+        settings.heaterOptionBit.map {
+            PaxHeatingParams.Options(rawValue: 1 << UInt16($0))
+        } ?? .heater
+    }
+
+    /// One block, composed the same way for every write: start from what the
+    /// device reported if it ever has and otherwise the preset for the mode it
+    /// says it is in, keep that preset's own lip bits less whatever the user
+    /// switched off, and set the heater to what the caller asked for.
+    private func composedHeatingParams(ovenOn: Bool) -> PaxHeatingParams {
+        let mode = dynamicMode ?? .standard
         var params = deviceHeatingParams ?? PaxHeatingParams.stock(for: mode)
-        // Start from the preset's own lip bits, then take away only what the
-        // user has turned off. Setting them from scratch would invent values
-        // for a mode whose preset leaves one of them clear.
         params.options.formUnion(PaxHeatingParams.Options.lipDetection)
         params.options.subtract(lipBitsToClear)
-        // The same word carries the bit that decides whether the oven heats at
-        // all. A write that cleared it would look like a dead device — which is
-        // exactly what happened before the probe existed. The measured bit wins
-        // over the official app's naming, because on this hardware the naming
-        // is what was wrong.
-        params.options.insert(settings.heaterOptionBit.map {
-            PaxHeatingParams.Options(rawValue: 1 << UInt16($0))
-        } ?? .heater)
-        heatingParamsStoppedOven = false
-        writeHeatingParams(params, note: "\(reason), from the \(mode.label) preset")
+        if ovenOn {
+            params.options.insert(heaterBit)
+            // Bit 2 as well: on a firmware that really does keep the heater
+            // where the official app says, this is the bit that matters, and
+            // setting both can only ever mean "on".
+            params.options.insert(.heater)
+        } else {
+            params.options.remove(heaterBit)
+        }
+        return params
     }
+
+    // MARK: - How long until
+
+    /// Least-squares slope over the recent trail, in units per second, or nil
+    /// when there is not enough of a trail to say anything.
+    private func slope(of trail: [(at: Date, value: Double)]) -> Double? {
+        guard trail.count >= 4, let first = trail.first else { return nil }
+        let xs = trail.map { $0.at.timeIntervalSince(first.at) }
+        let ys = trail.map(\.value)
+        let n = Double(trail.count)
+        let meanX = xs.reduce(0, +) / n
+        let meanY = ys.reduce(0, +) / n
+        var numerator = 0.0, denominator = 0.0
+        for (x, y) in zip(xs, ys) {
+            numerator += (x - meanX) * (y - meanY)
+            denominator += (x - meanX) * (x - meanX)
+        }
+        guard denominator > 0 else { return nil }
+        return numerator / denominator
+    }
+
+    private func trim(_ trail: inout [(at: Date, value: Double)], seconds: TimeInterval) {
+        let cutoff = Date().addingTimeInterval(-seconds)
+        trail.removeAll { $0.at < cutoff }
+    }
+
+    private func trackTemperature(_ celsius: Double) {
+        tempTrail.append((Date(), celsius))
+        trim(&tempTrail, seconds: 20)
+        updateReadyEstimate()
+    }
+
+    private func trackBattery(_ percent: Double) {
+        batteryTrail.append((Date(), percent))
+        // A battery moves a percent every minute or two, so the window has to
+        // be long enough to contain a change at all.
+        trim(&batteryTrail, seconds: 900)
+        updateChargeEstimate()
+    }
+
+    private func updateReadyEstimate() {
+        guard heatingState == .heating,
+              let actual = actualTempC,
+              let target = targetTempC ?? currentTargetTempC,
+              target > actual,
+              // Below about a fifth of a degree a second the estimate is mostly
+              // noise, and a number that swings by minutes is worse than none.
+              let rate = slope(of: tempTrail), rate > 0.2
+        else {
+            if secondsToReady != nil { secondsToReady = nil }
+            return
+        }
+        let estimate = Int(((target - actual) / rate).rounded())
+        // Clamped rather than hidden at the top end: a long estimate early in a
+        // cold start is still true.
+        let clamped = min(900, max(1, estimate))
+        if secondsToReady != clamped { secondsToReady = clamped }
+    }
+
+    private func updateChargeEstimate() {
+        guard isCharging == true, let level = batteryLevel, level < 100,
+              let rate = slope(of: batteryTrail), rate > 0.0001
+        else {
+            if secondsToFull != nil { secondsToFull = nil }
+            return
+        }
+        let estimate = Int((Double(100 - level) / rate).rounded())
+        let clamped = min(6 * 3600, max(60, estimate))
+        if secondsToFull != clamped { secondsToFull = clamped }
+    }
+
+    /// "4 min", "45s" — short enough to sit under a temperature without
+    /// crowding it.
+    static func shortDuration(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s" }
+        let minutes = Int((Double(seconds) / 60).rounded())
+        if minutes < 60 { return "\(minutes) min" }
+        let hours = Double(minutes) / 60
+        return String(format: "%.1f h", hours)
+    }
+
+    // MARK: - Sessions
+
+    private let sessions = PaxSessionStore.shared
+    /// When the last draw ended, which is what the idle timer counts from.
+    private var lastDrawAt: Date?
+    /// The last sample written to the running session's curve, so samples land
+    /// a few seconds apart rather than twice a second.
+    private var lastSampleAt: Date?
+    /// The step the schedule last applied, so a temperature is written once per
+    /// step rather than on every draw.
+    private var lastScheduledTemperature: Double?
+    /// Set while the app is switching the oven off itself, so the ending that
+    /// gets recorded is the real reason rather than "the oven went off".
+    private var pendingEnding: PaxSession.Ending?
+
+    /// The session on screen, if one is running.
+    var runningSession: PaxSession? { sessions.running }
+
+    private func beginSession() {
+        guard settings.sessionHistoryEnabled || settings.doseLimitEnabled
+                || settings.autoOffEnabled || settings.scheduleEnabled else { return }
+        guard sessions.running == nil else { return }
+        lastDrawAt = nil
+        lastSampleAt = nil
+        lastScheduledTemperature = nil
+        sessions.begin(PaxSession(setPointC: targetTempC, modeRaw: dynamicMode?.rawValue))
+        log("Session started", level: .info)
+        // A schedule's first step is the one that applies before any draw, and
+        // it has to be written now rather than waiting for one.
+        applyScheduleIfDue(draws: 0)
+    }
+
+    private func finishSession(_ ending: PaxSession.Ending) {
+        guard sessions.running != nil else { return }
+        sessions.finishRunning(ending)
+        log("Session ended: \(ending.label)", level: .info)
+        lastDrawAt = nil
+        lastSampleAt = nil
+        lastScheduledTemperature = nil
+        // A session nobody asked to keep is recorded only so the dose counter
+        // and the timer have something to count against, and is dropped here.
+        if !settings.sessionHistoryEnabled, let done = sessions.sessions.first {
+            sessions.delete(done)
+        }
+    }
+
+    private func recordDraw() {
+        lastDrawAt = Date()
+        sessions.updateRunning { $0.draws += 1 }
+        let draws = sessions.running?.draws ?? 0
+        log("Draw \(draws)", level: .info)
+        applyScheduleIfDue(draws: draws)
+        enforceDoseLimit(draws: draws)
+    }
+
+    private func recordTemperature(_ celsius: Double) {
+        guard let session = sessions.running else { return }
+        let now = Date()
+        if let last = lastSampleAt, now.timeIntervalSince(last) < PaxSessionStore.sampleInterval {
+            // Still worth tracking the peak between samples: the highest point
+            // of a session is often between two of them.
+            if celsius > (session.peakTempC ?? -.infinity) {
+                sessions.updateRunning { $0.peakTempC = celsius }
+            }
+            return
+        }
+        lastSampleAt = now
+        let offset = now.timeIntervalSince(session.startedAt)
+        sessions.updateRunning {
+            $0.samples.append(PaxSession.Sample(at: offset, celsius: celsius))
+            if celsius > ($0.peakTempC ?? -.infinity) { $0.peakTempC = celsius }
+        }
+    }
+
+    // MARK: - The oven's own rules, on the app's terms
+
+    /// Called from the telemetry path rather than from a timer: the app holds
+    /// the connection in the background, where a timer may not fire, but a
+    /// reading always arrives. The clock that matters is the one in the data.
+    private func enforceAutoOff() {
+        guard settings.autoOffEnabled, canPowerOven, let session = sessions.running else { return }
+        let limit = TimeInterval(max(1, settings.autoOffMinutes) * 60)
+        guard session.idleSeconds(lastDrawAt: lastDrawAt) >= limit else { return }
+        log("No draw for \(settings.autoOffMinutes) minutes — switching the oven off", level: .info)
+        pendingEnding = .autoOff
+        setOvenEnabled(false, reason: "after \(settings.autoOffMinutes) idle minutes")
+    }
+
+    private func enforceDoseLimit(draws: Int) {
+        guard settings.doseLimitEnabled, canPowerOven else { return }
+        guard draws >= max(1, settings.doseLimitDraws) else { return }
+        log("Dose reached (\(draws) draws) — switching the oven off", level: .info)
+        pendingEnding = .doseLimit
+        setOvenEnabled(false, reason: "after \(draws) draws")
+    }
+
+    /// Writes the step the session has reached, if it is not already in force.
+    private func applyScheduleIfDue(draws: Int) {
+        guard settings.scheduleEnabled, settings.schedule.isUsable, sessions.running != nil else { return }
+        guard let wanted = settings.schedule.temperature(atDraws: draws) else { return }
+        guard wanted != lastScheduledTemperature else { return }
+        lastScheduledTemperature = wanted
+        log("Schedule: \(draws) draw(s) in, setting \(Int(wanted))°C", level: .info)
+        setCustomTemperature(wanted)
+    }
+
+    // MARK: - Profiles
+
+    /// Applies a saved profile: the temperature always, the mode and the colour
+    /// only where the profile carries them.
+    func apply(_ profile: PaxProfile) {
+        log("Applying profile \(profile.name): \(profile.summary)", level: .info)
+        setCustomTemperature(profile.temperatureC)
+        if let raw = profile.modeRaw, let mode = PaxDynamicMode(rawValue: raw) {
+            setDynamicMode(mode)
+        }
+        if let hex = profile.ledHex, let color = LedColor.fromHex(hex) {
+            applyLedColor(color)
+        }
+    }
+
+    // MARK: - Turning the oven off
+
+    /// Switching the oven off needs to know which bit is the heater, and
+    /// guessing at that is how the oven got stopped by accident in the first
+    /// place. Until the probe has run on this device, the button is not offered.
+    var canPowerOven: Bool {
+        canSetLipDetection && settings.heaterOptionBit != nil
+    }
+
+    /// Whether the app is the reason the oven is off. Cleared as soon as the
+    /// device shows any sign of heating again, including from its own button —
+    /// the app does not get to believe it is in charge longer than it is.
+    @Published private(set) var ovenPoweredOffByApp = false
+
+    /// The one thing the PAX's own app cannot do: switch the oven off from the
+    /// phone. Writes the current heating block with the heater bit cleared, and
+    /// puts it back to turn it on again.
+    func setOvenEnabled(_ on: Bool, reason: String = "from the app") {
+        guard canPowerOven else {
+            log("Cannot switch the oven \(on ? "on" : "off"): this device's heater bit has not been measured yet", level: .warn)
+            return
+        }
+        ovenPoweredOffByApp = !on
+        heatingParamsStoppedOven = false
+        writeHeatingParams(composedHeatingParams(ovenOn: on),
+                           note: "oven \(on ? "on" : "off") \(reason)")
+        if !on { finishSession(.manual) }
+    }
+
+
 
     /// Puts the current mode's factory heating parameters back, both lip
     /// behaviours included, and clears the app's memory of the switches. The
@@ -1526,6 +1807,24 @@ final class PaxDeviceViewModel: ObservableObject {
         PaxIntentBridge.statusSummary = { [weak self] in
             self?.spokenStatus ?? "The PAX is not connected"
         }
+        PaxIntentBridge.setOvenEnabled = { [weak self] on in
+            guard let self, self.canPowerOven else { return false }
+            self.setOvenEnabled(on, reason: "from a shortcut")
+            return true
+        }
+        PaxIntentBridge.applyProfile = { [weak self] name in
+            guard let self else { return nil }
+            let wanted = name.trimmingCharacters(in: .whitespaces).lowercased()
+            // Spoken names come back with the casing and spacing Siri heard, so
+            // match loosely rather than making the user say it exactly.
+            guard let profile = self.settings.profiles.first(where: {
+                $0.name.lowercased() == wanted
+            }) ?? self.settings.profiles.first(where: {
+                $0.name.lowercased().hasPrefix(wanted)
+            }) else { return nil }
+            self.apply(profile)
+            return "\(profile.name), \(profile.summary)"
+        }
     }
 
     /// What Siri reads back. Deliberately a sentence rather than the terse
@@ -1624,6 +1923,11 @@ final class PaxDeviceViewModel: ObservableObject {
         case .actualTemp:
             actualTempC = packet.temperatureCelsius
             updateWarmUpColor()
+            if let celsius = packet.temperatureCelsius {
+                trackTemperature(celsius)
+                recordTemperature(celsius)
+            }
+            enforceAutoOff()
         case .heaterSetPoint:
             targetTempC = packet.temperatureCelsius
             if let t = packet.temperatureCelsius {
@@ -1631,6 +1935,7 @@ final class PaxDeviceViewModel: ObservableObject {
             }
         case .battery:
             batteryLevel = packet.batteryLevel
+            if let level = packet.batteryLevel { trackBattery(Double(level)) }
             log("Battery: \(packet.batteryLevel.map { "\($0)%" } ?? "nil")", level: .info)
         case .chargeStatus:
             let charging = (packet.payload.count >= 1 && packet.payload[packet.payload.startIndex] != 0)
@@ -2037,6 +2342,16 @@ final class PaxDeviceViewModel: ObservableObject {
         deviceHeatingParams = nil
         heatingParamsStoppedOven = false
         lastHeatingParamsWrite = nil
+        // A session cannot be watched through a dropped link, so it ends here
+        // and says why, rather than being left open and later reporting a
+        // duration that includes however long the phone was away.
+        finishSession(.disconnected)
+        pendingEnding = nil
+        ovenPoweredOffByApp = false
+        tempTrail.removeAll()
+        batteryTrail.removeAll()
+        secondsToReady = nil
+        secondsToFull = nil
         shellColorIndex = nil
         ledBrightness = nil
         hapticAmplitude = nil

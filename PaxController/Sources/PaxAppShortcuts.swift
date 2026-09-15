@@ -28,6 +28,24 @@ struct PaxAppShortcuts: AppShortcutsProvider {
             systemImageName: "dial.medium")
 
         AppShortcut(
+            intent: SetPaxOvenIntent(),
+            phrases: [
+                "Turn my \(.applicationName) oven off",
+                "Switch the oven in \(.applicationName)",
+            ],
+            shortTitle: "Oven on or off",
+            systemImageName: "power")
+
+        AppShortcut(
+            intent: ApplyPaxProfileIntent(),
+            phrases: [
+                "Apply a profile in \(.applicationName)",
+                "Set up my \(.applicationName)",
+            ],
+            shortTitle: "Apply a profile",
+            systemImageName: "slider.horizontal.3")
+
+        AppShortcut(
             intent: PaxStatusIntent(),
             phrases: [
                 "Check my \(.applicationName)",

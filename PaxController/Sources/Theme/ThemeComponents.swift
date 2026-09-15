@@ -104,6 +104,7 @@ struct ThemedHeader: View {
 
             Spacer(minLength: 0)
             lockIndicator
+            powerButton(inCircle: true)
             gearButton(inCircle: true)
         }
         .foregroundStyle(t.ink)
@@ -136,6 +137,7 @@ struct ThemedHeader: View {
                     .foregroundStyle(battery <= 10 ? t.color(.low) : t.muted)
             }
             lockIndicator
+            powerButton(inCircle: false)
             gearButton(inCircle: false)
         }
         .padding(.horizontal, t.gutter)
@@ -147,6 +149,7 @@ struct ThemedHeader: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Spacer(minLength: 0)
+                powerButton(inCircle: true)
                 gearButton(inCircle: true)
             }
             .frame(height: 44)
@@ -181,6 +184,30 @@ struct ThemedHeader: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(t.accent)
                 .accessibilityLabel("Device locked")
+        }
+    }
+
+    /// Switches the oven off, and on again.
+    ///
+    /// The PAX's own app cannot do this; nothing could, until the heater bit
+    /// was measured on the device. It appears only once that measurement
+    /// exists, because without it the write would be a guess at which bit stops
+    /// the oven — and the wrong guess stops it anyway, by accident.
+    @ViewBuilder
+    private func powerButton(inCircle: Bool) -> some View {
+        if viewModel.canPowerOven {
+            let off = viewModel.ovenPoweredOffByApp || viewModel.heatingState == .ovenOff
+            Button {
+                viewModel.setOvenEnabled(off)
+            } label: {
+                Image(systemName: "power")
+                    .font(.system(size: inCircle ? 17 : 15, weight: .semibold))
+                    .frame(width: inCircle ? 38 : 30, height: inCircle ? 38 : 30)
+                    .background(inCircle ? t.plate : Color.clear, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(off ? t.muted : t.color(.low))
+            .accessibilityLabel(off ? "Switch the oven on" : "Switch the oven off")
         }
     }
 
@@ -253,7 +280,29 @@ struct ThemedReadout: View {
                     .foregroundStyle(t.muted)
             }
             .foregroundStyle(t.ink)
+
+            if let seconds = viewModel.secondsToReady {
+                // The one thing a person watching a warm-up actually wants, and
+                // the app has had the data for it all along: readings twice a
+                // second, and a slope through the last twenty.
+                Text(t.labelText("ready in \(PaxDeviceViewModel.shortDuration(seconds))"))
+                    .font(t.label())
+                    .tracking(t.labelTracking)
+                    .foregroundStyle(t.muted)
+                    .contentTransition(.numericText())
+                    .padding(.top, 4)
+                    .transition(.opacity)
+            } else if viewModel.isCharging == true, let seconds = viewModel.secondsToFull {
+                Text(t.labelText("full in \(PaxDeviceViewModel.shortDuration(seconds))"))
+                    .font(t.label())
+                    .tracking(t.labelTracking)
+                    .foregroundStyle(t.muted)
+                    .contentTransition(.numericText())
+                    .padding(.top, 4)
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.25), value: viewModel.secondsToReady == nil)
     }
 }
 

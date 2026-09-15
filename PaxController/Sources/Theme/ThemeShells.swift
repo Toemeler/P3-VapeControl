@@ -79,23 +79,11 @@ final class SessionRecorder: ObservableObject {
         return held.reduce(0, +) / Double(held.count)
     }
 
-    /// Seconds to the target, from the slope of the last few samples. Returns
-    /// nil rather than a guess when the climb is too short or too flat to say,
-    /// because a countdown that jumps about is worse than none at all.
-    func secondsToTarget(_ target: Double) -> Int? {
-        let recent = samples.suffix(8)
-        guard recent.count >= 4,
-              let first = recent.first, let last = recent.last else { return nil }
-        let elapsed = last.at.timeIntervalSince(first.at)
-        let climbed = last.celsius - first.celsius
-        guard elapsed > 1, climbed > 0.5 else { return nil }
-        let remaining = target - last.celsius
-        guard remaining > 0 else { return nil }
-        let rate = climbed / elapsed
-        let seconds = remaining / rate
-        guard seconds.isFinite, seconds > 0, seconds < 600 else { return nil }
-        return Int(seconds.rounded())
-    }
+    // The estimate used to live here, over the last eight samples this view
+    // happened to have seen. It lives on the view model now: the readings are
+    // the same ones, but they keep arriving while the screen is closed, so the
+    // countdown is right the moment a screen opens rather than a few seconds
+    // later. Every theme shows it, not only this one.
 
     static func clock(_ interval: TimeInterval) -> String {
         let total = max(0, Int(interval))
@@ -776,7 +764,7 @@ struct CountdownShell: View {
         }
         switch viewModel.heatingState {
         case .heating:
-            if let seconds = recorder.secondsToTarget(viewModel.customTargetTempC) {
+            if let seconds = viewModel.secondsToReady {
                 return ("Ready in about", "\(seconds)", "sec")
             }
             return nil

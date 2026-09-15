@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA000104 /* SessionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000104 /* SessionHistoryView.swift */; };
+		AA000105 /* ProfilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000105 /* ProfilesView.swift */; };
+		AA000102 /* PaxSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000102 /* PaxSession.swift */; };
+		AA000103 /* PaxProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000103 /* PaxProfile.swift */; };
 		AA000100 /* PaxProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000100 /* PaxProtocolTests.swift */; };
 		AA000101 /* PaxActivityStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000101 /* PaxActivityStateTests.swift */; };
 		AA000110 /* PaxProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000003 /* PaxProtocol.swift */; };
@@ -75,6 +79,10 @@
 /* Begin PBXFileReference section */
 		AB000001 /* PaxControllerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxControllerApp.swift; sourceTree = "<group>"; };
 		AB000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AB000104 /* SessionHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionHistoryView.swift; sourceTree = "<group>"; };
+		AB000105 /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
+		AB000102 /* PaxSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxSession.swift; sourceTree = "<group>"; };
+		AB000103 /* PaxProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxProfile.swift; sourceTree = "<group>"; };
 		AB000100 /* PaxProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxProtocolTests.swift; sourceTree = "<group>"; };
 		AB000101 /* PaxActivityStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxActivityStateTests.swift; sourceTree = "<group>"; };
 		AC000004 /* PaxControllerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PaxControllerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -187,6 +195,10 @@
 				AB000042 /* LiveActivityController.swift */,
 				AB000043 /* PaxActivityAttributes.swift */,
 				AB000044 /* PaxColorTheme.swift */,
+				AB000102 /* PaxSession.swift */,
+				AB000103 /* PaxProfile.swift */,
+				AB000104 /* SessionHistoryView.swift */,
+				AB000105 /* ProfilesView.swift */,
 				AB000045 /* PaxIntents.swift */,
 				AB000046 /* PaxAppShortcuts.swift */,
 				AB000047 /* ReadyNotifier.swift */,
@@ -355,6 +367,10 @@
 				AA000001 /* PaxControllerApp.swift in Sources */,
 				AA000002 /* ContentView.swift in Sources */,
 				AA000003 /* PaxProtocol.swift in Sources */,
+				AA000102 /* PaxSession.swift in Sources */,
+				AA000103 /* PaxProfile.swift in Sources */,
+				AA000104 /* SessionHistoryView.swift in Sources */,
+				AA000105 /* ProfilesView.swift in Sources */,
 				AA000004 /* BluetoothManager.swift in Sources */,
 				AA000007 /* DebugConsoleView.swift in Sources */,
 				AA000010 /* PaxDeviceViewModel.swift in Sources */,

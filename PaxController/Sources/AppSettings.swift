@@ -23,6 +23,14 @@ final class AppSettings: ObservableObject {
         static let lipDetection    = "lipDetectionEnabled"
         static let lipCooling      = "lipCoolingEnabled"
         static let lipShutdown     = "lipShutdownEnabled"
+        static let autoOff         = "autoOffEnabled"
+        static let autoOffMinutes  = "autoOffMinutes"
+        static let doseLimit       = "doseLimitEnabled"
+        static let doseDraws       = "doseLimitDraws"
+        static let profiles        = "savedProfiles"
+        static let schedule        = "temperatureSchedule"
+        static let scheduleOn      = "temperatureScheduleEnabled"
+        static let historyOn       = "sessionHistoryEnabled"
         static let heaterBit       = "heaterOptionBit"
     }
 
@@ -117,6 +125,58 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    // MARK: - The oven, on the app's terms
+
+    /// Switch the oven off once a session has been idle this long. The device
+    /// has its own version of this, tied to the lip sensor and fixed at three
+    /// minutes; this one counts from the last draw, works with the lip sensor
+    /// off, and can be set to something a person actually wants.
+    @Published var autoOffEnabled: Bool {
+        didSet { defaults.set(autoOffEnabled, forKey: Key.autoOff) }
+    }
+
+    @Published var autoOffMinutes: Int {
+        didSet { defaults.set(autoOffMinutes, forKey: Key.autoOffMinutes) }
+    }
+
+    /// Switch the oven off after a set number of draws. Nothing on the device
+    /// counts draws; the app does, because it watches the heating state.
+    @Published var doseLimitEnabled: Bool {
+        didSet { defaults.set(doseLimitEnabled, forKey: Key.doseLimit) }
+    }
+
+    @Published var doseLimitDraws: Int {
+        didSet { defaults.set(doseLimitDraws, forKey: Key.doseDraws) }
+    }
+
+    /// Whether sessions are written down at all. Off means nothing is stored,
+    /// and turning it off offers to clear what is already there.
+    @Published var sessionHistoryEnabled: Bool {
+        didSet { defaults.set(sessionHistoryEnabled, forKey: Key.historyOn) }
+    }
+
+    @Published var scheduleEnabled: Bool {
+        didSet { defaults.set(scheduleEnabled, forKey: Key.scheduleOn) }
+    }
+
+    @Published var schedule: PaxSchedule {
+        didSet { Self.store(schedule, in: defaults, forKey: Key.schedule) }
+    }
+
+    @Published var profiles: [PaxProfile] {
+        didSet { Self.store(profiles, in: defaults, forKey: Key.profiles) }
+    }
+
+    private static func store<T: Encodable>(_ value: T, in defaults: UserDefaults, forKey key: String) {
+        guard let data = try? JSONEncoder().encode(value) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    private static func read<T: Decodable>(_ type: T.Type, from defaults: UserDefaults, forKey key: String) -> T? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -141,6 +201,20 @@ final class AppSettings: ObservableObject {
         let lipLegacy = defaults.object(forKey: Key.lipDetection) as? Bool ?? true
         lipCoolingEnabled  = defaults.object(forKey: Key.lipCooling) as? Bool ?? lipLegacy
         lipShutdownEnabled = defaults.object(forKey: Key.lipShutdown) as? Bool ?? lipLegacy
+        // Off by default, all of it. These change what the oven does on its
+        // own, and nobody should discover them by having the device behave
+        // differently than it did yesterday.
+        autoOffEnabled      = defaults.object(forKey: Key.autoOff) as? Bool ?? false
+        autoOffMinutes      = defaults.object(forKey: Key.autoOffMinutes) as? Int ?? 10
+        doseLimitEnabled    = defaults.object(forKey: Key.doseLimit) as? Bool ?? false
+        doseLimitDraws      = defaults.object(forKey: Key.doseDraws) as? Int ?? 6
+        scheduleEnabled     = defaults.object(forKey: Key.scheduleOn) as? Bool ?? false
+        schedule            = Self.read(PaxSchedule.self, from: defaults, forKey: Key.schedule) ?? .suggested
+        // History is the exception: it costs nothing, it is local, and a
+        // history that only starts once someone thinks to switch it on is a
+        // history with a hole where the interesting part was.
+        sessionHistoryEnabled = defaults.object(forKey: Key.historyOn) as? Bool ?? true
+        profiles            = Self.read([PaxProfile].self, from: defaults, forKey: Key.profiles) ?? PaxProfile.starters
         heaterOptionBit     = defaults.object(forKey: Key.heaterBit) as? Int
         // On by default: the four states carry the palette below, which is
         // what makes the PAX show what it is doing rather than one flat colour.

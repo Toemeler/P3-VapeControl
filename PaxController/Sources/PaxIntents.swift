@@ -16,6 +16,12 @@ import Foundation
 enum PaxIntentBridge {
     static var setTemperature: ((Int) -> Void)?
     static var setDynamicMode: ((UInt8) -> Void)?
+    /// Switches the oven off, or back on. Nil in the extension, and nil in the
+    /// app until a device has had its heater bit measured — which is why the
+    /// intent reports what happened rather than assuming it worked.
+    static var setOvenEnabled: ((Bool) -> Bool)?
+    /// Applies a saved profile by name, returning what it matched.
+    static var applyProfile: ((String) -> String?)?
     /// A one-line description of what the PAX is doing, for Siri to read back.
     static var statusSummary: (() -> String)?
 
@@ -100,6 +106,53 @@ struct SetPaxModeIntent: AppIntent {
         PaxIntentBridge.setDynamicMode?(mode.wireValue)
         let name = PaxModeChoice.caseDisplayRepresentations[mode]?.title ?? "\(mode.rawValue)"
         return .result(dialog: IntentDialog(stringLiteral: "PAX set to \(name)"))
+    }
+}
+
+@available(iOS 16.0, *)
+struct SetPaxOvenIntent: AppIntent {
+    static var title: LocalizedStringResource = "Turn the PAX oven on or off"
+    static var description = IntentDescription(
+        "Switches the PAX's heater. Needs the heater bit to have been measured on the device first, in Settings.")
+    static var openAppWhenRun: Bool = false
+
+    @Parameter(title: "On", default: false)
+    var on: Bool
+
+    init() {}
+    init(on: Bool) { self.on = on }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        guard let handler = PaxIntentBridge.setOvenEnabled else {
+            return .result(dialog: "The PAX is not connected")
+        }
+        let worked = handler(on)
+        guard worked else {
+            return .result(dialog: "Run \u{201C}Find the heater bit\u{201D} in the app's settings first — without it, switching the oven is a guess")
+        }
+        return .result(dialog: on ? "PAX oven on" : "PAX oven off")
+    }
+}
+
+@available(iOS 16.0, *)
+struct ApplyPaxProfileIntent: AppIntent {
+    static var title: LocalizedStringResource = "Apply a PAX profile"
+    static var description = IntentDescription("Sets the temperature, mode and colour from one of your saved profiles.")
+    static var openAppWhenRun: Bool = false
+
+    @Parameter(title: "Profile name")
+    var name: String
+
+    init() {}
+    init(name: String) { self.name = name }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        guard let applied = PaxIntentBridge.applyProfile?(name) else {
+            return .result(dialog: IntentDialog(stringLiteral: "No profile called \(name)"))
+        }
+        return .result(dialog: IntentDialog(stringLiteral: "PAX set to \(applied)"))
     }
 }
 

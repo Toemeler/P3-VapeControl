@@ -29,6 +29,8 @@ struct DeviceSheet: View {
                 ledModeSection
                 alertsSection
                 temperatureSection
+                sessionsSection
+                ovenRulesSection
                 ovenSection
                 connectionSection
                 lockScreenSection
@@ -140,6 +142,84 @@ struct DeviceSheet: View {
                 row("On device", value: unit.format(target, decimals: 1))
             }
         }
+    }
+
+    /// Everything the app knows about how the PAX gets used, which is more than
+    /// the device itself keeps: a PAX 3 has no session log, so this is the only
+    /// place that record exists.
+    private var sessionsSection: some View {
+        Section {
+            NavigationLink {
+                SessionHistoryView()
+            } label: {
+                LabeledContent("History") {
+                    Text(historySummary).foregroundStyle(.secondary)
+                }
+            }
+            NavigationLink {
+                ProfilesView()
+            } label: {
+                LabeledContent("Profiles") {
+                    Text("\(settings.profiles.count)").foregroundStyle(.secondary)
+                }
+            }
+            NavigationLink {
+                ScheduleView()
+            } label: {
+                LabeledContent("Temperature schedule") {
+                    Text(settings.scheduleEnabled ? settings.schedule.summary : "Off")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Toggle("Record sessions", isOn: $settings.sessionHistoryEnabled)
+        } header: {
+            Text("Sessions")
+        } footer: {
+            Text("A PAX 3 keeps no log of its own — the one the official app reads belongs to the Era — so a session is what this app saw while it was connected. Nothing leaves the phone.")
+        }
+    }
+
+    private var historySummary: String {
+        let store = PaxSessionStore.shared
+        let count = store.finished.count
+        guard count > 0 else { return "None yet" }
+        return "\(count) session\(count == 1 ? "" : "s")"
+    }
+
+    /// The oven's behaviour on the app's terms rather than the firmware's. All
+    /// of it needs the heater bit, because all of it ends in switching the oven
+    /// off, and doing that without the measurement is a guess.
+    @ViewBuilder
+    private var ovenRulesSection: some View {
+        Section {
+            Toggle("Switch off when idle", isOn: $settings.autoOffEnabled)
+                .disabled(!viewModel.canPowerOven)
+            if settings.autoOffEnabled {
+                Stepper(value: $settings.autoOffMinutes, in: 1...120) {
+                    LabeledContent("After", value: "\(settings.autoOffMinutes) min")
+                }
+                .disabled(!viewModel.canPowerOven)
+            }
+            Toggle("Switch off after a dose", isOn: $settings.doseLimitEnabled)
+                .disabled(!viewModel.canPowerOven)
+            if settings.doseLimitEnabled {
+                Stepper(value: $settings.doseLimitDraws, in: 1...30) {
+                    LabeledContent("Draws", value: "\(settings.doseLimitDraws)")
+                }
+                .disabled(!viewModel.canPowerOven)
+            }
+        } header: {
+            Text("Switching off")
+        } footer: {
+            Text(ovenRulesNote)
+        }
+    }
+
+    private var ovenRulesNote: String {
+        guard viewModel.canPowerOven else {
+            return "Switching the oven off needs the heater bit, which is measured below. Without it the app would be guessing at which bit stops the oven, and the wrong guess stops it anyway."
+        }
+        return "The device has a version of the idle timer built in, fixed at three minutes from the last draw and tied to the lip sensor. This one is yours: it counts from the last draw the app saw, works with the lip sensor off, and the dose limit counts draws, which nothing on the device does at all."
     }
 
     /// The lip sensor's hold over the oven, split into the two things it
