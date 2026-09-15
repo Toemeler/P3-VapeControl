@@ -22,6 +22,9 @@
 		AA000042 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000042 /* LiveActivityController.swift */; };
 		AA000043 /* PaxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000043 /* PaxActivityAttributes.swift */; };
 		AA000044 /* PaxColorTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000044 /* PaxColorTheme.swift */; };
+		AA000045 /* PaxIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000045 /* PaxIntents.swift */; };
+		AA000046 /* PaxAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000046 /* PaxAppShortcuts.swift */; };
+		AA000054 /* PaxIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000045 /* PaxIntents.swift */; };
 		AA000050 /* PaxLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000050 /* PaxLiveActivityBundle.swift */; };
 		AA000051 /* PaxStatusLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000051 /* PaxStatusLiveActivity.swift */; };
 		AA000052 /* PaxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000043 /* PaxActivityAttributes.swift */; };
@@ -71,6 +74,8 @@
 		AB000042 /* LiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityController.swift; sourceTree = "<group>"; };
 		AB000043 /* PaxActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxActivityAttributes.swift; sourceTree = "<group>"; };
 		AB000044 /* PaxColorTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxColorTheme.swift; sourceTree = "<group>"; };
+		AB000045 /* PaxIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxIntents.swift; sourceTree = "<group>"; };
+		AB000046 /* PaxAppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxAppShortcuts.swift; sourceTree = "<group>"; };
 		AB000050 /* PaxLiveActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxLiveActivityBundle.swift; sourceTree = "<group>"; };
 		AB000051 /* PaxStatusLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxStatusLiveActivity.swift; sourceTree = "<group>"; };
 		AB000052 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -135,6 +140,8 @@
 				AB000042 /* LiveActivityController.swift */,
 				AB000043 /* PaxActivityAttributes.swift */,
 				AB000044 /* PaxColorTheme.swift */,
+				AB000045 /* PaxIntents.swift */,
+				AB000046 /* PaxAppShortcuts.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -270,6 +277,8 @@
 				AA000042 /* LiveActivityController.swift in Sources */,
 				AA000043 /* PaxActivityAttributes.swift in Sources */,
 				AA000044 /* PaxColorTheme.swift in Sources */,
+				AA000045 /* PaxIntents.swift in Sources */,
+				AA000046 /* PaxAppShortcuts.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -281,6 +290,7 @@
 				AA000051 /* PaxStatusLiveActivity.swift in Sources */,
 				AA000052 /* PaxActivityAttributes.swift in Sources */,
 				AA000053 /* LedColor.swift in Sources */,
+				AA000054 /* PaxIntents.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

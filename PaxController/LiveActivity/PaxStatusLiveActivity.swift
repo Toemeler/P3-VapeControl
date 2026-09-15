@@ -60,6 +60,39 @@ private struct LockScreenCard: View {
     private var accent: Color { state.accent }
 
     var body: some View {
+        VStack(spacing: 10) {
+            summary
+            // iOS 17 is where a Lock Screen button can run an intent in the
+            // app's process, which is the only place the Bluetooth write can
+            // happen. Below that the card stays a readout.
+            if #available(iOS 17.0, *), state.isConnected {
+                temperatureButtons
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    @available(iOS 17.0, *)
+    private var temperatureButtons: some View {
+        HStack(spacing: 8) {
+            ForEach(PaxQuickTemperatures.all, id: \.self) { celsius in
+                Button(intent: PaxQuickTemperatureIntent(celsius: celsius)) {
+                    Text(state.useFahrenheit
+                         ? "\(Int((Double(celsius) * 9 / 5 + 32).rounded()))°"
+                         : "\(celsius)°")
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+                .background(accent.opacity(0.22), in: Capsule())
+                .foregroundColor(.white)
+            }
+        }
+    }
+
+    private var summary: some View {
         HStack(spacing: 14) {
             ZStack {
                 Circle()
@@ -99,8 +132,6 @@ private struct LockScreenCard: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
     }
 }
 

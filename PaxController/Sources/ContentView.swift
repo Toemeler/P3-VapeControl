@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var viewModel = PaxDeviceViewModel()
+    @StateObject private var viewModel = PaxDeviceViewModel.shared
     @StateObject private var settings = AppSettings.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var showDeviceSheet = false

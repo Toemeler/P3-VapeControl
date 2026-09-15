@@ -199,6 +199,12 @@ final class PaxDeviceViewModel: ObservableObject {
     /// UI sets the key.
     private let demoMode = UserDefaults.standard.bool(forKey: "uiDemo")
 
+    /// One instance for the whole process. An App Intent fired from the Lock
+    /// Screen or from Siri runs in the app — possibly launched into the
+    /// background for it, with no window on screen — so it needs a view model
+    /// that exists without a view having asked for one.
+    static let shared = PaxDeviceViewModel()
+
     init() {
         bluetooth.delegate = self
         rememberedDeviceName = Self.storedDeviceName
@@ -823,6 +829,40 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     func clearLog() { debugLog.removeAll() }
+
+    // MARK: - App Intents
+
+    /// Hands the intents a way in. Called once from the app's initialiser, so
+    /// it is set even on a launch that never shows a window.
+    func installIntentHandlers() {
+        PaxIntentBridge.setTemperature = { [weak self] celsius in
+            self?.setCustomTemperature(Double(celsius))
+        }
+        PaxIntentBridge.setDynamicMode = { [weak self] raw in
+            guard let mode = PaxDynamicMode(rawValue: raw) else { return }
+            self?.setDynamicMode(mode)
+        }
+        PaxIntentBridge.statusSummary = { [weak self] in
+            self?.spokenStatus ?? "The PAX is not connected"
+        }
+    }
+
+    /// What Siri reads back. Deliberately a sentence rather than the terse
+    /// headline the Lock Screen card uses.
+    var spokenStatus: String {
+        guard connectionState.isConnected else { return "The PAX is not connected" }
+        var parts: [String] = []
+        if let actual = actualTempC {
+            parts.append("\(Int(actual.rounded())) degrees")
+        }
+        if let target = targetTempC, target != actualTempC {
+            parts.append("set to \(Int(target.rounded()))")
+        }
+        if let state = heatingState { parts.append(state.description.lowercased()) }
+        if let battery = batteryLevel { parts.append("battery \(battery) percent") }
+        guard !parts.isEmpty else { return "The PAX is connected" }
+        return "The PAX is " + parts.joined(separator: ", ")
+    }
 
     // MARK: - Internal helpers
 
