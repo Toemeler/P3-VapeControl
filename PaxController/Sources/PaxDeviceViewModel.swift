@@ -1168,11 +1168,42 @@ final class PaxDeviceViewModel: ObservableObject {
             targetTempC: targetTempC?.rounded(),
             ledColorHex: settings.ledColorHex,
             useFahrenheit: settings.useFahrenheit)
-        LiveActivityController.shared.sync(
-            deviceName: connectionState.isConnected ? deviceLabel
-                : (rememberedDeviceName ?? settings.deviceNickname ?? "PAX"),
-            state: state)
+        let name = connectionState.isConnected ? deviceLabel
+            : (rememberedDeviceName ?? settings.deviceNickname ?? "PAX")
+        LiveActivityController.shared.sync(deviceName: name, state: state)
+        publishSnapshot(named: name)
     }
+
+    /// The Home Screen widget's copy of all this. Written on the same beat as
+    /// the Lock Screen card, and only when something in it actually changed —
+    /// a widget reload costs the system a process launch, and the temperature
+    /// moving a tenth of a degree is not worth one.
+    private func publishSnapshot(named name: String) {
+        let today = Calendar.current.startOfDay(for: Date())
+        let todays = sessions.sessions(since: today)
+        let snapshot = PaxSnapshot(
+            isConnected: connectionState.isConnected,
+            headline: statusHeadline,
+            deviceName: name,
+            batteryLevel: batteryLevel,
+            isCharging: isCharging ?? false,
+            actualTempC: actualTempC?.rounded(),
+            targetTempC: targetTempC?.rounded(),
+            useFahrenheit: settings.useFahrenheit,
+            ledColorHex: settings.ledColorHex,
+            updatedAt: Date(),
+            sessionsToday: todays.count,
+            drawsToday: todays.reduce(0) { $0 + $1.draws })
+        // `updatedAt` differs on every call, so compare everything else.
+        var comparable = snapshot
+        comparable.updatedAt = lastSnapshot?.updatedAt ?? .distantPast
+        guard comparable != lastSnapshot else { return }
+        lastSnapshot = comparable
+        PaxSharedStore.write(snapshot)
+        PaxSharedStore.reloadWidgets()
+    }
+
+    private var lastSnapshot: PaxSnapshot?
 
     /// What the Lock Screen card is about, which is not quite the heating state:
     /// the charger outranks the oven, and a PAX that is not there outranks both.

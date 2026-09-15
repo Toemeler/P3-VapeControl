@@ -5,5 +5,6 @@ import WidgetKit
 struct PaxLiveActivityBundle: WidgetBundle {
     var body: some Widget {
         PaxStatusLiveActivity()
+        PaxStatusWidget()
     }
 }

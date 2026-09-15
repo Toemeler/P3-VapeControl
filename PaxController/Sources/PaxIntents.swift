@@ -131,7 +131,9 @@ struct SetPaxOvenIntent: AppIntent {
         guard worked else {
             return .result(dialog: "Run \u{201C}Find the heater bit\u{201D} in the app's settings first — without it, switching the oven is a guess")
         }
-        return .result(dialog: on ? "PAX oven on" : "PAX oven off")
+        // Built rather than written inline: a ternary of two string literals
+        // infers String, which is not what `dialog:` wants.
+        return .result(dialog: IntentDialog(stringLiteral: on ? "PAX oven on" : "PAX oven off"))
     }
 }
 

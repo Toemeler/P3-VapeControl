@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA000106 /* PaxSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000106 /* PaxSharedState.swift */; };
+		AA000107 /* PaxSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000106 /* PaxSharedState.swift */; };
+		AA000108 /* PaxStatusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000107 /* PaxStatusWidget.swift */; };
 		AA000104 /* SessionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000104 /* SessionHistoryView.swift */; };
 		AA000105 /* ProfilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000105 /* ProfilesView.swift */; };
 		AA000102 /* PaxSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000102 /* PaxSession.swift */; };
@@ -79,6 +82,10 @@
 /* Begin PBXFileReference section */
 		AB000001 /* PaxControllerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxControllerApp.swift; sourceTree = "<group>"; };
 		AB000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AB000106 /* PaxSharedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxSharedState.swift; sourceTree = "<group>"; };
+		AB000107 /* PaxStatusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxStatusWidget.swift; sourceTree = "<group>"; };
+		AB000108 /* PaxController.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PaxController.entitlements; sourceTree = "<group>"; };
+		AB000109 /* PaxLiveActivity.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PaxLiveActivity.entitlements; sourceTree = "<group>"; };
 		AB000104 /* SessionHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionHistoryView.swift; sourceTree = "<group>"; };
 		AB000105 /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
 		AB000102 /* PaxSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxSession.swift; sourceTree = "<group>"; };
@@ -199,6 +206,7 @@
 				AB000103 /* PaxProfile.swift */,
 				AB000104 /* SessionHistoryView.swift */,
 				AB000105 /* ProfilesView.swift */,
+				AB000106 /* PaxSharedState.swift */,
 				AB000045 /* PaxIntents.swift */,
 				AB000046 /* PaxAppShortcuts.swift */,
 				AB000047 /* ReadyNotifier.swift */,
@@ -219,6 +227,7 @@
 			isa = PBXGroup;
 			children = (
 				AB000008 /* Info.plist */,
+				AB000108 /* PaxController.entitlements */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -228,7 +237,9 @@
 			children = (
 				AB000050 /* PaxLiveActivityBundle.swift */,
 				AB000051 /* PaxStatusLiveActivity.swift */,
+				AB000107 /* PaxStatusWidget.swift */,
 				AB000052 /* Info.plist */,
+				AB000109 /* PaxLiveActivity.entitlements */,
 			);
 			path = LiveActivity;
 			sourceTree = "<group>";
@@ -371,6 +382,7 @@
 				AA000103 /* PaxProfile.swift in Sources */,
 				AA000104 /* SessionHistoryView.swift in Sources */,
 				AA000105 /* ProfilesView.swift in Sources */,
+				AA000106 /* PaxSharedState.swift in Sources */,
 				AA000004 /* BluetoothManager.swift in Sources */,
 				AA000007 /* DebugConsoleView.swift in Sources */,
 				AA000010 /* PaxDeviceViewModel.swift in Sources */,
@@ -407,6 +419,8 @@
 				AA000052 /* PaxActivityAttributes.swift in Sources */,
 				AA000053 /* LedColor.swift in Sources */,
 				AA000054 /* PaxIntents.swift in Sources */,
+				AA000107 /* PaxSharedState.swift in Sources */,
+				AA000108 /* PaxStatusWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -547,6 +561,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6TN58RP29N;
+				CODE_SIGN_ENTITLEMENTS = PaxController/Resources/PaxController.entitlements;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PaxController/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
@@ -568,6 +583,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6TN58RP29N;
+				CODE_SIGN_ENTITLEMENTS = PaxController/Resources/PaxController.entitlements;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PaxController/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
@@ -584,6 +600,7 @@
 		BC000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PaxController/LiveActivity/PaxLiveActivity.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6TN58RP29N;
@@ -608,6 +625,7 @@
 		BC000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PaxController/LiveActivity/PaxLiveActivity.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6TN58RP29N;
