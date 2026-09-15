@@ -1,0 +1,96 @@
+# Builds the lab flavour of the app: the normal app plus a screen for pulling
+# the PAX protocol apart — a sweep of every attribute, snapshots to diff the
+# device against itself in different states, and arbitrary attribute writes.
+#
+# Kept apart from `Build` on purpose. It ships under its own bundle id so it
+# installs alongside the normal app, it never touches the screenshots, the
+# README or the SideStore feed, and every release it cuts is a prerelease. The
+# writes it allows can take a device offline; nothing here should ever be the
+# build somebody installs by accident.
+
+name: Lab
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lab:
+    name: Build the lab IPA
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stamp the version
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION="1.0.${{ github.run_number }}"
+          PLIST=PaxController/Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$PLIST"
+          EXT_PLIST=PaxController/LiveActivity/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$EXT_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$EXT_PLIST"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          set -o pipefail
+          .github/scripts/build_app.sh Release iphoneos \
+            de.marcomeissner.PaxControllerLab "PAX Lab" \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS=PAX_LAB 2>&1 | tee lab-build.log
+          mkdir -p build/release && mv build/Release-iphoneos/PaxController.app build/release/
+
+      - name: Package the IPA
+        id: package
+        run: |
+          set -euo pipefail
+          .github/scripts/package_ipa.sh build/release/PaxController.app PaxControllerLab.ipa
+          echo "human_size=$(ls -lh PaxControllerLab.ipa | awk '{print $5}')" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 PaxControllerLab.ipa | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the build log when it fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-build-log
+          path: lab-build.log
+          if-no-files-found: ignore
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > notes.indented.md <<'NOTES'
+          **A build for taking the protocol apart.** Separate bundle id, so it
+          installs next to the normal app rather than replacing it.
+
+          Settings → Diagnostics → **Lab**:
+
+          - **Sweep** — asks for all 63 addressable attributes, three times
+            over. Only the ones this firmware implements answer, and three
+            reads separate each payload from the uninitialised bytes behind it.
+          - **Snapshots** — capture what every attribute reads in one state,
+            change the state, capture again. The attributes that differ are the
+            ones that mean something about it.
+          - **Write** — any attribute, any bytes, with the length the device
+            itself reported to match against. Every write is logged *before* it
+            is sent, so one that takes the device offline is still on record
+            when the app comes back.
+          - **Report** — all of it as text, to copy out in one go.
+
+          Unsigned · iOS 16+ · ${{ steps.package.outputs.human_size }}
+          `${{ steps.package.outputs.sha256 }}`
+          NOTES
+          sed 's/^          //' notes.indented.md > notes.md
+          gh release create "lab-${{ github.run_number }}" PaxControllerLab.ipa \
+            --target "${{ github.sha }}" \
+            --title "Lab #${{ github.run_number }} (${{ github.ref_name }})" \
+            --notes-file notes.md \
+            --prerelease

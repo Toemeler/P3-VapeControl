@@ -1,0 +1,265 @@
+#if PAX_LAB
+import SwiftUI
+import UIKit
+
+/// The lab build's own screen. Reads are free and run in bulk; snapshots are
+/// how an undecoded attribute is pinned down by comparing the device in two
+/// states; writes are deliberately awkward to reach, because a guessed payload
+/// is what took this device offline the first time.
+struct PaxLabView: View {
+    @EnvironmentObject var viewModel: PaxDeviceViewModel
+    @StateObject private var lab = PaxLab.shared
+
+    @State private var snapshotLabel = ""
+    @State private var writeAttribute = ""
+    @State private var writePayload = ""
+    @State private var showWriteConfirm = false
+    @State private var copied = false
+
+    private var connected: Bool { viewModel.connectionState.isConnected }
+
+    var body: some View {
+        List {
+            sweepSection
+            attributesSection
+            snapshotSection
+            writeSection
+            writeLogSection
+            reportSection
+        }
+        .navigationTitle("Lab")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // MARK: - Sweep
+
+    private var sweepSection: some View {
+        Section {
+            Button {
+                viewModel.labSweep()
+            } label: {
+                HStack {
+                    Text("Read every attribute")
+                    if lab.sweepInProgress {
+                        Spacer()
+                        ProgressView().controlSize(.small)
+                    }
+                }
+            }
+            .disabled(!connected || lab.sweepInProgress)
+
+            Button("Forget what was read", role: .destructive) { lab.forgetSamples() }
+                .disabled(lab.samples.isEmpty)
+        } header: {
+            Text("Sweep")
+        } footer: {
+            Text("Asks for all 63 addressable attributes, three times over, in batches. Only the ones this firmware implements answer — silence is an answer too. Three reads separate the payload from the uninitialised bytes behind it.")
+        }
+    }
+
+    // MARK: - What answered
+
+    @ViewBuilder
+    private var attributesSection: some View {
+        if !lab.answeredAttributes.isEmpty {
+            Section("Answered (\(lab.answeredAttributes.count))") {
+                ForEach(lab.answeredAttributes, id: \.self) { attribute in
+                    attributeRow(attribute)
+                }
+            }
+        }
+    }
+
+    private func attributeRow(_ attribute: UInt8) -> some View {
+        let payload = lab.stable(attribute) ?? Data()
+        let name = PaxMessageType(rawValue: attribute).map { "\($0)" } ?? "unnamed"
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(String(format: "0x%02X", attribute))
+                    .font(.system(.subheadline, design: .monospaced).weight(.semibold))
+                Text(name)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(payload.count) B")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+            Text(payload.isEmpty ? "—" : PaxLab.hex(payload))
+                .font(.system(.caption, design: .monospaced))
+            let notes = PaxDeviceViewModel.interpretation(of: payload, id: attribute)
+            if !notes.isEmpty {
+                Text(notes.trimmingCharacters(in: CharacterSet(charactersIn: " —")))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onTapGesture { viewModel.labRead(attribute: attribute) }
+    }
+
+    // MARK: - Snapshots
+
+    private var snapshotSection: some View {
+        Section {
+            HStack {
+                TextField("heating, charging, lid off…", text: $snapshotLabel)
+                    .autocorrectionDisabled()
+                Button("Capture") {
+                    lab.takeSnapshot(label: snapshotLabel)
+                    snapshotLabel = ""
+                }
+                .disabled(lab.answeredAttributes.isEmpty)
+            }
+
+            ForEach(lab.snapshots) { snapshot in
+                HStack {
+                    Text(snapshot.label)
+                    Spacer()
+                    Text("\(snapshot.values.count) attributes")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if lab.snapshots.count >= 2 {
+                let a = lab.snapshots[lab.snapshots.count - 2]
+                let b = lab.snapshots[lab.snapshots.count - 1]
+                let diffs = lab.differences(a, b)
+                DisclosureGroup("\(a.label) → \(b.label): \(diffs.count) changed") {
+                    if diffs.isEmpty {
+                        Text("Nothing moved.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    ForEach(diffs, id: \.attribute) { diff in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(format: "0x%02X %@", diff.attribute,
+                                        PaxMessageType(rawValue: diff.attribute).map { "\($0)" } ?? "unnamed"))
+                                .font(.caption.weight(.semibold))
+                            Text("\(diff.before)  →  \(diff.after)")
+                                .font(.system(.caption2, design: .monospaced))
+                        }
+                    }
+                }
+            }
+
+            if !lab.snapshots.isEmpty {
+                Button("Delete snapshots", role: .destructive) { lab.deleteSnapshots() }
+            }
+        } header: {
+            Text("Snapshots")
+        } footer: {
+            Text("Sweep, then capture with the PAX in one state; change the state and do it again. The attributes that differ are the ones that mean something about that state — this is how HeatingParams gives up which byte is which.")
+        }
+    }
+
+    // MARK: - Writes
+
+    private var writeSection: some View {
+        Section {
+            TextField("Attribute, e.g. 19", text: $writeAttribute)
+                .autocorrectionDisabled()
+            TextField("Payload bytes, e.g. 01 or 00 0A", text: $writePayload)
+                .autocorrectionDisabled()
+                .font(.system(.body, design: .monospaced))
+            Button("Write") { showWriteConfirm = true }
+                .disabled(!connected || parsedWrite == nil)
+                .foregroundStyle(.red)
+        } header: {
+            Text("Write")
+        } footer: {
+            Text("A payload the firmware does not expect can take the device offline: a three-byte write to ColorTheme once made it read a mode count of 255 and walk two kilobytes off a fifteen-byte buffer. Read an attribute first, match the length it reports, and change one byte at a time. Every write is logged before it is sent, so one that kills the link is still on record afterwards.")
+        }
+        .confirmationDialog("Write to the device?",
+                            isPresented: $showWriteConfirm, titleVisibility: .visible) {
+            Button("Write it", role: .destructive) {
+                if let write = parsedWrite {
+                    viewModel.labWrite(attribute: write.attribute, payload: write.payload)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let write = parsedWrite {
+                Text(String(format: "0x%02X ← %@\n\nIf the PAX goes quiet after this, power-cycle it; the write stays in the log.",
+                            write.attribute, PaxLab.hex(write.payload)))
+            }
+        }
+    }
+
+    private var parsedWrite: (attribute: UInt8, payload: Data)? {
+        guard let attributeByte = PaxLab.bytes(fromHex: writeAttribute)?.first,
+              let payload = PaxLab.bytes(fromHex: writePayload), !payload.isEmpty else { return nil }
+        return (attributeByte, payload)
+    }
+
+    @ViewBuilder
+    private var writeLogSection: some View {
+        if !lab.writes.isEmpty {
+            Section {
+                if let fatal = lab.lastFatalWrite {
+                    Label(String(format: "0x%02X ← %@ was in flight when the device last went away",
+                                 fatal.attribute, fatal.payloadHex),
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                ForEach(lab.writes.reversed()) { write in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(format: "0x%02X ← %@", write.attribute, write.payloadHex))
+                            .font(.system(.caption, design: .monospaced))
+                        Text(outcomeText(write.outcome))
+                            .font(.caption2)
+                            .foregroundStyle(outcomeColor(write.outcome))
+                    }
+                }
+                Button("Clear the write log", role: .destructive) { lab.clearWrites() }
+            } header: {
+                Text("Write log")
+            } footer: {
+                Text("Kept across launches, so a write that took the device down is still here when you come back.")
+            }
+        }
+    }
+
+    private func outcomeText(_ outcome: PaxLab.WriteRecord.Outcome) -> String {
+        switch outcome {
+        case .pending:       return "waiting to see what happens"
+        case .survived:      return "device still connected five seconds later"
+        case .deviceDropped: return "device dropped the link after this"
+        case .reportedBack:  return "device reported the value back — it took"
+        }
+    }
+
+    private func outcomeColor(_ outcome: PaxLab.WriteRecord.Outcome) -> Color {
+        switch outcome {
+        case .pending:       return .secondary
+        case .survived:      return .secondary
+        case .deviceDropped: return .red
+        case .reportedBack:  return .green
+        }
+    }
+
+    // MARK: - Report
+
+    private var reportSection: some View {
+        Section {
+            Button {
+                UIPasteboard.general.string = report()
+                copied = true
+            } label: {
+                Label(copied ? "Copied" : "Copy the whole report", systemImage: "doc.on.doc")
+            }
+            ShareLink(item: report()) {
+                Label("Share the report", systemImage: "square.and.arrow.up")
+            }
+        } footer: {
+            Text("Everything the device answered, the snapshot differences and every write, as text.")
+        }
+    }
+
+    private func report() -> String {
+        lab.deviceSummary = viewModel.labDeviceSummary
+        return lab.report()
+    }
+}
+#endif

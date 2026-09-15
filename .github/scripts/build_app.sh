@@ -20,6 +20,9 @@ CONFIGURATION=$1
 SDK=$2
 BUNDLE_ID=$3
 DISPLAY_NAME=$4
+shift 4
+# Anything further is passed to xcodebuild as-is, which is how the lab build
+# turns its own code on with SWIFT_ACTIVE_COMPILATION_CONDITIONS.
 
 PLIST=PaxController/Resources/Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $DISPLAY_NAME" "$PLIST"
@@ -38,4 +41,5 @@ xcodebuild \
   CODE_SIGN_STYLE=Manual \
   DEVELOPMENT_TEAM="" \
   ONLY_ACTIVE_ARCH=NO \
+  "$@" \
   build

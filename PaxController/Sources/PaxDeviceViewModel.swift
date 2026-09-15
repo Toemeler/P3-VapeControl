@@ -872,7 +872,7 @@ final class PaxDeviceViewModel: ObservableObject {
     /// Plausible readings of a payload whose meaning is still open, so the log
     /// carries the numbers rather than leaving them to be worked out by hand.
     /// These are suggestions, not decodings.
-    private static func interpretation(of payload: Data, id: UInt8) -> String {
+    static func interpretation(of payload: Data, id: UInt8) -> String {
         var notes: [String] = []
         if payload.count == 1 {
             notes.append("\(payload[0]) as a byte")
@@ -896,6 +896,82 @@ final class PaxDeviceViewModel: ObservableObject {
         }
         return notes.isEmpty ? "" : " — " + notes.joined(separator: "; ")
     }
+
+    #if PAX_LAB
+    // MARK: - Lab
+
+    /// Reads every attribute the protocol can address, several times over.
+    /// The status request is a 64-bit bitfield, so 1…63 is the whole space;
+    /// asking in batches rather than all at once keeps the device from
+    /// answering sixty times in one breath.
+    func labSweep(rounds: Int = 3) {
+        guard connectionState.isConnected, !PaxLab.shared.sweepInProgress else { return }
+        PaxLab.shared.setSweeping(true)
+        PaxLab.shared.deviceSummary = labDeviceSummary
+        log("Lab: sweeping every attribute, \(rounds) rounds", level: .info)
+        Task { [weak self] in
+            for round in 1...rounds {
+                for batch in stride(from: 1, through: 63, by: 8) {
+                    guard let self, !Task.isCancelled else { return }
+                    let ids = Array(UInt8(batch)...UInt8(min(63, batch + 7)))
+                    self.enqueue {
+                        try self.sendPacket(PaxPacket.statusRequest(rawAttributes: ids))
+                    }
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                }
+                self?.log("Lab: sweep round \(round) sent", level: .info)
+                try? await Task.sleep(nanoseconds: 600_000_000)
+            }
+            self?.finishLabSweep()
+        }
+    }
+
+    private func finishLabSweep() {
+        PaxLab.shared.setSweeping(false)
+        let answered = PaxLab.shared.answeredAttributes
+        log("Lab: \(answered.count) attributes answered — \(answered.map { String(format: "0x%02X", $0) }.joined(separator: " "))",
+            level: .info)
+    }
+
+    /// Writes an arbitrary attribute. This is the dangerous one, and the
+    /// reason this build exists: it is written to the lab's log before it
+    /// leaves, so a payload that takes the device offline is still on record
+    /// when the app comes back.
+    func labWrite(attribute: UInt8, payload: Data) {
+        guard connectionState.isConnected else { return }
+        PaxLab.shared.noteWrite(attribute: attribute, payload: payload)
+        enqueue {
+            try self.sendRawPlaintext(Data([attribute]) + payload)
+            self.log(String(format: "Lab: wrote 0x%02X ← %@", attribute, PaxLab.hex(payload)), level: .tx)
+            try self.sendPacket(PaxPacket.statusRequest(rawAttributes: [attribute]))
+        }
+    }
+
+    func labRead(attribute: UInt8) {
+        guard connectionState.isConnected else { return }
+        enqueue {
+            try self.sendPacket(PaxPacket.statusRequest(rawAttributes: [attribute]))
+        }
+    }
+
+    /// The type byte and payload, encrypted as they are. `sendPacket` cannot
+    /// carry an attribute this app has no name for.
+    private func sendRawPlaintext(_ plaintext: Data) throws {
+        guard let key = sessionKey else { throw PaxError.notConnected }
+        let data = try PaxCrypto.encrypt(plaintext: plaintext, key: key)
+        try bluetooth.writeCommand(data)
+    }
+
+    var labDeviceSummary: String {
+        [modelNumber.map { "Model \($0)" },
+         firmwareRevision.map { "firmware \($0)" },
+         serialNumber.map { "serial \($0)" },
+         gapName.map { "GAP name \($0)" },
+         "GAP name writable: \(bluetooth.deviceNameWritable)"]
+            .compactMap { $0 }
+            .joined(separator: ", ")
+    }
+    #endif
 
     // MARK: - Live Activity
 
@@ -1114,11 +1190,17 @@ final class PaxDeviceViewModel: ObservableObject {
             let typeHex = String(packet.type.rawValue, radix: 16, uppercase: true)
             log("RX 0x\(typeHex) [\(packet.type)] plain=\(plaintext.hexString)", level: .rx)
             if probeInProgress { recordProbeSample(type: packet.type.rawValue, payload: packet.payload) }
+            #if PAX_LAB
+            PaxLab.shared.record(type: packet.type.rawValue, payload: packet.payload)
+            #endif
             applyPacket(packet)
         } catch PaxError.decryptionFailed(let msg) {
             log("RX decrypt failed: \(msg) raw=\(chunk.hexString)", level: .error)
         } catch PaxError.unknownMessageType(let t, let plaintext) {
             let tHex = String(t, radix: 16, uppercase: true)
+            #if PAX_LAB
+            PaxLab.shared.record(type: t, payload: Data(plaintext.dropFirst()))
+            #endif
             if probeInProgress {
                 recordProbeSample(type: t, payload: Data(plaintext.dropFirst()))
                 log("RX 0x\(tHex) unnamed — probe sample \(plaintext.hexString)", level: .rx)
@@ -1543,6 +1625,9 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
     }
 
     func bluetoothDidDisconnect(error: String?) {
+        #if PAX_LAB
+        PaxLab.shared.noteDisconnect()
+        #endif
         stopPolling()
         if let e = error {
             log("Disconnected with error: \(e)", level: .warn)

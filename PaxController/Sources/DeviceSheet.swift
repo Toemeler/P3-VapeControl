@@ -433,6 +433,13 @@ struct DeviceSheet: View {
             NavigationLink("Diagnostics") {
                 DebugConsoleView().environmentObject(viewModel)
             }
+            #if PAX_LAB
+            NavigationLink {
+                PaxLabView().environmentObject(viewModel)
+            } label: {
+                Label("Lab", systemImage: "flask")
+            }
+            #endif
             if viewModel.connectionState.isConnected {
                 Button {
                     viewModel.probeUndecodedAttributes()

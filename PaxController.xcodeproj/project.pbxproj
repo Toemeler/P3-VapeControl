@@ -22,6 +22,8 @@
 		AA000042 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000042 /* LiveActivityController.swift */; };
 		AA000043 /* PaxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000043 /* PaxActivityAttributes.swift */; };
 		AA000044 /* PaxColorTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000044 /* PaxColorTheme.swift */; };
+		AA000048 /* PaxLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000048 /* PaxLab.swift */; };
+		AA000049 /* PaxLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000049 /* PaxLabView.swift */; };
 		AA000047 /* ReadyNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000047 /* ReadyNotifier.swift */; };
 		AA000045 /* PaxIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000045 /* PaxIntents.swift */; };
 		AA000046 /* PaxAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000046 /* PaxAppShortcuts.swift */; };
@@ -75,6 +77,8 @@
 		AB000042 /* LiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityController.swift; sourceTree = "<group>"; };
 		AB000043 /* PaxActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxActivityAttributes.swift; sourceTree = "<group>"; };
 		AB000044 /* PaxColorTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxColorTheme.swift; sourceTree = "<group>"; };
+		AB000048 /* PaxLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxLab.swift; sourceTree = "<group>"; };
+		AB000049 /* PaxLabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxLabView.swift; sourceTree = "<group>"; };
 		AB000047 /* ReadyNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadyNotifier.swift; sourceTree = "<group>"; };
 		AB000045 /* PaxIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxIntents.swift; sourceTree = "<group>"; };
 		AB000046 /* PaxAppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxAppShortcuts.swift; sourceTree = "<group>"; };
@@ -145,6 +149,8 @@
 				AB000045 /* PaxIntents.swift */,
 				AB000046 /* PaxAppShortcuts.swift */,
 				AB000047 /* ReadyNotifier.swift */,
+				AB000048 /* PaxLab.swift */,
+				AB000049 /* PaxLabView.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -283,6 +289,8 @@
 				AA000045 /* PaxIntents.swift in Sources */,
 				AA000046 /* PaxAppShortcuts.swift in Sources */,
 				AA000047 /* ReadyNotifier.swift in Sources */,
+				AA000048 /* PaxLab.swift in Sources */,
+				AA000049 /* PaxLabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
