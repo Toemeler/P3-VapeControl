@@ -119,7 +119,9 @@ jobs:
       - name: Boot simulator
         id: boot
         if: steps.check.outputs.skip != 'true'
-        timeout-minutes: 12
+        # Booted poll and the SpringBoard wait are bounded at 450s and 360s;
+        # this has to clear their sum, not just the happy path.
+        timeout-minutes: 18
         run: |
           set -euo pipefail
           UDID="${{ steps.sim.outputs.existing_udid }}"
@@ -150,6 +152,27 @@ jobs:
           if [ "$STATE" != "Booted" ]; then
             echo "::error::simulator never reached Booted (last state: $STATE)"
             exit 1
+          fi
+
+          # Booted is not the same as able to launch an app: simctl reports it
+          # while SpringBoard is still coming up, and a launch aimed into that
+          # window blocks for its whole timeout instead of failing, so the
+          # capture script spends all three attempts on a device that was only
+          # still starting. Wait for SpringBoard before handing over.
+          #
+          # Best effort on purpose. If the probe never says ready we carry on
+          # and let the launch speak for itself - a false negative here should
+          # not fail a build that would otherwise have worked.
+          READY=waiting
+          for _ in $(seq 1 24); do
+            READY=$(python3 .github/scripts/simctl_helper.py ready "$UDID")
+            [ "$READY" = "ready" ] && break
+            sleep 5
+          done
+          if [ "$READY" = "ready" ]; then
+            echo "SpringBoard is up; the device can host an app."
+          else
+            echo "::warning::simulator booted but SpringBoard never reported in; launching anyway"
           fi
 
           # Clear any status bar override left on this device by an earlier
