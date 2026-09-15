@@ -44,16 +44,33 @@ struct LedColor: Identifiable, Equatable {
         LedColor(name: "White",  red: 0xFF, green: 0xFF, blue: 0xFF),
     ]
 
-    /// The colours each PAX state starts out with: a cool wake-up, a warm-up
-    /// that runs green through orange, light blue once it is holding
-    /// temperature, and a soft orange in standby. Eight entries, colour 1 then
-    /// colour 2 for startup, heating, regulating and standby.
+    /// The colours each PAX state starts out with. Four combinations, one per
+    /// state and none of them repeated, so the device says what it is doing
+    /// from across the room. Eight entries: colour 1 then colour 2 for startup,
+    /// heating, regulating and standby.
     static let cleanStateHexes = [
-        "#7FD6FF", "#FFFFFF",   // startup: light blue waking to white
+        "#FFFFFF", "#8E5CFF",   // startup: white flaring into violet
         "#2EB82E", "#FF6A00",   // heating: green climbing to orange
-        "#7FD6FF", "#7FD6FF",   // at temperature: steady light blue
+        "#7FD6FF", "#1E9BE5",   // at temperature: light blue with some depth
         "#A34D00", "#FF8A3D",   // standby: a soft orange, breathing
     ]
+
+    /// Palettes earlier builds shipped. One of these still stored means nobody
+    /// has touched the colours, so a new palette can replace it; anything else
+    /// was chosen by hand and is left alone.
+    static let supersededStateHexes: [[String]] = [
+        [   // 1.0.61: light blue in three of the eight slots
+            "#7FD6FF", "#FFFFFF",
+            "#2EB82E", "#FF6A00",
+            "#7FD6FF", "#7FD6FF",
+            "#A34D00", "#FF8A3D",
+        ],
+    ]
+
+    /// What the second colour becomes when one colour is driving every state:
+    /// the PAX moves between the two, and a colour paired with white reads as
+    /// that colour rather than as a flat block. Orange and white by default.
+    static let pairedWith = LedColor(name: "White", red: 0xFF, green: 0xFF, blue: 0xFF)
 
     /// Where the warm-up ramp sits at `progress` (0 at the start of the
     /// heat-up, 1 at the set point): green, through yellow, to orange.

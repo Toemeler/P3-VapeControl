@@ -105,13 +105,16 @@ final class AppSettings: ObservableObject {
         let stored = defaults.stringArray(forKey: Key.modeColors) ?? []
         let valid = stored.count == Self.modeSlotCount
             && stored.allSatisfy { LedColor.fromHex($0) != nil }
-        // Eight identical colours were never chosen by anyone: builds before
-        // this palette existed seeded the states from the single accent colour,
-        // which left every state flat orange — including the one that is meant
-        // to go light blue at temperature. Adopt the shipped palette instead,
-        // once, and leave a hand-picked palette alone.
+        // A palette nobody has touched — eight identical colours, which is what
+        // builds before this palette existed seeded from the accent colour, or
+        // one this app shipped earlier — takes up the current one. A palette
+        // that was chosen by hand is left alone.
         let autoSeeded = valid && Set(stored.map { $0.uppercased() }).count == 1
-        let superseded = autoSeeded && defaults.integer(forKey: Key.paletteVersion) < Self.paletteVersion
+        let upper = stored.map { $0.uppercased() }
+        let untouched = autoSeeded || LedColor.supersededStateHexes.contains {
+            $0.map { $0.uppercased() } == upper
+        }
+        let superseded = untouched && defaults.integer(forKey: Key.paletteVersion) < Self.paletteVersion
         modeLedHexes = (valid && !superseded) ? stored : LedColor.cleanStateHexes
         defaults.set(Self.paletteVersion, forKey: Key.paletteVersion)
     }
@@ -121,7 +124,7 @@ final class AppSettings: ObservableObject {
 
     /// Bumped when the shipped palette changes, so an install carrying an
     /// auto-seeded one picks the new colours up.
-    static let paletteVersion = 2
+    static let paletteVersion = 3
 
     /// The colour pair for one mode, as `PaxColorTheme.perMode` wants them.
     func modeColors(_ mode: Int) -> (LedColor, LedColor) {

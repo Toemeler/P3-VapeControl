@@ -100,15 +100,18 @@ struct PaxColorTheme: Equatable {
 
     private init(modes: [ModeColors]) { self.modes = modes }
 
-    /// Every mode set to one colour, keeping each mode's animation and
-    /// frequency from `template` when the device has reported them.
+    /// One colour across every mode, paired with white so the PAX has
+    /// something to move to — the standard look is the chosen colour and
+    /// white. Animation and frequency come from this app's own table rather
+    /// than the device's, which is usually all zeroes and shows nothing.
     static func solid(_ color: LedColor, basedOn template: PaxColorTheme?) -> PaxColorTheme {
+        let second = LedColor.pairedWith
         let modes = (0..<modeCount).map { i -> ModeColors in
-            let existing = template?.modes.indices.contains(i) == true ? template?.modes[i] : nil
+            let mode = Mode(rawValue: i)
             return ModeColors(color1: (color.red, color.green, color.blue),
-                              color2: (color.red, color.green, color.blue),
-                              animation: existing?.animation ?? 0,
-                              frequency: existing?.frequency ?? 0)
+                              color2: (second.red, second.green, second.blue),
+                              animation: mode?.defaultAnimation ?? 0,
+                              frequency: mode?.defaultFrequency ?? 0)
         }
         return PaxColorTheme(modes: modes)
     }
