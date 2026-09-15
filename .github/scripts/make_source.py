@@ -30,7 +30,10 @@ def main(out_dir):
     # Pages serves the default branch, and that is where the workflow commits
     # the feed and the screenshots, so every asset URL hangs off it.
     branch = os.environ.get("DEFAULT_BRANCH") or "main"
-    pages_base = f"https://{owner.lower()}.github.io/{name}"
+    # PAGES_URL is set by the workflow only when Pages is actually serving.
+    # Without it the short URL would 404, so the raw one becomes the feed URL.
+    pages_site = os.environ.get("PAGES_URL", "").strip().rstrip("/")
+    pages_base = pages_site or f"https://{owner.lower()}.github.io/{name}"
     raw_base = f"https://raw.githubusercontent.com/{repo}/{branch}"
     # Assets are referenced over raw.githubusercontent.com so the feed works
     # before GitHub Pages is switched on for the repository.
@@ -97,17 +100,22 @@ def main(out_dir):
         with open(os.path.join(out_dir, filename), "w") as fh:
             fh.write(payload + "\n")
 
-    source_url = f"{pages_base}/s.json"
     raw_url = f"{raw_base}/s.json"
+    source_url = f"{pages_base}/s.json" if pages_site else raw_url
     with open(os.path.join(out_dir, "index.html"), "w") as fh:
         fh.write(
             LANDING.format(
-                source_url=source_url, raw_url=raw_url, version=version, repo=repo, server=server
+                source_url=f"{pages_base}/s.json",
+                raw_url=raw_url,
+                version=version,
+                repo=repo,
+                server=server,
             )
         )
 
-    print(f"source URL (Pages): {source_url}")
-    print(f"source URL (raw):   {raw_url}")
+    print(f"source URL: {source_url}")
+    print(f"raw URL:    {raw_url}")
+    print("Pages: " + (pages_site or "not enabled - the notes use the raw URL"))
 
     # Single source of truth for the URL: the release notes read it back here
     # instead of rebuilding it from the repository name a second time.
@@ -116,6 +124,7 @@ def main(out_dir):
         with open(step_output, "a") as fh:
             fh.write(f"source_url={source_url}\n")
             fh.write(f"raw_url={raw_url}\n")
+            fh.write(f"pages_url={pages_site}\n")
 
 
 LANDING = """<!doctype html>

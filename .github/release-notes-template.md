@@ -10,7 +10,7 @@ Unsigned · iOS 16+ · {size}
 
 {gallery}
 
-**[Add to SideStore]({pages_url})**
+{add_source}
 
 <details>
 <summary><b>Install — step by step</b></summary>
@@ -24,7 +24,7 @@ A free Apple ID is enough — see **AutoRefreshApps** below for what that means 
 3. On the device: *Settings → General → VPN & Device Management → your account → Trust*.
 4. Install **[LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044)**, tap **Connect**.
 5. Open **SideStore**, sign in with the same account, *My Apps* → tap the **7 DAYS** counter.
-6. Open the **Add to SideStore** link above, or paste `{source_url}` under *Sources* → **+**.
+6. In **SideStore** → *Sources* → **+**, add `{source_url}`.
 7. Install **PAX Controller**, open it, tap *Scan*.
 
 <details>

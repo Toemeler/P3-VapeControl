@@ -33,6 +33,16 @@ on:
 
 permissions:
   contents: write
+  # Read-only, purely to ask whether Pages is serving; see the feed step.
+  pages: read
+
+env:
+  # Generated files follow the ref being built; a tag build writes to the
+  # default branch, since a tag is not a place to commit to.
+  TARGET_BRANCH: >-
+    ${{ github.ref_type == 'tag'
+        && github.event.repository.default_branch
+        || github.ref_name }}
 
 concurrency:
   # A newer build supersedes whatever is still running on the same ref, because
@@ -191,13 +201,24 @@ jobs:
             "connection." \
             > screenshots/README.md
 
-          # The README shows the same shots by relative path, so it moves with them.
-          python3 .github/scripts/update_readme.py
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           .github/scripts/commit_generated.sh \
             "Update simulator screenshots (run ${{ github.run_id }})" \
-            screenshots README.md
+            screenshots
+
+      - name: Keep the README's screenshot block current
+        # Deliberately ungated. The block is rendered from whatever screenshots
+        # are committed, so a change to the renderer alone has to reach the
+        # README without paying for a simulator run. Commits nothing when the
+        # rendered block is identical.
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/update_readme.py
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          .github/scripts/commit_generated.sh \
+            "Update the README's screenshot block" README.md
 
       - name: Report the commit the screenshots live in
         id: result
@@ -352,8 +373,18 @@ jobs:
           SHA256: ${{ steps.package.outputs.sha256 }}
           TAG: ${{ steps.tag.outputs.tag }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # The one-tap "Add to SideStore" button needs the Pages landing page,
+          # and the short feed URL needs Pages too. Neither may be advertised
+          # before Pages actually serves, so ask - and on any doubt fall back to
+          # raw.githubusercontent.com, which needs nothing switched on.
+          PAGES_URL=$(gh api "repos/${{ github.repository }}/pages" \
+            --jq '.html_url' 2>/dev/null || true)
+          export PAGES_URL
+          echo "Pages: ${PAGES_URL:-not enabled}"
+
           python3 .github/scripts/make_icon.py icon.png
           python3 .github/scripts/make_source.py .
           echo "--- source feed ---"
@@ -365,6 +396,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
           SOURCE_URL: ${{ steps.feed.outputs.source_url }}
+          PAGES_URL: ${{ steps.feed.outputs.pages_url }}
           SHORTCUT_URL: ${{ vars.SHORTCUT_URL }}
           SCREENSHOT_SHA: ${{ needs.screenshots.outputs.sha }}
           IPA_SIZE: ${{ steps.package.outputs.human_size }}
@@ -434,8 +466,14 @@ jobs:
         id: facts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
+          PAGES_URL=$(gh api "repos/${{ github.repository }}/pages" \
+            --jq '.html_url' 2>/dev/null || true)
+          export PAGES_URL
+          echo "Pages: ${PAGES_URL:-not enabled}"
+
           python3 .github/scripts/release_facts.py
 
       - name: Publish the refreshed notes
@@ -448,6 +486,7 @@ jobs:
           VERSION: ${{ steps.facts.outputs.version }}
           IPA_SIZE: ${{ steps.facts.outputs.human_size }}
           SOURCE_URL: ${{ steps.facts.outputs.source_url }}
+          PAGES_URL: ${{ steps.facts.outputs.pages_url }}
           SCREENSHOT_SHA: ${{ needs.screenshots.outputs.sha }}
         run: |
           set -euo pipefail
