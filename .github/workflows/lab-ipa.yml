@@ -12,6 +12,13 @@ name: Lab
 
 on:
   workflow_dispatch:
+  # GitHub only offers a manual run for workflows that exist on the default
+  # branch, and this one lives on a feature branch for now. A tag build works
+  # from wherever the tag points, so `lab-*` is how it is started meanwhile.
+  # `lab-*` cannot match the `v*` the release workflow watches for.
+  push:
+    tags:
+      - "lab-*"
 
 permissions:
   contents: write
