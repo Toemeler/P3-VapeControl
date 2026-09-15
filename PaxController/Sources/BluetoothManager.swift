@@ -51,6 +51,10 @@ protocol BluetoothManagerDelegate: AnyObject {
     /// The whole advertisement, which carries state the device broadcasts
     /// without anyone having to connect to it.
     func bluetoothLabSawAdvertisement(_ description: String)
+    /// The log service is present and its notify characteristic is subscribed.
+    func bluetoothLabLogServiceReady()
+    /// A batch of log events, or empty when there are none left.
+    func bluetoothLabLogEvents(_ data: Data)
     #endif
 }
 
@@ -69,6 +73,10 @@ final class BluetoothManager: NSObject {
     private var writeCharProps: CBCharacteristicProperties = []
     /// Generic Access' Device Name, when the device exposes it.
     private var deviceNameChar: CBCharacteristic?
+    #if PAX_LAB
+    private var logReadChar: CBCharacteristic?
+    var hasLogService: Bool { logReadChar != nil }
+    #endif
 
     /// Whether this device lets the name be written over Generic Access. Most
     /// do not; the ones that do are the only place a rename can actually stick
@@ -220,6 +228,13 @@ final class BluetoothManager: NSObject {
         return true
     }
 
+    #if PAX_LAB
+    func readLogEvents() {
+        guard let p = connectedPeripheral, let char = logReadChar else { return }
+        p.readValue(for: char)
+    }
+    #endif
+
     // MARK: - writeCommand()
 
     func writeCommand(_ data: Data) throws {
@@ -278,6 +293,9 @@ extension BluetoothManager: CBCentralManagerDelegate {
         writeChar = nil
         notifyChar = nil
         deviceNameChar = nil
+        #if PAX_LAB
+        logReadChar = nil
+        #endif
         writeCharProps = []
     }
 
@@ -416,6 +434,11 @@ extension BluetoothManager: CBPeripheralDelegate {
                 delegate?.bluetoothLabFoundCharacteristic(service: svcUUID,
                                                           characteristic: info.uuid,
                                                           properties: info.props)
+                if info.uuid == PaxUUIDs.logReadChar { logReadChar = char }
+                if info.uuid == PaxUUIDs.logNotifyChar {
+                    p.setNotifyValue(true, for: char)
+                    delegate?.bluetoothLabLogServiceReady()
+                }
                 // 0x2901 is a user description: a name the vendor left in the
                 // firmware for whoever came looking.
                 p.discoverDescriptors(for: char)
@@ -464,6 +487,16 @@ extension BluetoothManager: CBPeripheralDelegate {
             }
             guard let data = value else { return }
             #if PAX_LAB
+            if uuid == PaxUUIDs.logNotifyChar {
+                // The notify only says there is something to collect; the
+                // events themselves come from LogRead.
+                readLogEvents()
+                return
+            }
+            if uuid == PaxUUIDs.logReadChar {
+                delegate?.bluetoothLabLogEvents(data)
+                return
+            }
             delegate?.bluetoothLabReadValue(service: serviceUUID ?? CBUUID(string: "0000"),
                                             characteristic: uuid, data: data)
             #endif

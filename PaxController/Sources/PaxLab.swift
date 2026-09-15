@@ -71,6 +71,8 @@ final class PaxLab: ObservableObject {
     @Published private(set) var gatt: [String: String] = [:]
     /// The device's advertisement, which it broadcasts to anyone listening.
     @Published private(set) var advertisement: String?
+    /// The PAX's own session log, read from its log service.
+    @Published private(set) var logEvents: [String] = []
 
     private let defaults = UserDefaults.standard
     private let writesKey = "labWriteLog"
@@ -94,6 +96,12 @@ final class PaxLab: ObservableObject {
     /// adding another.
     func recordGatt(key: String, line: String) {
         gatt[key] = line
+    }
+
+    func recordLogEvents(_ events: [PaxLogEvent]) {
+        logEvents.append(contentsOf: events.map(\.description))
+        // A PAX keeps a long history and the report has to stay pasteable.
+        if logEvents.count > 400 { logEvents.removeFirst(logEvents.count - 400) }
     }
 
     func recordAdvertisement(_ description: String) {
@@ -313,6 +321,12 @@ final class PaxLab: ObservableObject {
             out.append("")
             out.append("## Everything the device exposes (\(gatt.count) entries)")
             out.append(contentsOf: gattLines)
+        }
+
+        if !logEvents.isEmpty {
+            out.append("")
+            out.append("## Session log (\(logEvents.count) events)")
+            out.append(contentsOf: logEvents.suffix(200))
         }
 
         let silent = answeredAttributes.isEmpty ? []

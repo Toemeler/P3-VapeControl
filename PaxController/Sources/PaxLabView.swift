@@ -85,6 +85,14 @@ struct PaxLabView: View {
                             .font(.system(.caption2, design: .monospaced))
                     }
                 }
+                if !lab.logEvents.isEmpty {
+                    DisclosureGroup("Session log (\(lab.logEvents.count) events)") {
+                        ForEach(lab.logEvents.suffix(60).reversed(), id: \.self) { event in
+                            Text(event)
+                                .font(.system(.caption2, design: .monospaced))
+                        }
+                    }
+                }
                 if !lab.gatt.isEmpty {
                     DisclosureGroup("Services and characteristics (\(lab.gatt.count))") {
                         ForEach(lab.gattLines, id: \.self) { line in
@@ -96,7 +104,7 @@ struct PaxLabView: View {
             } header: {
                 Text("The whole device")
             } footer: {
-                Text("Every service the PAX exposes, every characteristic in them with what it allows, the descriptors behind those — 0x2901 is a name the vendor left in the firmware — and whatever it broadcasts in its advertisement. Gathered on connect, without being asked.")
+                Text("Every service the PAX exposes, every characteristic in them with what it allows, the descriptors behind those — 0x2901 is a name the vendor left in the firmware — and whatever it broadcasts in its advertisement. The session log comes from a service of its own, read the way the official app reads it. All of it gathered on connect, without being asked.")
             }
         }
     }

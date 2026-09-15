@@ -18,6 +18,15 @@ enum PaxUUIDs {
     /// writing it, the one a rename has to change to stick.
     static let genericAccessService = CBUUID(string: "1800")
     static let deviceNameChar       = CBUUID(string: "2A00")
+
+    /// The session log lives on a service of its own, which this app never
+    /// knew about: the official PAX web app subscribes to LogNotify, asks for
+    /// events by writing LogSyncRequest (0x12) on the ordinary write
+    /// characteristic, and then reads them out of LogRead until it comes back
+    /// empty. UUIDs taken from that app's own bundle.
+    static let logService           = CBUUID(string: "64F50300-EFDC-11E6-BC64-92361F002671")
+    static let logReadChar          = CBUUID(string: "64F50301-EFDC-11E6-BC64-92361F002671")
+    static let logNotifyChar        = CBUUID(string: "64F50302-EFDC-11E6-BC64-92361F002671")
     static let serialNumberChar   = CBUUID(string: "2A25")
     static let modelNumberChar    = CBUUID(string: "2A24")
     static let firmwareRevChar    = CBUUID(string: "2A26")
@@ -348,6 +357,15 @@ extension PaxPacket {
     /// multi-byte character can never be cut in half, and the length byte
     /// always matches what follows it — a mismatch there is the same class of
     /// bug as ColorTheme's mode count.
+    /// Asks the device for log events from `timestamp` onwards, skipping the
+    /// first `offset` events that share it. Layout from the official app:
+    /// a little-endian 32-bit timestamp then a single byte.
+    static func logSyncRequest(timestamp: UInt32, offset: UInt8) -> PaxPacket {
+        var value = timestamp.littleEndian
+        let payload = withUnsafeBytes(of: &value) { Data($0) } + Data([offset])
+        return PaxPacket(type: .logSyncRequest, payload: payload)
+    }
+
     static func setDisplayName(_ name: String) -> PaxPacket? {
         var bytes = Data(name.utf8)
         if bytes.count > maxDisplayNameBytes {
@@ -364,6 +382,28 @@ extension PaxPacket {
     /// The device reports its name inside a 15-byte payload, so a name plus its
     /// length byte has to fit that.
     static let maxDisplayNameBytes = 14
+}
+
+/// One entry in the PAX's own session log: eight bytes, as the official app
+/// parses them — a 24-bit value, a type code, then a 32-bit timestamp.
+struct PaxLogEvent {
+    let value: UInt32
+    let typeCode: UInt8
+    let time: UInt32
+
+    static let size = 8
+
+    init?(_ bytes: Data) {
+        guard bytes.count >= Self.size else { return nil }
+        let b = Array(bytes.prefix(Self.size))
+        value = UInt32(b[0]) | (UInt32(b[1]) << 8) | (UInt32(b[2]) << 16)
+        typeCode = b[3]
+        time = UInt32(b[4]) | (UInt32(b[5]) << 8) | (UInt32(b[6]) << 16) | (UInt32(b[7]) << 24)
+    }
+
+    var description: String {
+        String(format: "t=%u type=0x%02X value=%u", time, typeCode, value)
+    }
 }
 
 // MARK: - Parser helpers

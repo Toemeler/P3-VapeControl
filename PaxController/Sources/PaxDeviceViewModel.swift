@@ -1437,7 +1437,9 @@ final class PaxDeviceViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             self?.enqueue {
                 guard let self else { return }
-                try self.sendPacket(PaxPacket(type: .brightness, payload: Data([raw])))
+                // Two bytes, as the official app writes it: the level and a
+                // command byte, which it leaves at zero.
+                try self.sendPacket(PaxPacket(type: .brightness, payload: Data([raw, 0])))
                 self.log("Set LED brightness → \(Int(clamped * 100))% (\(raw)/128)", level: .tx)
                 try self.sendPacket(PaxPacket.statusRequest(attributes: [.brightness]))
             }
@@ -1763,6 +1765,44 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
 
     func bluetoothLabSawAdvertisement(_ description: String) {
         PaxLab.shared.recordAdvertisement(description)
+    }
+
+    func bluetoothLabLogServiceReady() {
+        log("Lab: the device has a log service — asking it for its session history", level: .info)
+        labFetchLogs(from: 0, offset: 0)
+    }
+
+    /// Asks for the next batch. The official app walks the log by repeating
+    /// this with the timestamp of the last event it saw, and stops when a read
+    /// comes back empty.
+    func labFetchLogs(from timestamp: UInt32, offset: UInt8) {
+        guard connectionState.isConnected else { return }
+        enqueue {
+            try self.sendPacket(PaxPacket.logSyncRequest(timestamp: timestamp, offset: offset))
+        }
+    }
+
+    func bluetoothLabLogEvents(_ data: Data) {
+        guard !data.isEmpty else {
+            log("Lab: the session log has been read to the end — \(PaxLab.shared.logEvents.count) events",
+                level: .info)
+            return
+        }
+        var events: [PaxLogEvent] = []
+        var index = data.startIndex
+        while index + PaxLogEvent.size <= data.endIndex {
+            if let event = PaxLogEvent(data[index..<(index + PaxLogEvent.size)]) {
+                events.append(event)
+            }
+            index += PaxLogEvent.size
+        }
+        guard let last = events.last else { return }
+        PaxLab.shared.recordLogEvents(events)
+        log("Lab: \(events.count) log events, newest \(last.description)", level: .rx)
+        // Walk on from the last event seen. The offset skips the events that
+        // share that timestamp, so a second's worth is not read twice for ever.
+        let offset = UInt8(min(255, events.filter { $0.time == last.time }.count))
+        labFetchLogs(from: last.time, offset: offset)
     }
     #endif
 
