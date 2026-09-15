@@ -22,7 +22,8 @@ enum PaxIntentBridge {
     /// Degrees the PAX itself accepts. Kept here rather than imported from the
     /// protocol layer, which the extension does not compile.
     static let minCelsius = 180
-    static let maxCelsius = 215
+    /// The ceiling the device reports for itself through HeaterRanges.
+    static let maxCelsius = 245
 
     static func clamp(_ celsius: Int) -> Int {
         min(maxCelsius, max(minCelsius, celsius))

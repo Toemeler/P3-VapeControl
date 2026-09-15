@@ -14,6 +14,9 @@ enum DS {
         static let sweep: Double = 270
         static let tickRadius: CGFloat = 185
         static let tickDot: CGFloat = 2.6
+        /// The warm-up ring sits just inside the main one.
+        static let warmUpInset: CGFloat = 19
+        static let warmUpStroke: CGFloat = 3.5
         /// Half the length of the radial target marker.
         static let markerReach: CGFloat = 13
         static let markerWidth: CGFloat = 4.5
@@ -47,7 +50,13 @@ enum DS {
     /// The oven's usable range. `PaxPresetTemp` sits inside it.
     enum Range {
         static let min: Double = 180
-        static let max: Double = 215
+        /// The ceiling the device itself reports through HeaterRanges (0x11),
+        /// whose ladder ends at 245.0 °C. PAX's own app stopped at 215.
+        static let max: Double = 245
+        /// Where PAX's app stopped. The dial marks everything past it, because
+        /// plant material scorches somewhere around here and the person turning
+        /// the ring should be able to see where they are.
+        static let vendorMax: Double = 215
         static var span: Double { Self.max - Self.min }
 
         static func fraction(of celsius: Double) -> Double {
@@ -57,6 +66,19 @@ enum DS {
 
         static func celsius(atFraction f: Double) -> Double {
             Self.min + Swift.min(1, Swift.max(0, f)) * Self.span
+        }
+    }
+
+    /// The climb from cold up to the bottom of the dial's scale. The oven
+    /// spends most of a warm-up here, where the main arc has nothing to show:
+    /// without this the ring sits empty for thirty seconds and then leaps.
+    enum WarmUp {
+        static let floor: Double = 30
+
+        static func fraction(of celsius: Double) -> Double {
+            let span = Range.min - floor
+            guard span > 0 else { return 0 }
+            return Swift.min(1, Swift.max(0, (celsius - floor) / span))
         }
     }
 }

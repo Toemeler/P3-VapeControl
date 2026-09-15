@@ -40,6 +40,8 @@ struct TemperatureDial<Center: View>: View {
     var body: some View {
         ZStack {
             track
+            aboveVendorMax
+            warmUp
             progress
             presetTicks
             targetMarker
@@ -77,7 +79,41 @@ struct TemperatureDial<Center: View>: View {
                     style: StrokeStyle(lineWidth: DS.Dial.stroke, lineCap: .round))
             .rotationEffect(.degrees(DS.Dial.startAngle))
             .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
-            .animation(.easeOut(duration: 0.45), value: current)
+            // Linear, and just longer than the gap between readings, so the arc
+            // is still travelling towards one temperature when the next
+            // arrives: it moves continuously rather than stepping and settling.
+            .animation(.linear(duration: 1.15), value: current)
+    }
+
+    /// The climb from cold to the bottom of the scale, on a ring of its own
+    /// just inside the main one. Most of a warm-up happens below 180 °C, where
+    /// the main arc has nothing to draw.
+    private var warmUp: some View {
+        let celsius = current ?? DS.WarmUp.floor
+        let filled = DS.WarmUp.fraction(of: celsius)
+        let diameter = (DS.Dial.radius - DS.Dial.warmUpInset) * 2
+        return Circle()
+            .trim(from: 0, to: CGFloat(sweepFraction * filled))
+            .stroke(accent.opacity(0.4),
+                    style: StrokeStyle(lineWidth: DS.Dial.warmUpStroke, lineCap: .round))
+            .rotationEffect(.degrees(DS.Dial.startAngle))
+            .frame(width: diameter, height: diameter)
+            // Fades out as the main arc takes over, rather than vanishing the
+            // moment the oven crosses 180.
+            .opacity(celsius >= DS.Range.min ? 0 : 1)
+            .animation(.linear(duration: 1.15), value: current)
+    }
+
+    /// Past where PAX's own app stopped. Drawn on the track so the end of the
+    /// dial reads differently from the rest of it.
+    private var aboveVendorMax: some View {
+        let start = DS.Range.fraction(of: DS.Range.vendorMax)
+        return Circle()
+            .trim(from: CGFloat(sweepFraction * start), to: CGFloat(sweepFraction))
+            .stroke(Color.orange.opacity(0.22),
+                    style: StrokeStyle(lineWidth: DS.Dial.stroke, lineCap: .butt))
+            .rotationEffect(.degrees(DS.Dial.startAngle))
+            .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
     }
 
     private var presetTicks: some View {
@@ -142,7 +178,7 @@ struct TemperatureDial<Center: View>: View {
 
     /// Maps a touch to a temperature, rounded to whole degrees. Touches in the
     /// dead zone at the bottom snap to whichever end of the arc is nearer, so
-    /// a finger sliding off the end stops at 180 or 215 rather than jumping.
+    /// a finger sliding off the end stops at either limit rather than jumping.
     private func celsius(at location: CGPoint) -> Double? {
         let dx = Double(location.x - mid)
         let dy = Double(location.y - mid)

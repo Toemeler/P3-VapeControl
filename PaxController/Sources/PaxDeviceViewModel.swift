@@ -184,6 +184,8 @@ final class PaxDeviceViewModel: ObservableObject {
     private var serialReady = false
     private var pendingCommands: [() throws -> Void] = []
     private var pollTimer: AnyCancellable?
+    /// The faster, smaller poll behind the dial's movement.
+    private var temperatureTimer: AnyCancellable?
     /// A scan reports each peripheral once and iOS suppresses the repeats. A
     /// PAX that is switched off and on again during one scan can therefore go
     /// unreported for as long as that scan lasts, which is what makes it look
@@ -1295,7 +1297,7 @@ final class PaxDeviceViewModel: ObservableObject {
         case .heaterSetPoint:
             targetTempC = packet.temperatureCelsius
             if let t = packet.temperatureCelsius {
-                customTargetTempC = min(215, max(180, t))
+                customTargetTempC = min(DS.Range.max, max(DS.Range.min, t))
             }
         case .battery:
             batteryLevel = packet.batteryLevel
@@ -1557,7 +1559,11 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     private func startPolling() {
-        // Poll every 3 s — PAX 3 firmware only sends temp/battery in response to requests.
+        // The PAX 3 says nothing unless asked, so how smoothly the dial moves is
+        // decided here. Everything is asked for every three seconds; the
+        // temperature and what the oven is doing are asked for every second,
+        // which is one small packet in between and is what lets the ring travel
+        // instead of stepping.
         pollTimer?.cancel()
         unansweredPolls = 0
         pollTimer = Timer.publish(every: 3, on: .main, in: .common)
@@ -1568,6 +1574,22 @@ final class PaxDeviceViewModel: ObservableObject {
                 self.failOverIfSilent()
                 self.requestFullStatus()
             }
+        temperatureTimer?.cancel()
+        temperatureTimer = Timer.publish(every: 1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.requestTemperature()
+            }
+    }
+
+    /// The smallest useful question: where the oven is, where it is heading,
+    /// and what it is doing.
+    private func requestTemperature() {
+        guard connectionState.isConnected else { return }
+        enqueue {
+            try self.sendPacket(PaxPacket.statusRequest(
+                attributes: [.actualTemp, .currentTargetTemp, .heatingState]))
+        }
     }
 
     /// A working device answers every poll within a few hundred milliseconds,
@@ -1584,6 +1606,8 @@ final class PaxDeviceViewModel: ObservableObject {
     private func stopPolling() {
         pollTimer?.cancel()
         pollTimer = nil
+        temperatureTimer?.cancel()
+        temperatureTimer = nil
     }
 
     private func resetDeviceState() {
