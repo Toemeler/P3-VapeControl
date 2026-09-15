@@ -34,20 +34,33 @@ enum PaxMessageType: UInt8 {
     case podInserted        = 0x08  // Era only
     case time               = 0x09
     case displayName        = 0x0A  // 1 byte length + UTF-8 bytes
+    case replay             = 0x0D
+    case gameMode           = 0x0F
     case heaterRanges       = 0x11
+    case logSyncRequest     = 0x12
     case dynamicMode        = 0x13  // 1 byte dynamic heating mode (Pax 3)
-    case colorTheme         = 0x14
-    case brightness         = 0x15
-    case hapticMode         = 0x17
+    case colorTheme         = 0x14  // Mode count + 4 × 8-byte LED modes
+    case brightness         = 0x15  // 1 byte, 0…128
+    case hapticMode         = 0x17  // Byte 0 is amplitude, 0…128
     case supportedAttribs   = 0x18  // 64-bit bitfield of supported message types
     case heatingParams      = 0x19
     case uiMode             = 0x1B
-    case shellColor         = 0x1C
+    case shellColor         = 0x1C  // 1 byte: the casing's colour, read only
     case lowSoCMode         = 0x1E
     case currentTargetTemp  = 0x1F  // Current PID target; 16-bit LE, °C × 10 (Pax 3)
     case heatingState       = 0x20  // Current oven state byte (Pax 3)
+    case sessionControl     = 0x24
     case haptics            = 0x28
+    case logRequest         = 0x29
+    case podData            = 0x2A
+    case encryptionExchange = 0x31
+    case encryptionPacket   = 0x32
+    case bleDisData         = 0x34
+    case findMyPax          = 0x36
     case statusUpdate       = 0xFE  // Request status; 64-bit LE bitfield of desired attrs
+
+    /// 0…128 on the wire for brightness and haptic amplitude.
+    static let amplitudeMax: Double = 128
 }
 
 // MARK: - Heating State

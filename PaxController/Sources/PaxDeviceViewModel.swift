@@ -110,6 +110,13 @@ final class PaxDeviceViewModel: ObservableObject {
     /// The device's physical shell colour (attribute 0x1C) — hardware identity,
     /// read only. It is not where the LED colour lives.
     @Published private(set) var shellColorIndex: UInt8?
+    /// LED brightness, 0…1. The wire value is 0…128.
+    @Published private(set) var ledBrightness: Double?
+    /// Haptic amplitude, 0…1, read only for now — see applyHapticReport.
+    @Published private(set) var hapticAmplitude: Double?
+    /// Everything the device reported for HapticMode, so a future write can
+    /// preserve the fields whose meaning is still unknown.
+    private var hapticRawPayload: Data?
     /// The write we are waiting to confirm by reading the attribute back.
     private var pendingLedWrite: (attribute: UInt8, payload: Data)?
     /// Send the saved colour as soon as we learn the device can accept one.
@@ -119,14 +126,13 @@ final class PaxDeviceViewModel: ObservableObject {
     private var capabilitiesKnown = false
     /// Coalesces colour-wheel drags into a single write.
     private var ledWriteDebounce: Task<Void, Never>?
+    /// Same, for the brightness slider.
+    private var brightnessDebounce: Task<Void, Never>?
     /// Deadline for the capability query, so a silent device still gets a colour.
     private var capabilityTimeout: Task<Void, Never>?
     /// The device never answered the capability query, so any write is a guess.
     private var capabilityQueryUnanswered = false
 
-    /// Which attribute to use for LED color, preferring the one the device
-    /// actually answered with. nil means it never reported either, so there is
-    /// nothing sensible to write.
     /// Whether the device will accept an LED colour. ColorTheme is the only
     /// writable one — ShellColor just states which colour the casing is.
     var deviceLedColorSupported: Bool {
@@ -401,9 +407,12 @@ final class PaxDeviceViewModel: ObservableObject {
     /// part of the 3 s poll.
     func requestCapabilities() {
         enqueue {
-            let attrs: [PaxMessageType] = [.supportedAttribs, .colorTheme, .shellColor, .brightness, .uiMode]
+            let attrs: [PaxMessageType] = [
+                .supportedAttribs, .colorTheme, .shellColor,
+                .brightness, .hapticMode, .uiMode, .lowSoCMode,
+            ]
             try self.sendPacket(PaxPacket.statusRequest(attributes: attrs))
-            self.log("Asked the device which attributes it supports, and for its current LED values", level: .tx)
+            self.log("Asked the device which attributes it supports, and for its current settings", level: .tx)
         }
         // Not every firmware implements SupportedAttributes. Without a deadline
         // a device that simply never answers would leave the colour queued for
@@ -562,6 +571,20 @@ final class PaxDeviceViewModel: ObservableObject {
             applySupportedAttributes(packet)
         case .colorTheme, .shellColor:
             applyLedAttributeReport(packet)
+        case .brightness:
+            if let raw = packet.payload.first {
+                let value = min(1, Double(raw) / PaxMessageType.amplitudeMax)
+                if ledBrightness != value {
+                    ledBrightness = value
+                    log("LED brightness: \(Int(value * 100))% (\(raw)/128)", level: .info)
+                }
+            }
+        case .hapticMode:
+            applyHapticReport(packet)
+        case .uiMode, .lowSoCMode, .gameMode, .heaterRanges, .heatingParams, .time:
+            // Supported by this firmware but not yet decoded. Log the raw value
+            // rather than dropping it as an unknown type.
+            log("\(packet.type) raw: \(Data(packet.payload.prefix(8)).hexString)", level: .rx)
         default:
             break
         }
@@ -593,7 +616,45 @@ final class PaxDeviceViewModel: ObservableObject {
         pushSavedColorIfReady()
     }
 
+    /// The official app writes HapticMode as a single amplitude byte, but this
+    /// firmware reports six. Rather than write a shorter payload than the
+    /// device sends — the mistake that took it offline over ColorTheme — read
+    /// it, keep the raw bytes, and leave writing alone until the remaining
+    /// fields are understood.
+    private func applyHapticReport(_ packet: PaxPacket) {
+        let raw = Data(packet.payload.prefix(8))
+        guard hapticRawPayload != raw else { return }
+        hapticRawPayload = raw
+        if let amplitude = raw.first {
+            hapticAmplitude = min(1, Double(amplitude) / PaxMessageType.amplitudeMax)
+            log("Haptics: amplitude \(Int((hapticAmplitude ?? 0) * 100))% (\(amplitude)/128), full value \(raw.hexString)",
+                level: .info)
+        }
+    }
+
+    /// Sets LED brightness. One byte, 0…128, confirmed by the device reporting
+    /// 0x80 for full brightness.
+    func setLedBrightness(_ fraction: Double) {
+        let clamped = min(1, max(0, fraction))
+        ledBrightness = clamped
+        guard connectionState.isConnected else { return }
+        let raw = UInt8(( clamped * PaxMessageType.amplitudeMax).rounded())
+        brightnessDebounce?.cancel()
+        brightnessDebounce = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
+            self?.enqueue {
+                guard let self else { return }
+                try self.sendPacket(PaxPacket(type: .brightness, payload: Data([raw])))
+                self.log("Set LED brightness → \(Int(clamped * 100))% (\(raw)/128)", level: .tx)
+                try self.sendPacket(PaxPacket.statusRequest(attributes: [.brightness]))
+            }
+        }
+    }
+
     /// Names from the official app's ShellColors enum.
+    static func shellColorLabel(_ index: UInt8) -> String { shellColorName(index) }
+
     private static func shellColorName(_ index: UInt8) -> String {
         switch index {
         case 0: return "Onyx Black"
@@ -717,6 +778,11 @@ final class PaxDeviceViewModel: ObservableObject {
         supportedAttributes.removeAll()
         deviceColorTheme = nil
         shellColorIndex = nil
+        ledBrightness = nil
+        hapticAmplitude = nil
+        hapticRawPayload = nil
+        brightnessDebounce?.cancel()
+        brightnessDebounce = nil
         pendingLedWrite = nil
         pushColorOnceDiscovered = false
         capabilitiesKnown = false

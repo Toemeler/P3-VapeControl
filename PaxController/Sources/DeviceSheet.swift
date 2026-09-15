@@ -125,6 +125,26 @@ struct DeviceSheet: View {
                 }
                 .disabled(!viewModel.connectionState.isConnected || !viewModel.deviceLedColorSupported)
             }
+
+            if let brightness = viewModel.ledBrightness {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text("Brightness")
+                        Spacer()
+                        Text("\(Int(brightness * 100))%")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { brightness },
+                            set: { viewModel.setLedBrightness($0) }
+                        ),
+                        in: 0...1
+                    )
+                    .tint(settings.ledColor.color)
+                }
+            }
         } header: {
             Text("LED Color")
         } footer: {
@@ -229,6 +249,15 @@ struct DeviceSheet: View {
             row("Model", value: viewModel.modelNumber)
             row("Serial", value: viewModel.serialNumber)
             row("Firmware", value: viewModel.firmwareRevision)
+            if let shell = viewModel.shellColorIndex {
+                row("Shell", value: PaxDeviceViewModel.shellColorLabel(shell))
+            }
+            if let haptics = viewModel.hapticAmplitude {
+                row("Haptics", value: "\(Int(haptics * 100))%")
+            }
+            if !viewModel.supportedAttributes.isEmpty {
+                row("Attributes", value: "\(viewModel.supportedAttributes.count) supported")
+            }
         }
     }
 

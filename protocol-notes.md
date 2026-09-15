@@ -104,11 +104,14 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 | `0x08` | `PodInserted` | Device → Host | 1 byte (PAX Era only) |
 | `0x09` | `Time` | Both | Unknown format |
 | `0x0A` | `DisplayName` | Both | 1 byte length + UTF-8 string |
+| `0x0D` | `Replay` | Both | Unknown |
+| `0x0F` | `GameMode` | Both | Unknown — supported by PAX 3 fw 2.0.4 |
+| `0x12` | `LogSyncRequest` | Both | Unknown |
 | `0x11` | `HeaterRanges` | Device → Host | Unknown format |
 | `0x13` | `DynamicMode` | Both | 1 byte mode ID (PAX 3) |
 | `0x14` | `ColorTheme` | Both | **33 bytes: mode count + 4 modes × 8** (see below) |
-| `0x15` | `Brightness` | Both | 1 byte (0–100?) |
-| `0x17` | `HapticMode` | Both | 1 byte mode ID |
+| `0x15` | `Brightness` | Both | **1 byte, 0…128** (not 0–100). PAX 3 reported `0x80` = full |
+| `0x17` | `HapticMode` | Both | Byte 0 is amplitude, 0…128. PAX 3 reports **6 bytes** (`2F 04 02 04 01 00`); the rest are undecoded |
 | `0x18` | `SupportedAttributes` | Device → Host | 8 bytes LE `uint64` bitfield; bit N set = attribute N supported |
 | `0x19` | `HeatingParams` | Both | Unknown |
 | `0x1B` | `UiMode` | Both | 1 byte |
@@ -116,7 +119,14 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 | `0x1E` | `LowSoCMode` | Both | Unknown |
 | `0x1F` | `CurrentTargetTemp` | Device → Host | 2 bytes LE `uint16`: PID target in °C × 10 (PAX 3) |
 | `0x20` | `HeatingState` | Device → Host | 1 byte; see table below (PAX 3) |
+| `0x24` | `SessionControl` | Both | Unknown |
 | `0x28` | `Haptics` | Both | Unknown |
+| `0x29` | `LogRequest` | Both | Unknown |
+| `0x2A` | `PodData` | Both | Unknown (Era) |
+| `0x31` | `EncryptionExchange` | Both | Unknown |
+| `0x32` | `EncryptionPacket` | Both | Unknown |
+| `0x34` | `BleDisData` | Both | Unknown |
+| `0x36` | `FindMyPax` | Both | Unknown — **not** supported by PAX 3 fw 2.0.4 |
 | `0xFE` | `StatusUpdate` | Host → Device | 8 bytes LE `uint64` bitfield; request device send current values of indicated attributes |
 
 ### HeatingState values
@@ -192,6 +202,14 @@ attributes:
 
 Querying this first is worth it: it settles which attributes exist before
 anything is written, rather than guessing and writing blind.
+
+Of those 21, `0x1A` is not named even in the official app's own enum, and
+`0x0F` GameMode, `0x11` HeaterRanges, `0x19` HeatingParams, `0x1B` UiMode,
+`0x1E` LowSoCMode and `0x09` Time are named but undecoded. `0x36` FindMyPax
+exists in the official enum but this firmware does **not** advertise it.
+
+Attribute numbering below was cross-checked against the official PAX web app's
+own `Messages` enum, which agrees with this table throughout.
 
 **The write characteristic is `writeWithoutResponse`**, so a write is never
 acknowledged — `didWriteValueFor` does not fire. The only way to tell whether
