@@ -16,6 +16,7 @@ struct TemperatureDial<Center: View>: View {
     /// Called once when the finger lifts, so only one packet is written.
     let onCommit: (Double) -> Void
     private let center: Center
+    @State private var isScrubbing = false
 
     init(current: Double?,
          target: Double,
@@ -90,7 +91,6 @@ struct TemperatureDial<Center: View>: View {
     }
 
     private var targetMarker: some View {
-        let anchor = ringPoint(for: target, radius: DS.Dial.radius)
         let reach = DS.Dial.markerReach * 2
         return ZStack {
             Capsule()
@@ -100,9 +100,14 @@ struct TemperatureDial<Center: View>: View {
                 .fill(Color.white)
                 .frame(width: reach, height: DS.Dial.markerWidth)
         }
+        // Pushed out to the ring and then rotated about the dial's centre, so
+        // the only animatable quantity is the angle and the marker travels
+        // along the arc. Animating a .position instead interpolates the point
+        // in a straight line, which swings the marker across the dial's middle.
+        .offset(x: DS.Dial.radius)
         .rotationEffect(.degrees(degrees(for: target)))
-        .position(x: anchor.x, y: anchor.y)
-        .animation(.easeOut(duration: 0.15), value: target)
+        // A drag should track the finger exactly; easing it lags behind.
+        .animation(isScrubbing ? nil : .easeOut(duration: 0.18), value: target)
     }
 
     // MARK: - Geometry
@@ -124,10 +129,12 @@ struct TemperatureDial<Center: View>: View {
     private var scrub: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
+                isScrubbing = true
                 guard let celsius = celsius(at: value.location) else { return }
                 onScrub(celsius)
             }
             .onEnded { value in
+                isScrubbing = false
                 guard let celsius = celsius(at: value.location) else { return }
                 onCommit(celsius)
             }
