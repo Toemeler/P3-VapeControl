@@ -128,6 +128,10 @@ final class PaxDeviceViewModel: ObservableObject {
     @Published private(set) var heatingParamsStoppedOven = false
     /// When the last 0x19 write went out, so the stop above can be tied to it.
     private var lastHeatingParamsWrite: Date?
+    /// The last time the PAX said anything. The waiting card counts up from it,
+    /// so a glance says whether it has just stepped out of range or has been
+    /// gone all afternoon.
+    private var lastSeenAt: Date?
     /// The device's physical shell colour (attribute 0x1C) — hardware identity,
     /// read only. It is not where the LED colour lives.
     @Published private(set) var shellColorIndex: UInt8?
@@ -1119,6 +1123,8 @@ final class PaxDeviceViewModel: ObservableObject {
     func refreshLiveActivity() {
         guard settings.liveActivityEnabled, !demoMode else { return }
         let state = PaxActivityAttributes.ContentState(
+            phase: livePhase,
+            lastSeen: lastSeenAt,
             isConnected: connectionState.isConnected,
             headline: statusHeadline,
             batteryLevel: batteryLevel,
@@ -1134,6 +1140,25 @@ final class PaxDeviceViewModel: ObservableObject {
             deviceName: connectionState.isConnected ? deviceLabel
                 : (rememberedDeviceName ?? settings.deviceNickname ?? "PAX"),
             state: state)
+    }
+
+    /// What the Lock Screen card is about, which is not quite the heating state:
+    /// the charger outranks the oven, and a PAX that is not there outranks both.
+    private var livePhase: PaxActivityAttributes.ContentState.Phase {
+        guard connectionState.isConnected else { return .waiting }
+        if isCharging == true { return .charging }
+        switch heatingState {
+        case .heating:     return .heating
+        case .ready:       return .ready
+        case .boosting:    return .drawing
+        case .cooling:     return .cooling
+        case .ovenOff:     return .ovenOff
+        case .tempSetMode: return .ready
+        // Standby, and the first second or two after connecting when the device
+        // has not said yet — both are "nothing is happening", which is what the
+        // standby card shows.
+        case .standby, .none: return .standby
+        }
     }
 
     func endLiveActivity() {
@@ -1572,6 +1597,7 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     private func applyPacket(_ packet: PaxPacket) {
+        lastSeenAt = Date()
         switch packet.type {
         case .actualTemp:
             actualTempC = packet.temperatureCelsius

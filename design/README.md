@@ -10,7 +10,11 @@ to 10 pt and turning green on the charger, with a highlight travelling around it
 so the motion means current rather than a level changing. The steppers, presets
 and mode tiles stay where they are and grey out.
 
-Still open: how the three Lock Screen states relate to each other.
+Settled: the three Lock Screen states share one skeleton — ring, name and
+state, lead number — and only what the ring measures and which number leads
+changes between them. A card that rearranges itself has to be read again every
+time. Built in `PaxController/LiveActivity/PaxStatusLiveActivity.swift`; the
+artboards stay as the record of what was considered.
 
 Measurements are lifted from `DesignSystem.swift` so the mockups and the app
 agree: a 390 × 844 frame, a 380 pt dial whose arc runs 270° clockwise from
