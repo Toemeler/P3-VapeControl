@@ -18,20 +18,23 @@ enum HeroSpan {
 /// A slender tapered pointer with a counterweight, drawn pointing up so the
 /// caller only has to rotate it.
 struct NeedleShape: Shape {
-    var reach: CGFloat = 0.78
-    var tail: CGFloat = 0.16
+    /// How far out the tip reaches, as a fraction of the radius. It has to stop
+    /// short of the tick ring: a needle that runs into the printed scale reads
+    /// as a mistake rather than as a reading.
+    var reach: CGFloat = 0.72
+    /// A short counterweight only. A long tail turns the needle into a diameter
+    /// and drags it straight across the readout in the middle of the face.
+    var tail: CGFloat = 0.07
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let centre = CGPoint(x: rect.midX, y: rect.midY)
         let radius = min(rect.width, rect.height) / 2
-        let tip = centre.y - radius * reach
-        let base = centre.y + radius * tail
-        path.move(to: CGPoint(x: centre.x, y: tip))
-        path.addLine(to: CGPoint(x: centre.x + 2.6, y: centre.y - radius * 0.1))
-        path.addLine(to: CGPoint(x: centre.x + 4.2, y: base))
-        path.addLine(to: CGPoint(x: centre.x - 4.2, y: base))
-        path.addLine(to: CGPoint(x: centre.x - 2.6, y: centre.y - radius * 0.1))
+        path.move(to: CGPoint(x: centre.x, y: centre.y - radius * reach))
+        path.addLine(to: CGPoint(x: centre.x + 1.9, y: centre.y - radius * 0.22))
+        path.addLine(to: CGPoint(x: centre.x + 3.2, y: centre.y + radius * tail))
+        path.addLine(to: CGPoint(x: centre.x - 3.2, y: centre.y + radius * tail))
+        path.addLine(to: CGPoint(x: centre.x - 1.9, y: centre.y - radius * 0.22))
         path.closeSubpath()
         return path
     }
@@ -52,9 +55,13 @@ struct TraceShape: Shape {
         }
         path.move(to: place(points[0]))
         for point in points.dropFirst() { path.addLine(to: place(point)) }
-        if closed {
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        if closed, let first = points.first, let last = points.last {
+            // Down from the last sample and back along the axis to where the
+            // trace actually starts. Closing at the plot's left edge instead
+            // invented a diagonal from the corner whenever the record was
+            // shorter than the window.
+            path.addLine(to: CGPoint(x: rect.minX + last.x * rect.width, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX + first.x * rect.width, y: rect.maxY))
             path.closeSubpath()
         }
         return path
@@ -493,12 +500,15 @@ struct ColumnHero: View {
                     .clipShape(RoundedRectangle(cornerRadius: t.metric(.plateRadius), style: .continuous))
                     .animation(.easeOut(duration: 0.5), value: fill)
             }
-            .overlay(alignment: .bottomLeading) {
+            .overlay(alignment: .bottomTrailing) {
+                // On the vessel's inner edge, pointing into it. On the outer
+                // edge it sat against the screen bezel and read as a stray
+                // glyph rather than as the line you had set.
                 Triangle()
-                    .rotation(.degrees(-90))
+                    .rotation(.degrees(90))
                     .fill(t.ink)
-                    .frame(width: 8, height: 8)
-                    .offset(x: -9, y: -(height * target) + 4)
+                    .frame(width: 7, height: 7)
+                    .offset(x: 11, y: -(height * target) + 3.5)
             }
             .contentShape(Rectangle())
             .gesture(
@@ -523,7 +533,9 @@ struct ColumnHero: View {
         GeometryReader { geo in
             let height = geo.size.height
             ZStack(alignment: .topLeading) {
-                ForEach([DS.Range.max, DS.Range.vendorMax, DS.Range.min], id: \.self) { value in
+                // 215 is five percent of the span from 225 and printed on top
+                // of it. Two marks and the floor are enough to read the column.
+                ForEach([DS.Range.max, DS.Range.min], id: \.self) { value in
                     let y = height * (1 - CGFloat(HeroSpan.fraction(of: value)))
                     HStack(spacing: 5) {
                         Rectangle().fill(t.hairline).frame(width: 7, height: 1)
@@ -559,9 +571,10 @@ struct ColumnHero: View {
                 .contentTransition(.numericText())
                 .animation(.easeOut(duration: 0.35), value: viewModel.actualTempC)
                 .padding(.top, 4)
-            Text(t.labelText("degrees " + (context.unit == .celsius ? "celsius" : "fahrenheit")))
-                .font(t.label()).tracking(t.labelTracking).foregroundStyle(t.muted)
-                .padding(.top, 4)
+            Text(context.unit.symbol)
+                .font(t.display(t.heroSize * 0.2, .medium))
+                .foregroundStyle(t.muted)
+                .padding(.top, 2)
             Rectangle().fill(t.hairline).frame(height: 1).padding(.vertical, 14)
             ThemedReadoutState(context: context)
         }
@@ -609,21 +622,27 @@ struct GaugeHero: View {
                         .rotationEffect(.degrees(Self.start + Self.sweep * Double(index) / 45))
                 }
 
-                ForEach([DS.Range.min, 190.0, 200.0, 210.0, 220.0, DS.Range.max], id: \.self) { value in
+                // Counter-rotated before being swung into place, so the
+                // numerals stand upright the way a printed face does. Rotating
+                // the glyph with the offset left 180 upside down and 225 on
+                // its side.
+                ForEach([DS.Range.min, 190.0, 200.0, 210.0, 220.0], id: \.self) { value in
                     Text(context.unit.format(value, includeSymbol: false))
-                        .font(t.body(12, .medium))
+                        .font(t.body(11.5, .medium))
                         .monospacedDigit()
-                        .foregroundStyle(t.ink)
-                        .offset(y: -(radius - 48))
+                        .foregroundStyle(t.ink.opacity(0.85))
+                        .rotationEffect(.degrees(-angle(for: value)))
+                        .offset(y: -(radius - 46))
                         .rotationEffect(.degrees(angle(for: value)))
                 }
 
-                // The band past the vendor's own ceiling, printed on the face.
+                // The band past the vendor's own ceiling, on the bezel rather
+                // than across the face, where it read as a stray red arc.
                 Circle()
                     .trim(from: CGFloat(DS.Range.fraction(of: DS.Range.vendorMax) * (Self.sweep / 360)),
                           to: CGFloat(Self.sweep / 360))
-                    .stroke(t.accent.opacity(0.7), lineWidth: 2.4)
-                    .frame(width: (radius - 18) * 2, height: (radius - 18) * 2)
+                    .stroke(t.accent.opacity(0.8), style: StrokeStyle(lineWidth: 3, lineCap: .butt))
+                    .frame(width: (radius - 5) * 2, height: (radius - 5) * 2)
                     .rotationEffect(.degrees(Self.start - 90))
 
                 // The target, as an index on the bezel.
@@ -634,17 +653,17 @@ struct GaugeHero: View {
                     .rotationEffect(.degrees(angle(for: viewModel.customTargetTempC)))
                     .animation(.easeOut(duration: 0.25), value: viewModel.customTargetTempC)
 
-                centreStack(size: size)
-
                 NeedleShape()
                     .fill(t.accent)
                     .frame(width: size, height: size)
                     .rotationEffect(.degrees(angle(for: viewModel.actualTempC ?? DS.Range.min)))
                     .animation(.easeOut(duration: 0.45), value: viewModel.actualTempC)
 
-                Circle().fill(t.track).frame(width: 17, height: 17)
+                Circle().fill(t.track).frame(width: 15, height: 15)
                     .overlay(Circle().strokeBorder(t.hairline, lineWidth: 1))
-                Circle().fill(t.ink).frame(width: 5, height: 5)
+                Circle().fill(t.ink).frame(width: 4.5, height: 4.5)
+
+                centreStack(size: size)
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
@@ -652,10 +671,14 @@ struct GaugeHero: View {
         .padding(.horizontal, t.gutter)
     }
 
+    /// State above the hub, reading below it, both clear of the needle's sweep
+    /// and of the printed scale. The battery is already in the header, so the
+    /// face does not repeat it.
     private func centreStack(size: CGFloat) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 0) {
             ThemedReadoutState(context: context, dotted: false)
-                .padding(.bottom, size * 0.12)
+                .offset(y: -size * 0.17)
+            Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(viewModel.actualTempC.map { context.format($0, decimals: 1, symbol: false) } ?? "--")
                     .font(t.display(t.heroSize))
@@ -663,15 +686,13 @@ struct GaugeHero: View {
                     .contentTransition(.numericText())
                     .animation(.easeOut(duration: 0.35), value: viewModel.actualTempC)
                 Text(context.unit.symbol)
-                    .font(t.body(17, .medium))
+                    .font(t.body(16, .medium))
                     .foregroundStyle(t.muted)
             }
             .foregroundStyle(t.ink)
-            if let battery = viewModel.batteryLevel {
-                Text(t.labelText("batt \(battery)%"))
-                    .font(t.label()).tracking(t.labelTracking).foregroundStyle(t.muted)
-                    .padding(.top, 4)
-            }
+            .offset(y: size * 0.19)
+            Spacer(minLength: 0)
         }
+        .frame(height: size * 0.6)
     }
 }

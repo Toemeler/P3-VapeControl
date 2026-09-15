@@ -188,9 +188,13 @@ struct StackedShell: View {
                 .padding(.top, t.metric(.sectionGap))
             ThemedPresets(context: context, style: t.theme.presetKind)
                 .padding(.top, t.metric(.sectionGap) * 0.6)
+            // Two spacers, not one: a single spacer before the modes put every
+            // leftover point into one gap, which on the shorter heroes left a
+            // void a third of the screen tall.
             Spacer(minLength: 0)
             ThemedModes(context: context, style: t.theme.modeKind)
-                .padding(.bottom, 12)
+            Spacer(minLength: 0)
+                .frame(maxHeight: 24)
         }
     }
 
@@ -234,12 +238,8 @@ struct ChartShell: View {
             ThemedHeader(context: context, style: .chart, showDeviceSheet: $showDeviceSheet)
 
             HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(t.labelText("Oven"))
-                        .font(t.label()).tracking(t.labelTracking).foregroundStyle(t.muted)
-                    ThemedReadoutState(context: context, dotted: false)
-                }
-                .padding(.bottom, 6)
+                ThemedReadoutState(context: context, dotted: false)
+                    .padding(.bottom, 8)
                 Spacer()
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(viewModel.actualTempC.map { context.format($0, decimals: 1, symbol: false) } ?? "--")
@@ -254,8 +254,8 @@ struct ChartShell: View {
                 .foregroundStyle(t.ink)
             }
             .padding(.horizontal, t.gutter)
-            .padding(.top, 16)
-            .padding(.bottom, 10)
+            .padding(.top, 12)
+            .padding(.bottom, 18)
 
             trace
             stats.padding(.top, 14)
@@ -277,16 +277,15 @@ struct ChartShell: View {
 
     private var trace: some View {
         HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .trailing, spacing: 0) {
-                axisLabel(DS.Range.max)
-                Spacer(minLength: 0)
-                axisLabel(DS.Range.min)
-                Spacer(minLength: 0)
-                axisLabel(100)
-                Spacer(minLength: 0)
-                axisLabel(HeroSpan.floor)
+            // Positioned by the same fraction as the gridlines. Spacing them
+            // evenly put every label somewhere its line was not.
+            ZStack(alignment: .topTrailing) {
+                ForEach([DS.Range.max, DS.Range.min, 100.0, HeroSpan.floor], id: \.self) { value in
+                    axisLabel(value)
+                        .offset(y: 300 * CGFloat(1 - HeroSpan.fraction(of: value)) - 6)
+                }
             }
-            .frame(width: 30, height: 300)
+            .frame(width: 30, height: 300, alignment: .topTrailing)
 
             GeometryReader { geo in
                 let size = geo.size
@@ -382,10 +381,20 @@ struct FieldShell: View {
         GeometryReader { geo in
             let height = geo.size.height
             ZStack(alignment: .bottom) {
+                // The whole screen is the track, not just the filled part. A
+                // bare field on a blank page looked broken at anything under
+                // half: 193 of a 180-225 range is 29 percent, which left two
+                // thirds of the screen empty and unexplained.
+                LinearGradient(colors: [t.color(.heroFill).opacity(0.14),
+                                        t.color(.heroFill).opacity(0.05)],
+                               startPoint: .bottom, endPoint: .top)
                 LinearGradient(colors: [t.color(.heroFill), t.color(.heroFillEnd)],
                                startPoint: .bottom, endPoint: .top)
                     .frame(height: height * target)
                     .animation(.easeOut(duration: 0.2), value: target)
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(t.color(.heroFillEnd)).frame(height: 1.5)
+                    }
 
                 // What the oven actually reads, chasing the line you set.
                 Rectangle()
@@ -452,7 +461,9 @@ struct FieldShell: View {
         }
         .padding(.horizontal, t.gutter)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, height * target + 14)
+        // Held clear of the header, so a high target does not slide the
+        // number up behind the device name.
+        .padding(.bottom, min(height - 210, height * target + 16))
     }
 
     private var oneLineStatus: String {
@@ -464,19 +475,24 @@ struct FieldShell: View {
     }
 
     private func detents(height: CGFloat) -> some View {
-        ZStack(alignment: .bottomTrailing) {
+        // Inset top and bottom so the end stops stay on screen: 180 sits at
+        // the very foot of the scale and was being drawn below the bezel.
+        let inset: CGFloat = 54
+        let usable = max(1, height - inset * 2)
+        return ZStack(alignment: .bottomTrailing) {
             ForEach(PaxPresetTemp.allCases) { preset in
                 let selected = viewModel.selectedPreset == preset
-                let y = height * CGFloat(DS.Range.fraction(of: Double(preset.rawValue)))
-                HStack(spacing: 7) {
+                let y = inset + usable * CGFloat(DS.Range.fraction(of: Double(preset.rawValue)))
+                HStack(spacing: 8) {
                     Text(context.unit.format(Double(preset.rawValue), includeSymbol: false))
                         .font(t.label()).tracking(t.labelTracking)
                         .foregroundStyle(selected ? t.accent : t.muted)
                     Rectangle()
-                        .fill(selected ? t.accent : t.ink.opacity(0.3))
-                        .frame(width: selected ? 22 : 14, height: selected ? 2 : 1.5)
+                        .fill(selected ? t.accent : t.ink.opacity(0.28))
+                        .frame(width: selected ? 20 : 12, height: selected ? 2 : 1)
                 }
                 .frame(height: 44)
+                .padding(.trailing, t.gutter)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     guard context.active else { return }
@@ -606,9 +622,9 @@ struct ProseShell: View {
             HStack {
                 Text(t.labelText("cold"))
                 Spacer()
-                Text(t.labelText("target"))
+                Text(t.labelText("target " + context.unit.format(viewModel.customTargetTempC, includeSymbol: false) + "°"))
                 Spacer()
-                Text(t.labelText(context.unit.format(DS.Range.max, includeSymbol: false)))
+                Text(t.labelText(context.unit.format(DS.Range.max, includeSymbol: false) + "°"))
             }
             .font(t.label()).tracking(t.labelTracking).foregroundStyle(t.muted)
         }
@@ -695,11 +711,13 @@ struct ObjectShell: View {
                 }
                 .frame(width: 84, height: height - 48)
                 .clipShape(RoundedRectangle(cornerRadius: t.metric(.scaleStroke), style: .continuous))
-
-                // A seam, so it reads as an object rather than a shape.
-                Rectangle().fill(t.hairline)
-                    .frame(height: 1)
-                    .offset(y: -height * 0.16)
+                // Drawn over the body but under the chamber, otherwise the
+                // seam cuts a hairline straight across the heat inside.
+                .background(
+                    Rectangle().fill(t.hairline)
+                        .frame(height: 1)
+                        .offset(y: -height * 0.16)
+                )
             }
             .overlay(alignment: .bottomLeading) {
                 HStack(spacing: 4) {
@@ -708,7 +726,7 @@ struct ObjectShell: View {
                     Rectangle().fill(t.ink).frame(width: 10, height: 2)
                 }
                 .fixedSize()
-                .offset(x: -44, y: -((height - 48) * target) - 24)
+                .offset(x: -38, y: -((height - 48) * target) - 24)
             }
             .contentShape(Rectangle())
             .gesture(
@@ -825,14 +843,14 @@ struct CountdownShell: View {
                 let width = geo.size.width
                 let progress = CGFloat(HeroSpan.fraction(of: viewModel.actualTempC ?? HeroSpan.floor))
                 ZStack(alignment: .topLeading) {
-                    Rectangle().fill(t.track).frame(width: width, height: 12)
-                    Rectangle().fill(stateColor).frame(width: width * progress, height: 12)
+                    Rectangle().fill(t.track).frame(width: width, height: 8)
+                    Rectangle().fill(t.accent).frame(width: width * progress, height: 8)
                         .animation(.easeOut(duration: 0.5), value: progress)
-                    Rectangle().fill(t.ink).frame(width: 2, height: 22)
-                        .offset(x: width * progress - 1, y: -5)
+                    Rectangle().fill(t.ink).frame(width: 2, height: 18)
+                        .offset(x: max(0, width * progress - 1), y: -5)
                 }
             }
-            .frame(height: 12)
+            .frame(height: 8)
             HStack {
                 Text(t.labelText("cold"))
                 Spacer()

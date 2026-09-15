@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - Labels
+
+extension PaxDynamicMode {
+    /// For the rows that put five modes across a phone. "Efficiency" is the
+    /// only label that does not fit, and letting `minimumScaleFactor` shrink
+    /// just that one made every mode row contain two type sizes.
+    var compactLabel: String {
+        self == .efficiency ? "Effic." : label
+    }
+}
+
 // MARK: - Shared context
 
 /// What every themed component needs to draw itself, gathered once by the shell
@@ -515,15 +526,25 @@ struct ThemedPresets: View {
             .foregroundStyle(isActive(preset) ? t.accent : t.ink)
     }
 
+    /// The live preset is marked with the accent in the type and a hairline of
+    /// it around the plate. A solid accent fill reads as a call to action on a
+    /// row of four, and drowned every restrained theme that uses this style.
     private func plate(_ preset: PaxPresetTemp) -> some View {
-        Text(context.degrees(Double(preset.rawValue)))
-            .font(t.body(14, isActive(preset) ? .semibold : .regular))
+        let live = isActive(preset)
+        return Text(context.degrees(Double(preset.rawValue)))
+            .font(t.body(14, live ? .semibold : .regular))
             .monospacedDigit()
             .frame(maxWidth: .infinity)
             .frame(height: t.metric(.presetHeight))
-            .background(RoundedRectangle(cornerRadius: t.metric(.plateRadius), style: .continuous)
-                .fill(isActive(preset) ? t.accent : t.plate))
-            .foregroundStyle(isActive(preset) ? t.onAccent : t.ink)
+            .background(
+                RoundedRectangle(cornerRadius: t.metric(.plateRadius), style: .continuous)
+                    .fill(live ? t.accentWash : t.plate)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: t.metric(.plateRadius), style: .continuous)
+                    .strokeBorder(live ? t.accent : Color.clear, lineWidth: 1.5)
+            )
+            .foregroundStyle(live ? t.accent : t.ink)
     }
 
     private var segmented: some View {
@@ -560,13 +581,13 @@ struct ThemedPresets: View {
                         .font(t.display(25, isActive(preset) ? .semibold : .regular))
                         .monospacedDigit()
                         .foregroundStyle(isActive(preset) ? t.accent : t.muted)
-                        .frame(height: t.metric(.presetHeight))
+                        .padding(.bottom, 4)
                         .overlay(alignment: .bottom) {
                             if isActive(preset) {
-                                Rectangle().fill(t.accent.opacity(0.45)).frame(height: 2)
-                                    .padding(.bottom, 10)
+                                Rectangle().fill(t.accent.opacity(0.5)).frame(height: 2)
                             }
                         }
+                        .frame(height: t.metric(.presetHeight))
                 }
                 .buttonStyle(.plain)
             }
@@ -580,7 +601,8 @@ struct ThemedPresets: View {
         HStack(spacing: 0) {
             ForEach(Array(PaxPresetTemp.allCases.enumerated()), id: \.element.id) { index, preset in
                 if index > 0 {
-                    Rectangle().fill(t.hairline).frame(width: t.hairlineWidth)
+                    Rectangle().fill(t.hairline)
+                        .frame(width: t.hairlineWidth, height: t.metric(.presetHeight))
                 }
                 Button { viewModel.setTemperature(preset) } label: {
                     VStack(spacing: 4) {
@@ -683,23 +705,28 @@ struct ThemedModes: View {
 
     /// One plate divided into five positions, the live one filled.
     private var switchBar: some View {
-        HStack(spacing: 0) {
+        let height = t.metric(.modeHeight)
+        return HStack(spacing: 0) {
             ForEach(Array(PaxDynamicMode.allCases.enumerated()), id: \.element.id) { index, mode in
                 if index > 0 {
-                    Rectangle().fill(t.hairline).frame(width: t.hairlineWidth)
+                    // An explicit height: a Rectangle given only a width takes
+                    // every point on offer, which stretched this bar to the
+                    // whole space the shell's spacer had left over.
+                    Rectangle().fill(t.hairline)
+                        .frame(width: t.hairlineWidth, height: height)
                 }
                 button(mode) {
-                    Text(t.labelText(mode.label))
+                    Text(t.labelText(mode.compactLabel))
                         .font(t.body(11, isActive(mode) ? .medium : .regular))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.75)
                         .frame(maxWidth: .infinity)
-                        .frame(height: t.metric(.modeHeight))
+                        .frame(height: height)
                         .background(isActive(mode) ? t.ink : Color.clear)
                         .foregroundStyle(isActive(mode) ? t.canvas : t.muted)
                 }
             }
         }
+        .frame(height: height)
         .background(RoundedRectangle(cornerRadius: t.metric(.plateRadius), style: .continuous).fill(t.plate))
         .clipShape(RoundedRectangle(cornerRadius: t.metric(.plateRadius), style: .continuous))
         .padding(.horizontal, t.gutter)
@@ -712,10 +739,9 @@ struct ThemedModes: View {
                 button(mode) {
                     VStack(spacing: 7) {
                         Image(systemName: mode.icon).font(.system(size: 18))
-                        Text(t.labelText(mode.label))
+                        Text(t.labelText(mode.compactLabel))
                             .font(t.body(9.5, .semibold))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.7)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: t.metric(.modeHeight))
@@ -782,18 +808,18 @@ struct ThemedModes: View {
         HStack(spacing: 14) {
             ForEach(PaxDynamicMode.allCases) { mode in
                 button(mode) {
-                    Text(t.labelText(mode.label))
+                    Text(t.labelText(mode.compactLabel))
                         .font(t.body(13, isActive(mode) ? .semibold : .regular))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
                         .foregroundStyle(isActive(mode) ? t.accent : t.muted)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: t.metric(.modeHeight))
+                        .padding(.bottom, 5)
                         .overlay(alignment: .bottom) {
                             if isActive(mode) {
-                                Rectangle().fill(t.accent).frame(height: 2).padding(.bottom, 8)
+                                Rectangle().fill(t.accent).frame(height: 1.5)
                             }
                         }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: t.metric(.modeHeight))
                 }
             }
         }
@@ -805,10 +831,9 @@ struct ThemedModes: View {
         HStack(spacing: 3) {
             ForEach(PaxDynamicMode.allCases) { mode in
                 button(mode) {
-                    Text(t.labelText(mode.label))
+                    Text(t.labelText(mode.compactLabel))
                         .font(t.body(10.5, isActive(mode) ? .bold : .medium))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity)
                         .frame(height: t.metric(.modeHeight) - 6)
                         .background(
