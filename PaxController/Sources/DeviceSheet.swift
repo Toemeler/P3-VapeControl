@@ -23,6 +23,7 @@ struct DeviceSheet: View {
                 ledModeSection
                 alertsSection
                 temperatureSection
+                ovenSection
                 connectionSection
                 lockScreenSection
                 deviceSection
@@ -107,6 +108,43 @@ struct DeviceSheet: View {
                 row("On device", value: unit.format(target, decimals: 1))
             }
         }
+    }
+
+    /// The lip sensor's hold over the oven. HeatingParams (0x19) is written
+    /// wholesale and this firmware has not answered a read of it in any
+    /// capture, so the switch is a record of what the app last sent rather than
+    /// a reading — the footer says so rather than implying the device
+    /// confirmed anything.
+    @ViewBuilder
+    private var ovenSection: some View {
+        Section {
+            Toggle("Lip detection", isOn: Binding(
+                get: { viewModel.lipDetectionEnabled },
+                set: { viewModel.setLipDetection($0) }))
+                .disabled(!viewModel.canSetLipDetection)
+            if !viewModel.lipDetectionEnabled {
+                Button("Restore factory heating settings") {
+                    viewModel.restoreStockHeatingParams()
+                }
+                .disabled(!viewModel.canSetLipDetection)
+            }
+        } header: {
+            Text("Oven")
+        } footer: {
+            Text(lipDetectionNote)
+        }
+    }
+
+    private var lipDetectionNote: String {
+        guard viewModel.canSetLipDetection else {
+            return viewModel.canSendCommands
+                ? "This PAX does not report the heating parameters attribute, so lip detection cannot be changed from here."
+                : "Connect to the PAX to change this."
+        }
+        let base = viewModel.lipDetectionEnabled
+            ? "The PAX raises the temperature while it senses a draw, then cools and switches off when it stops sensing one."
+            : "The oven holds the set point whether or not it senses a draw — no boost on a draw, and no cooling when the lips leave it. It also no longer switches itself off a few minutes after the last draw: it still drops to the standby temperature when the device stops moving, but from there it stays warm until it is switched off by hand or the battery runs down."
+        return base + " Written as part of the heating parameters, which a mode change replaces — the app re-sends it after every mode change and on every connection. The PAX does not report this attribute back, so the switch shows what was last sent, not a reading."
     }
 
     // MARK: - LED color

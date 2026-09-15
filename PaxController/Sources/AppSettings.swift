@@ -20,6 +20,7 @@ final class AppSettings: ObservableObject {
         static let warmUpGradient  = "warmUpGradient"
         static let nickname        = "deviceNickname"
         static let paletteVersion  = "ledPaletteVersion"
+        static let lipDetection    = "lipDetectionEnabled"
     }
 
     /// Drives `DS.Palette.accent`, so it re-themes the dial, chips and buttons.
@@ -80,6 +81,15 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(modeLedHexes, forKey: Key.modeColors) }
     }
 
+    /// Whether the lip sensor is allowed to drive the oven: the boost on a
+    /// draw, and the cooling and shutdown that follow when it stops seeing one.
+    /// This one is not a preference the app acts on but a record of what was
+    /// last written to the device — HeatingParams (0x19) is write-only on this
+    /// firmware, so nothing can read back whether it took.
+    @Published var lipDetectionEnabled: Bool {
+        didSet { defaults.set(lipDetectionEnabled, forKey: Key.lipDetection) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -97,6 +107,10 @@ final class AppSettings: ObservableObject {
         deviceNickname      = defaults.string(forKey: Key.nickname)
         notifyWhenReady     = defaults.object(forKey: Key.readyAlert) as? Bool ?? true
         warmUpGradient      = defaults.object(forKey: Key.warmUpGradient) as? Bool ?? true
+        // On is the device's own default, and the one every vendor preset
+        // ships with, so an install that has never touched this matches what
+        // the PAX does out of the box.
+        lipDetectionEnabled = defaults.object(forKey: Key.lipDetection) as? Bool ?? true
         // On by default: the four states carry the palette below, which is
         // what makes the PAX show what it is doing rather than one flat colour.
         perModeLedColors    = defaults.object(forKey: Key.perModeColors) as? Bool ?? true

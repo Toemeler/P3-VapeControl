@@ -117,7 +117,7 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 | `0x15` | `Brightness` | Both | **1 byte, 0…128** (not 0–100). PAX 3 reported `0x80` = full |
 | `0x17` | `HapticMode` | Both | Byte 0 is amplitude, 0…128. PAX 3 reports **6 bytes** (`2F 04 02 04 01 00`); the rest are undecoded |
 | `0x18` | `SupportedAttributes` | Device → Host | 8 bytes LE `uint64` bitfield; bit N set = attribute N supported |
-| `0x19` | `HeatingParams` | Both | Unknown |
+| `0x19` | `HeatingParams` | Both | **22 bytes: 11 LE `uint16` words** — the heating algorithm, options bitfield last (see below) |
 | `0x1B` | `UiMode` | Both | 1 byte; PAX 3 reports `0x01` |
 | `0x1C` | `ShellColor` | Device → Host | 1 byte: the casing's own colour. `0`=Onyx Black, `1`=Silver, `2`=Rose Gold, `3`=Sage Teal, `4`=Burgundy. Hardware identity, **not** the LED colour. A PAX 3 on fw 2.0.4 answered `0xE5`, outside that range — treat an out-of-range value as unpopulated |
 | `0x1E` | `LowSoCMode` | Both | 1 byte; PAX 3 reports `0x00` |
@@ -222,8 +222,8 @@ Querying this first is worth it: it settles which attributes exist before
 anything is written, rather than guessing and writing blind.
 
 Of those 21, `0x1A` is not named even in the official app's own enum, and
-`0x0F` GameMode, `0x11` HeaterRanges, `0x19` HeatingParams, `0x1B` UiMode,
-`0x1E` LowSoCMode and `0x09` Time are named but undecoded. `0x36` FindMyPax
+`0x0F` GameMode, `0x11` HeaterRanges, `0x1B` UiMode and `0x1E` LowSoCMode are
+named but undecoded. `0x36` FindMyPax
 exists in the official enum but this firmware does **not** advertise it.
 
 Attribute numbering below was cross-checked against the official PAX web app's
@@ -267,6 +267,83 @@ Full RGB is supported; this is not a palette of preset themes.
 > consecutive sessions the device powered off and the link dropped about two
 > seconds later, while a session that never wrote `ColorTheme` stayed up for
 > over a minute. Get the count right.
+
+### HeatingParams (0x19) — the heating algorithm, and lip detection
+
+Read out of the official PAX web app's own bundle, where the five Dynamic Modes
+are nothing but five of these blocks. **22 bytes, eleven little-endian 16-bit
+words**, written in this order — which is not the alphabetical order the app's
+own source declares the fields in:
+
+```
+0  StandbyTemperature              °C × 10
+1  NoMotionToStandbyTime           seconds
+2  NoLipCooldownTemperatureChange  °C × 10
+3  NoLipCooldownStart              seconds
+4  NoLipCooldownRate               °C × 10 per interval
+5  NoLipPowerOffTime               seconds
+6  BoostTemperatureChange          °C × 10
+7  RampTargetTemperature           °C × 10
+8  RampStartingTemperature         °C × 10
+9  RampRate
+10 Options                         bitfield, below
+```
+
+The options word:
+
+```
+bit 0  Boost              raise the temperature while a draw is sensed
+bit 1  CustomTemperature  honour the set point (off in Efficiency, which ramps)
+bit 2  Heater             whether the oven heats at all
+bit 3  NoLipCooling       cool down when no lip is sensed
+bit 4  NoLipShutdown      switch off when no lip is sensed
+bit 5  RampContinue
+bit 6  Ramp
+bit 7  Standby            drop to standby when the device stops moving (motion,
+                          not lip)
+```
+
+The five stock presets, verbatim from the bundle:
+
+| | Standard | Boost | Efficiency | Stealth | Flavor |
+|---|---|---|---|---|---|
+| StandbyTemperature | 1600 | 1750 | 1600 | 1200 | 1600 |
+| NoMotionToStandbyTime | 30 | 60 | 30 | 15 | 15 |
+| NoLipCooldownTempChange | 150 | 70 | 150 | 300 | 250 |
+| NoLipCooldownStart | 20 | 30 | 20 | 9 | 10 |
+| NoLipCooldownRate | 30 | 20 | 30 | 100 | 100 |
+| NoLipPowerOffTime | 180 | 180 | 180 | 180 | 180 |
+| BoostTemperatureChange | 39 | 112 | 39 | 0 | 84 |
+| RampTargetTemperature | 2300 | 2300 | 2350 | 2300 | 2300 |
+| RampStartingTemperature | 1990 | 1990 | 2050 | 2040 | 2040 |
+| RampRate | 20 | 20 | 20 | 20 | 20 |
+| Options | 0x9F | 0x9F | 0xDD | 0x9F | 0x9F |
+
+So a Dynamic Mode *is* a HeatingParams block. The official app's
+`writeDynamicMode` writes **both**: `DynamicMode` (0x13) with the mode ID, and
+then `HeatingParams` (0x19) with that mode's block. Whether the firmware would
+have applied the preset on its own from the 0x13 write alone is not known — the
+official app never gives it the chance. Either way, anything changed here has to
+be re-applied after a mode change: if the firmware resets the block, the change
+is gone, and if it does not, the block still needs to become the new mode's.
+
+**Lip detection is bits 0, 3 and 4 together** — the boost while a draw is
+sensed, and the cooling and shutdown that follow when it stops sensing one.
+Clearing all three (`0x9F` → `0x86`) leaves the oven holding the set point
+regardless of the lip sensor. It also disables the `NoLipPowerOffTime` timer,
+which is what switches the device off three minutes after the last draw — bit 7
+Standby is left alone, so a device that stops moving still drops to
+`StandbyTemperature`, but that is a lower temperature, not an off. The app says
+so in the settings footer rather than presenting this as free.
+
+**This firmware has not answered a read of 0x19 in any capture so far.** It
+advertises the attribute in SupportedAttributes, but the probe's three reads of
+it came back with nothing — so a write cannot be confirmed by reading it back,
+the way every other attribute here was confirmed. The app parses a report if one
+ever arrives and prefers it as the template. The app therefore starts every write from the stock preset for the mode
+the device reports being in, changes only the three lip bits, forces bit 2
+Heater on, and range-checks the result before sending it. The switch in the app
+shows what was last sent, not what the device holds.
 
 ## Separating payload from padding
 

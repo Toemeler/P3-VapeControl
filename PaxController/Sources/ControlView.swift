@@ -20,9 +20,7 @@ struct ControlView: View {
         }
     }
 
-    private var canSendCommands: Bool {
-        viewModel.connectionState.isConnected && viewModel.paxServiceConfirmed
-    }
+    private var canSendCommands: Bool { viewModel.canSendCommands }
 
     /// The oven is off on the charger, so the steppers, presets and modes have
     /// nothing to act on. They stay exactly where they are and grey out rather

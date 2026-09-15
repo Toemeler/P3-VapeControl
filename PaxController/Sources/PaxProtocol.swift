@@ -90,6 +90,7 @@ enum PaxMessageType: UInt8 {
         case .heaterRanges:                                     return 12
         case .colorTheme:                                       return PaxColorTheme.payloadSize
         case .hapticMode:                                       return 6
+        case .heatingParams:                                    return PaxHeatingParams.payloadSize
         case .supportedAttribs:                                 return 8
         default:                                                return nil
         }
@@ -362,6 +363,14 @@ extension PaxPacket {
         PaxPacket(type: .dynamicMode, payload: Data([mode.rawValue]))
     }
 
+    /// Writes the heating parameters wholesale (0x19). There is no way to
+    /// change one field: the attribute is written as a block, so the caller
+    /// has to start from a complete set — what the device reported, or the
+    /// vendor preset for the mode it is in — and change what it means to.
+    static func setHeatingParams(_ params: PaxHeatingParams) -> PaxPacket {
+        PaxPacket(type: .heatingParams, payload: params.payload)
+    }
+
     /// Writes an LED color attribute. Neither ColorTheme (0x14) nor ShellColor
     /// (0x1C) has a publicly documented payload, so the caller decides both
     /// which attribute to target and what shape the payload takes, based on
@@ -456,6 +465,10 @@ extension PaxPacket {
         return PaxDynamicMode(rawValue: payload[0])
     }
 
+    var heatingParams: PaxHeatingParams? {
+        PaxHeatingParams(payload: payload)
+    }
+
     /// SupportedAttributes (0x18): 64-bit LE bitfield, bit N set = the device
     /// supports attribute N. Asking the device what it can do beats guessing.
     var supportedAttributes: Set<UInt8> {
@@ -487,5 +500,183 @@ enum PaxError: Error, LocalizedError {
         case .notConnected:                 return "Not connected to device"
         case .missingCharacteristic(let s): return "Missing characteristic: \(s)"
         }
+    }
+}
+
+// MARK: - HeatingParams (0x19)
+
+/// What a PAX 3's Dynamic Modes actually are.
+///
+/// Layout and values taken from the official PAX web app's own serialiser: a
+/// 22-byte payload of eleven little-endian 16-bit fields, the last of which is
+/// a bitfield of feature switches. Picking a mode in that app writes one of the
+/// five presets below — the mode byte (0x13) is a label, this is the substance.
+///
+/// This firmware advertises the attribute and never answers it, so a write here
+/// cannot be read back. The values are the vendor's rather than invented, which
+/// is the best position available short of the device confirming.
+struct PaxHeatingParams: Equatable {
+    struct Options: OptionSet {
+        let rawValue: UInt16
+
+        /// Raise the temperature while a draw is detected.
+        static let boost             = Options(rawValue: 1 << 0)
+        /// Honour the set point. Efficiency turns this off and ramps instead.
+        static let customTemperature = Options(rawValue: 1 << 1)
+        /// Whether the oven heats at all.
+        static let heater            = Options(rawValue: 1 << 2)
+        /// Cool down when no lip is detected.
+        static let noLipCooling      = Options(rawValue: 1 << 3)
+        /// Switch off when no lip is detected.
+        static let noLipShutdown     = Options(rawValue: 1 << 4)
+        static let rampContinue      = Options(rawValue: 1 << 5)
+        static let ramp              = Options(rawValue: 1 << 6)
+        /// Drop to standby when the device stops moving. Motion, not lip.
+        static let standby           = Options(rawValue: 1 << 7)
+
+        /// Everything the lip sensor drives: the boost on a draw, and the
+        /// cooling and shutdown that follow when it stops detecting one.
+        static let lipDetection: Options = [.boost, .noLipCooling, .noLipShutdown]
+    }
+
+    var standbyTemperature: UInt16
+    var noMotionToStandbyTime: UInt16
+    var noLipCooldownTemperatureChange: UInt16
+    var noLipCooldownStart: UInt16
+    var noLipCooldownRate: UInt16
+    var noLipPowerOffTime: UInt16
+    var boostTemperatureChange: UInt16
+    var rampTargetTemperature: UInt16
+    var rampStartingTemperature: UInt16
+    var rampRate: UInt16
+    var options: Options
+
+    static let payloadSize = 22
+
+    /// The field order the official app writes, which is not the alphabetical
+    /// order its own source declares them in.
+    var payload: Data {
+        var out = Data()
+        for value in [standbyTemperature, noMotionToStandbyTime,
+                      noLipCooldownTemperatureChange, noLipCooldownStart,
+                      noLipCooldownRate, noLipPowerOffTime,
+                      boostTemperatureChange, rampTargetTemperature,
+                      rampStartingTemperature, rampRate, options.rawValue] {
+            var le = value.littleEndian
+            out.append(withUnsafeBytes(of: &le) { Data($0) })
+        }
+        return out
+    }
+
+    init?(payload: Data) {
+        guard payload.count >= Self.payloadSize else { return nil }
+        let bytes = Array(payload.prefix(Self.payloadSize))
+        func word(_ index: Int) -> UInt16 {
+            UInt16(bytes[index * 2]) | (UInt16(bytes[index * 2 + 1]) << 8)
+        }
+        standbyTemperature = word(0)
+        noMotionToStandbyTime = word(1)
+        noLipCooldownTemperatureChange = word(2)
+        noLipCooldownStart = word(3)
+        noLipCooldownRate = word(4)
+        noLipPowerOffTime = word(5)
+        boostTemperatureChange = word(6)
+        rampTargetTemperature = word(7)
+        rampStartingTemperature = word(8)
+        rampRate = word(9)
+        options = Options(rawValue: word(10))
+    }
+
+    private init(standbyTemperature: UInt16, noMotionToStandbyTime: UInt16,
+                 noLipCooldownTemperatureChange: UInt16, noLipCooldownStart: UInt16,
+                 noLipCooldownRate: UInt16, noLipPowerOffTime: UInt16,
+                 boostTemperatureChange: UInt16, rampTargetTemperature: UInt16,
+                 rampStartingTemperature: UInt16, rampRate: UInt16, options: Options) {
+        self.standbyTemperature = standbyTemperature
+        self.noMotionToStandbyTime = noMotionToStandbyTime
+        self.noLipCooldownTemperatureChange = noLipCooldownTemperatureChange
+        self.noLipCooldownStart = noLipCooldownStart
+        self.noLipCooldownRate = noLipCooldownRate
+        self.noLipPowerOffTime = noLipPowerOffTime
+        self.boostTemperatureChange = boostTemperatureChange
+        self.rampTargetTemperature = rampTargetTemperature
+        self.rampStartingTemperature = rampStartingTemperature
+        self.rampRate = rampRate
+        self.options = options
+    }
+
+    /// The five presets the official app ships, verbatim. Temperatures are
+    /// °C × 10 and times are seconds, as everywhere else on this bus.
+    static func stock(for mode: PaxDynamicMode) -> PaxHeatingParams {
+        switch mode {
+        case .standard:
+            return PaxHeatingParams(standbyTemperature: 1600, noMotionToStandbyTime: 30,
+                                    noLipCooldownTemperatureChange: 150, noLipCooldownStart: 20,
+                                    noLipCooldownRate: 30, noLipPowerOffTime: 180,
+                                    boostTemperatureChange: 39, rampTargetTemperature: 2300,
+                                    rampStartingTemperature: 1990, rampRate: 20,
+                                    options: [.boost, .customTemperature, .heater,
+                                              .noLipCooling, .noLipShutdown, .standby])
+        case .boost:
+            return PaxHeatingParams(standbyTemperature: 1750, noMotionToStandbyTime: 60,
+                                    noLipCooldownTemperatureChange: 70, noLipCooldownStart: 30,
+                                    noLipCooldownRate: 20, noLipPowerOffTime: 180,
+                                    boostTemperatureChange: 112, rampTargetTemperature: 2300,
+                                    rampStartingTemperature: 1990, rampRate: 20,
+                                    options: [.boost, .customTemperature, .heater,
+                                              .noLipCooling, .noLipShutdown, .standby])
+        case .efficiency:
+            // The one mode that gives up the set point: it ramps 205 to 235
+            // through the session instead, which is why customTemperature is off.
+            return PaxHeatingParams(standbyTemperature: 1600, noMotionToStandbyTime: 30,
+                                    noLipCooldownTemperatureChange: 150, noLipCooldownStart: 20,
+                                    noLipCooldownRate: 30, noLipPowerOffTime: 180,
+                                    boostTemperatureChange: 39, rampTargetTemperature: 2350,
+                                    rampStartingTemperature: 2050, rampRate: 20,
+                                    options: [.boost, .heater, .noLipCooling,
+                                              .noLipShutdown, .ramp, .standby])
+        case .stealth:
+            return PaxHeatingParams(standbyTemperature: 1200, noMotionToStandbyTime: 15,
+                                    noLipCooldownTemperatureChange: 300, noLipCooldownStart: 9,
+                                    noLipCooldownRate: 100, noLipPowerOffTime: 180,
+                                    boostTemperatureChange: 0, rampTargetTemperature: 2300,
+                                    rampStartingTemperature: 2040, rampRate: 20,
+                                    options: [.boost, .customTemperature, .heater,
+                                              .noLipCooling, .noLipShutdown, .standby])
+        case .flavor:
+            return PaxHeatingParams(standbyTemperature: 1600, noMotionToStandbyTime: 15,
+                                    noLipCooldownTemperatureChange: 250, noLipCooldownStart: 10,
+                                    noLipCooldownRate: 100, noLipPowerOffTime: 180,
+                                    boostTemperatureChange: 84, rampTargetTemperature: 2300,
+                                    rampStartingTemperature: 2040, rampRate: 20,
+                                    options: [.boost, .customTemperature, .heater,
+                                              .noLipCooling, .noLipShutdown, .standby])
+        }
+    }
+
+    /// A block assembled from a misread — or from a firmware whose field order
+    /// differs — would be written wholesale to the thing that makes heat, so it
+    /// is checked against the envelope the five vendor presets live in before
+    /// it goes out. Every bound here is wider than any preset uses.
+    /// The option bits are deliberately not checked here: every combination of
+    /// them is a state the device can legitimately be in, including the heater
+    /// switched off. This is about the numbers.
+    var isPlausible: Bool {
+        guard (0...2450).contains(Int(standbyTemperature)) else { return false }
+        guard (1500...2450).contains(Int(rampTargetTemperature)) else { return false }
+        guard (1500...2450).contains(Int(rampStartingTemperature)) else { return false }
+        guard rampStartingTemperature <= rampTargetTemperature else { return false }
+        // 20 °C over the set point is already more than Boost asks for.
+        guard boostTemperatureChange <= 200 else { return false }
+        guard noLipCooldownTemperatureChange <= 500 else { return false }
+        guard noMotionToStandbyTime <= 3600, noLipPowerOffTime <= 3600 else { return false }
+        guard noLipCooldownStart <= 3600, rampRate <= 600, noLipCooldownRate <= 600 else { return false }
+        return true
+    }
+
+    var summary: String {
+        String(format: "standby %.1f°C after %us, boost +%.1f°C, off after %us, options 0x%02X",
+               Double(standbyTemperature) / 10, noMotionToStandbyTime,
+               Double(boostTemperatureChange) / 10, noLipPowerOffTime, options.rawValue)
     }
 }
