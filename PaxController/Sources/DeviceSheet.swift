@@ -123,7 +123,7 @@ struct DeviceSheet: View {
                         systemImage: viewModel.deviceLedColorSupported ? "checkmark.circle" : "info.circle"
                     )
                     .font(.caption)
-                    .foregroundStyle(viewModel.deviceLedColorSupported ? .secondary : .orange)
+                    .foregroundStyle(viewModel.deviceLedColorSupported ? Color.secondary : Color.orange)
                 }
                 Button("Send color to device now") {
                     viewModel.applyLedColor(settings.ledColor)
