@@ -97,6 +97,17 @@ final class PaxLab: ObservableObject {
         return shortest
     }
 
+    /// The most recent read, which is the right value for anything that moves
+    /// between reads — the temperature, the clock.
+    func latest(_ attribute: UInt8) -> Data? { samples[attribute]?.last }
+
+    /// True when the reads disagreed from the first byte, which means the value
+    /// changes rather than that it is empty.
+    func varies(_ attribute: UInt8) -> Bool {
+        guard let list = samples[attribute], list.count > 1 else { return false }
+        return (stable(attribute)?.isEmpty ?? true)
+    }
+
     var answeredAttributes: [UInt8] { samples.keys.sorted() }
 
     func setSweeping(_ running: Bool) { sweepInProgress = running }
@@ -108,7 +119,12 @@ final class PaxLab: ObservableObject {
     func takeSnapshot(label: String) {
         var values: [String: String] = [:]
         for attribute in answeredAttributes {
-            guard let payload = stable(attribute), !payload.isEmpty else { continue }
+            // A value that moves between reads still belongs in a snapshot — a
+            // snapshot is a moment, and the last read is that moment. Leaving
+            // them out is what made two snapshots look identical: everything
+            // that had changed was the very thing being dropped.
+            let payload = stable(attribute).flatMap { $0.isEmpty ? nil : $0 } ?? latest(attribute)
+            guard let payload, !payload.isEmpty else { continue }
             values[String(attribute)] = Self.hex(payload)
         }
         snapshots.append(Snapshot(label: label.isEmpty ? "unlabelled" : label,
@@ -201,21 +217,42 @@ final class PaxLab: ObservableObject {
 
         out.append("## Attributes answered (\(answeredAttributes.count))")
         for attribute in answeredAttributes {
-            guard let payload = stable(attribute) else { continue }
             let name = PaxMessageType(rawValue: attribute).map { "\($0)" } ?? "unnamed"
+            if varies(attribute), let newest = latest(attribute) {
+                out.append(String(format: "0x%02X %@: varies between reads, latest %@",
+                                  attribute, name, Self.hex(newest)))
+                continue
+            }
+            guard let payload = stable(attribute), !payload.isEmpty else { continue }
             let notes = PaxDeviceViewModel.interpretation(of: payload, id: attribute)
             out.append(String(format: "0x%02X %@: %d bytes %@%@",
                               attribute, name, payload.count, Self.hex(payload), notes))
         }
 
+        let silent = (UInt8(1)...UInt8(63)).filter { samples[$0] == nil }
+        if !silent.isEmpty {
+            out.append("")
+            out.append("## Never answered")
+            out.append(silent.map { String(format: "0x%02X", $0) }.joined(separator: " "))
+        }
+
         if !snapshots.isEmpty {
             out.append("")
             out.append("## Snapshots")
+            // Every snapshot in full, and every consecutive pair compared. The
+            // earlier version printed one diff and the labels of the rest,
+            // which threw away most of what had been captured.
             for snapshot in snapshots {
-                out.append("- \(snapshot.label) at \(snapshot.takenAt) (\(snapshot.values.count) attributes)")
+                out.append("")
+                out.append("### \(snapshot.label) — \(snapshot.takenAt)")
+                for key in snapshot.values.keys.compactMap(UInt8.init).sorted() {
+                    let name = PaxMessageType(rawValue: key).map { "\($0)" } ?? "unnamed"
+                    out.append(String(format: "0x%02X %@: %@",
+                                      key, name, snapshot.values[String(key)] ?? "—"))
+                }
             }
-            if snapshots.count >= 2 {
-                let a = snapshots[snapshots.count - 2], b = snapshots[snapshots.count - 1]
+            for index in snapshots.indices.dropFirst() {
+                let a = snapshots[index - 1], b = snapshots[index]
                 out.append("")
                 out.append("### \(a.label) → \(b.label)")
                 let diffs = differences(a, b)

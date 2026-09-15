@@ -907,6 +907,11 @@ final class PaxDeviceViewModel: ObservableObject {
     func labSweep(rounds: Int = 3) {
         guard connectionState.isConnected, !PaxLab.shared.sweepInProgress else { return }
         PaxLab.shared.setSweeping(true)
+        // Start from nothing: samples carried over from the last sweep would be
+        // compared against this state's, and any attribute that had changed
+        // would agree on nothing and drop out of the snapshot entirely — which
+        // is exactly the attribute worth capturing.
+        PaxLab.shared.forgetSamples()
         log("Lab: sweeping every attribute, \(rounds) rounds", level: .info)
         Task { [weak self] in
             for round in 1...rounds {
