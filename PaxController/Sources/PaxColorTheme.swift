@@ -12,6 +12,25 @@ import Foundation
 struct PaxColorTheme: Equatable {
     enum Mode: Int, CaseIterable {
         case startup = 0, heating = 1, regulating = 2, standby = 3
+
+        /// What the PAX is doing while this mode's colours are showing.
+        var label: String {
+            switch self {
+            case .startup:    return "Startup"
+            case .heating:    return "Heating"
+            case .regulating: return "At temperature"
+            case .standby:    return "Standby"
+            }
+        }
+
+        var detail: String {
+            switch self {
+            case .startup:    return "The moment it wakes up"
+            case .heating:    return "Warming up to the set point"
+            case .regulating: return "Holding the set point, ready to draw"
+            case .standby:    return "Idle, cooling down"
+            }
+        }
     }
 
     struct ModeColors: Equatable {
@@ -66,6 +85,23 @@ struct PaxColorTheme: Equatable {
             let existing = template?.modes.indices.contains(i) == true ? template?.modes[i] : nil
             return ModeColors(color1: (color.red, color.green, color.blue),
                               color2: (color.red, color.green, color.blue),
+                              animation: existing?.animation ?? 0,
+                              frequency: existing?.frequency ?? 0)
+        }
+        return PaxColorTheme(modes: modes)
+    }
+
+    /// Each mode given its own pair of colours, again keeping the animation
+    /// and frequency bytes the device reported. `pairs` is indexed by `Mode`;
+    /// a short array falls back to `fallback` for the modes it does not cover.
+    static func perMode(_ pairs: [(LedColor, LedColor)],
+                        fallback: LedColor,
+                        basedOn template: PaxColorTheme?) -> PaxColorTheme {
+        let modes = (0..<modeCount).map { i -> ModeColors in
+            let existing = template?.modes.indices.contains(i) == true ? template?.modes[i] : nil
+            let pair = pairs.indices.contains(i) ? pairs[i] : (fallback, fallback)
+            return ModeColors(color1: (pair.0.red, pair.0.green, pair.0.blue),
+                              color2: (pair.1.red, pair.1.green, pair.1.blue),
                               animation: existing?.animation ?? 0,
                               frequency: existing?.frequency ?? 0)
         }

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// Everything the dial screen does not need in the moment. It is reached once
@@ -7,6 +8,10 @@ struct DeviceSheet: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
     @State private var customColor: Color = LedColor.orange.color
+    /// Held apart from `viewModel.displayName` so the 3 s poll cannot rewrite
+    /// the field under the user's cursor mid-rename.
+    @State private var draftName: String = ""
+    @FocusState private var nameFieldFocused: Bool
 
     private var unit: TemperatureUnit { settings.temperatureUnit }
 
@@ -15,6 +20,7 @@ struct DeviceSheet: View {
             List {
                 statusSection
                 ledColorSection
+                ledModeSection
                 temperatureSection
                 connectionSection
                 lockScreenSection
@@ -38,7 +44,14 @@ struct DeviceSheet: View {
                 }
             }
         }
-        .onAppear { customColor = settings.ledColor.color }
+        .onAppear {
+            customColor = settings.ledColor.color
+            draftName = viewModel.displayName ?? ""
+        }
+        .onChange(of: viewModel.displayName) { name in
+            guard !nameFieldFocused else { return }
+            draftName = name ?? ""
+        }
     }
 
     // MARK: - Sections
@@ -97,6 +110,74 @@ struct DeviceSheet: View {
 
     // MARK: - LED color
 
+    /// The PAX keeps two colours for each of its four states. Hidden unless the
+    /// user is actually driving the device's LEDs — with that off, these
+    /// colours would go nowhere.
+    @ViewBuilder
+    private var ledModeSection: some View {
+        if settings.pushColorToDevice {
+            Section {
+                Toggle("A colour per state", isOn: Binding(
+                    get: { settings.perModeLedColors },
+                    set: { enabled in
+                        // Start from what the PAX is showing rather than from
+                        // eight copies of the accent colour.
+                        if enabled, !settings.perModeLedColors {
+                            settings.seedModeColors(from: viewModel.deviceColorTheme)
+                        }
+                        settings.perModeLedColors = enabled
+                        viewModel.resendLedColors()
+                    }))
+                if settings.perModeLedColors {
+                    ForEach(PaxColorTheme.Mode.allCases, id: \.self) { mode in
+                        modeColorRow(mode)
+                    }
+                }
+            } header: {
+                Text("PAX LED States")
+            } footer: {
+                Text(settings.perModeLedColors
+                     ? "Each state holds two colours; the PAX moves between them. Set both to the same colour for a steady light. The colour above still themes the app."
+                     : "The PAX keeps a separate pair of colours for each of its four states. Turn this on to set them individually instead of painting all four with the colour above.")
+            }
+        }
+    }
+
+    private func modeColorRow(_ mode: PaxColorTheme.Mode) -> some View {
+        let pair = settings.modeColors(mode.rawValue)
+        return VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(mode.label)
+                    .font(.subheadline.weight(.semibold))
+                Text(mode.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 18) {
+                modeColorWell(mode: mode, slot: 0, current: pair.0)
+                modeColorWell(mode: mode, slot: 1, current: pair.1)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func modeColorWell(mode: PaxColorTheme.Mode, slot: Int, current: LedColor) -> some View {
+        HStack(spacing: 7) {
+            ColorPicker("", selection: Binding(
+                get: { current.color },
+                set: { newValue in
+                    guard let picked = LedColor.fromColor(newValue), picked.hex != current.hex else { return }
+                    settings.setModeColor(picked, mode: mode.rawValue, slot: slot)
+                    viewModel.resendLedColors()
+                }), supportsOpacity: false)
+            .labelsHidden()
+            Text(slot == 0 ? "Colour 1" : "Colour 2")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private var ledColorSection: some View {
         Section {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 12) {
@@ -120,10 +201,30 @@ struct DeviceSheet: View {
                         .font(.caption)
                         .foregroundStyle(viewModel.deviceLedColorSupported ? Color.secondary : Color.orange)
                 }
-                Button("Send color to device now") {
-                    viewModel.applyLedColor(settings.ledColor)
+                Button("Send colours to device now") {
+                    viewModel.resendLedColors()
                 }
                 .disabled(!viewModel.connectionState.isConnected || !viewModel.deviceLedColorSupported)
+            }
+
+            if let haptics = viewModel.hapticAmplitude {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text("Haptics")
+                        Spacer()
+                        Text("\(Int(haptics * 100))%")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { haptics },
+                            set: { viewModel.setHapticAmplitude($0) }
+                        ),
+                        in: 0...1
+                    )
+                    .tint(settings.ledColor.color)
+                }
             }
 
             if let brightness = viewModel.ledBrightness {
@@ -148,7 +249,7 @@ struct DeviceSheet: View {
         } header: {
             Text("LED Color")
         } footer: {
-            Text("Colors the dial, chips and buttons. Setting the PAX's own LEDs depends on the device: on connect the app asks which attributes the firmware supports and what its current LED value looks like, then writes a matching payload and reads it back to check it took. Diagnostics shows the whole exchange.")
+            Text("Colors the dial, chips and buttons. Setting the PAX's own LEDs depends on the device: on connect the app asks which attributes the firmware supports and what its current LED value looks like, then writes a matching payload and reads it back to check it took. Brightness and haptics are the same 0–128 scale the firmware uses. Diagnostics shows the whole exchange.")
         }
     }
 
@@ -246,15 +347,37 @@ struct DeviceSheet: View {
 
     private var deviceSection: some View {
         Section("Device") {
-            row("Name", value: viewModel.displayName)
+            if viewModel.connectionState.isConnected {
+                HStack {
+                    Text("Name")
+                    TextField("PAX", text: $draftName)
+                        .multilineTextAlignment(.trailing)
+                        .submitLabel(.done)
+                        .focused($nameFieldFocused)
+                        .autocorrectionDisabled()
+                        .onChange(of: draftName) { new in
+                            // The device carries the name in a 15-byte payload,
+                            // so keep the field inside what will actually fit
+                            // rather than silently truncating on send.
+                            var trimmed = new
+                            while Data(trimmed.utf8).count > PaxPacket.maxDisplayNameBytes, !trimmed.isEmpty {
+                                trimmed.removeLast()
+                            }
+                            if trimmed != new { draftName = trimmed }
+                        }
+                        .onSubmit {
+                            viewModel.setDisplayName(draftName)
+                            nameFieldFocused = false
+                        }
+                }
+            } else {
+                row("Name", value: viewModel.displayName)
+            }
             row("Model", value: viewModel.modelNumber)
             row("Serial", value: viewModel.serialNumber)
             row("Firmware", value: viewModel.firmwareRevision)
             if let shell = viewModel.shellColorIndex {
                 row("Shell", value: PaxDeviceViewModel.shellColorLabel(shell))
-            }
-            if let haptics = viewModel.hapticAmplitude {
-                row("Haptics", value: "\(Int(haptics * 100))%")
             }
             if !viewModel.supportedAttributes.isEmpty {
                 row("Attributes", value: "\(viewModel.supportedAttributes.count) supported")

@@ -136,6 +136,12 @@ final class PaxDeviceViewModel: ObservableObject {
     private var ledWriteDebounce: Task<Void, Never>?
     /// Same, for the brightness slider.
     private var brightnessDebounce: Task<Void, Never>?
+    /// Same, for the haptics slider.
+    private var hapticDebounce: Task<Void, Never>?
+    /// The amplitude byte we are waiting to see reported back.
+    private var pendingHapticWrite: UInt8?
+    /// The name we are waiting to see reported back.
+    private var pendingNameWrite: String?
     /// Deadline for the capability query, so a silent device still gets a colour.
     private var capabilityTimeout: Task<Void, Never>?
     /// The device never answered the capability query, so any write is a guess.
@@ -506,15 +512,47 @@ final class PaxDeviceViewModel: ObservableObject {
         // Dragging the colour wheel fires on every frame. Coalesce into one
         // write per gesture so the link is not flooded — short enough that a
         // tap on a preset still lands immediately.
+        scheduleLedWrite()
+    }
+
+    /// Re-sends whatever the settings currently describe, without touching the
+    /// app's accent: the accent follows the single colour, not the four
+    /// per-mode ones. Used by the per-mode pickers and by "Send now".
+    func resendLedColors() {
+        guard settings.pushColorToDevice else { return }
+        guard connectionState.isConnected else {
+            pushColorOnceDiscovered = true
+            log("LED colours saved — they will be sent as soon as the PAX connects", level: .info)
+            return
+        }
+        scheduleLedWrite()
+    }
+
+    private func scheduleLedWrite() {
+        // Dragging the colour wheel fires on every frame. Coalesce into one
+        // write per gesture so the link is not flooded — short enough that a
+        // tap on a preset still lands immediately.
         ledWriteDebounce?.cancel()
         ledWriteDebounce = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 200_000_000)
             guard !Task.isCancelled else { return }
-            self?.sendLedColorToDevice(color)
+            self?.sendLedColorToDevice()
         }
     }
 
-    private func sendLedColorToDevice(_ color: LedColor) {
+    /// The theme the user's settings currently describe: one colour across all
+    /// four modes, or a pair per mode. Either way the animation and frequency
+    /// bytes come from what the device reported, never from us.
+    private var themeFromSettings: PaxColorTheme {
+        settings.perModeLedColors
+            ? PaxColorTheme.perMode(settings.modeColorPairs,
+                                    fallback: settings.ledColor,
+                                    basedOn: deviceColorTheme)
+            : PaxColorTheme.solid(settings.ledColor, basedOn: deviceColorTheme)
+    }
+
+    private func sendLedColorToDevice() {
+        let color = settings.ledColor
         guard deviceLedColorSupported else {
             // Tapping a colour in the moment between connecting and the
             // capability reply landing must not be lost — queue it instead.
@@ -527,14 +565,13 @@ final class PaxDeviceViewModel: ObservableObject {
             }
             return
         }
-        // Every mode gets the chosen colour, with each mode's animation and
-        // frequency carried over from whatever the device reported.
-        let theme = PaxColorTheme.solid(color, basedOn: deviceColorTheme)
+        let theme = themeFromSettings
         let payload = theme.payload
         pendingLedWrite = (PaxMessageType.colorTheme.rawValue, payload)
         enqueue {
             try self.sendPacket(PaxPacket.setLedColor(attribute: .colorTheme, payload: payload))
-            self.log("Wrote colorTheme for \(color.hex) — \(theme.summary)", level: .tx)
+            let what = self.settings.perModeLedColors ? "per-mode colours" : color.hex
+            self.log("Wrote colorTheme for \(what) — \(theme.summary)", level: .tx)
             // writeWithoutResponse can never ACK, so read it back to find out
             // whether the device took it.
             try self.sendPacket(PaxPacket.statusRequest(attributes: [.colorTheme]))
@@ -755,7 +792,16 @@ final class PaxDeviceViewModel: ObservableObject {
             if packet.payload.count > 1 {
                 let len = Int(packet.payload[0])
                 if packet.payload.count >= 1 + len {
-                    displayName = String(bytes: packet.payload[1..<(1 + len)], encoding: .utf8)
+                    let reported = String(bytes: packet.payload[1..<(1 + len)], encoding: .utf8)
+                    displayName = reported
+                    if let wanted = pendingNameWrite {
+                        pendingNameWrite = nil
+                        if reported == wanted {
+                            log("✔ Device accepted the new name \"\(wanted)\"", level: .info)
+                        } else {
+                            log("✘ Device ignored the rename — still called \"\(reported ?? "?")\"", level: .warn)
+                        }
+                    }
                 }
             }
         case .supportedAttribs:
@@ -816,13 +862,69 @@ final class PaxDeviceViewModel: ObservableObject {
     /// it, keep the raw bytes, and leave writing alone until the remaining
     /// fields are understood.
     private func applyHapticReport(_ packet: PaxPacket) {
-        let raw = Data(packet.payload.prefix(8))
-        guard hapticRawPayload != raw else { return }
+        guard let amplitude = packet.payload.first else { return }
+        // Only the first byte is known to mean anything, and the bytes past the
+        // real payload are uninitialised buffer that differs on every read — so
+        // the amplitude, not the whole blob, decides whether this is news.
+        let raw = Data(packet.payload.prefix(6))
+        let isNew = hapticRawPayload?.first != amplitude
         hapticRawPayload = raw
-        if let amplitude = raw.first {
-            hapticAmplitude = min(1, Double(amplitude) / PaxMessageType.amplitudeMax)
-            log("Haptics: amplitude \(Int((hapticAmplitude ?? 0) * 100))% (\(amplitude)/128), full value \(raw.hexString)",
+        hapticAmplitude = min(1, Double(amplitude) / PaxMessageType.amplitudeMax)
+
+        if let pending = pendingHapticWrite {
+            pendingHapticWrite = nil
+            if pending == amplitude {
+                log("✔ Device accepted haptics \(Int((hapticAmplitude ?? 0) * 100))% (\(amplitude)/128)", level: .info)
+            } else {
+                log("✘ Device ignored the haptics write — still reports \(amplitude)/128", level: .warn)
+            }
+            return
+        }
+        if isNew {
+            log("Haptics: amplitude \(Int((hapticAmplitude ?? 0) * 100))% (\(amplitude)/128), first 6 bytes \(raw.hexString)",
                 level: .info)
+        }
+    }
+
+    /// Renames the PAX. The device echoes the new name back through the normal
+    /// DisplayName report, so the rename is confirmed the same way a colour
+    /// write is rather than assumed.
+    func setDisplayName(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard connectionState.isConnected else { return }
+        guard let packet = PaxPacket.setDisplayName(trimmed) else {
+            log("Not renaming: a name cannot be empty", level: .warn)
+            return
+        }
+        pendingNameWrite = trimmed
+        enqueue {
+            try self.sendPacket(packet)
+            self.log("Renaming device → \"\(trimmed)\"", level: .tx)
+            try self.sendPacket(PaxPacket.statusRequest(attributes: [.displayName]))
+        }
+    }
+
+    /// Sets haptic strength. One byte, 0…128, the same scale as brightness and
+    /// the same payload the official app writes — deliberately not an echo of
+    /// the longer value this firmware reports back, since the bytes past the
+    /// payload are uninitialised buffer and writing them back would be writing
+    /// noise into fields nobody has decoded.
+    func setHapticAmplitude(_ fraction: Double) {
+        let clamped = min(1, max(0, fraction))
+        hapticAmplitude = clamped
+        guard connectionState.isConnected else { return }
+        let raw = UInt8((clamped * PaxMessageType.amplitudeMax).rounded())
+        hapticDebounce?.cancel()
+        hapticDebounce = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
+            self?.enqueue {
+                guard let self else { return }
+                self.pendingHapticWrite = raw
+                try self.sendPacket(PaxPacket(type: .hapticMode, payload: Data([raw])))
+                self.log("Set haptics → \(Int(clamped * 100))% (\(raw)/128)", level: .tx)
+                try self.sendPacket(PaxPacket.statusRequest(attributes: [.hapticMode]))
+            }
         }
     }
 
@@ -865,9 +967,11 @@ final class PaxDeviceViewModel: ObservableObject {
     private func pushSavedColorIfReady() {
         guard pushColorOnceDiscovered, deviceLedColorSupported else { return }
         pushColorOnceDiscovered = false
-        let color = settings.ledColor
-        log("Applying saved LED color \(color.name) (\(color.hex)) now that the device is ready", level: .info)
-        sendLedColorToDevice(color)
+        let what = settings.perModeLedColors
+            ? "per-mode LED colours"
+            : "saved LED colour \(settings.ledColor.name) (\(settings.ledColor.hex))"
+        log("Applying \(what) now that the device is ready", level: .info)
+        sendLedColorToDevice()
     }
 
     /// The device reporting its current LED value is the only reliable source
@@ -1004,6 +1108,10 @@ final class PaxDeviceViewModel: ObservableObject {
         hapticRawPayload = nil
         brightnessDebounce?.cancel()
         brightnessDebounce = nil
+        hapticDebounce?.cancel()
+        hapticDebounce = nil
+        pendingHapticWrite = nil
+        pendingNameWrite = nil
         pendingLedWrite = nil
         pushColorOnceDiscovered = false
         capabilitiesKnown = false

@@ -317,6 +317,28 @@ extension PaxPacket {
     static func setLedColor(attribute: PaxMessageType, payload: Data) -> PaxPacket {
         PaxPacket(type: attribute, payload: payload)
     }
+
+    /// Renames the device. Same shape the PAX reports it in: one length byte,
+    /// then UTF-8. The name is truncated on a character boundary so a
+    /// multi-byte character can never be cut in half, and the length byte
+    /// always matches what follows it — a mismatch there is the same class of
+    /// bug as ColorTheme's mode count.
+    static func setDisplayName(_ name: String) -> PaxPacket? {
+        var bytes = Data(name.utf8)
+        if bytes.count > maxDisplayNameBytes {
+            var truncated = name
+            while Data(truncated.utf8).count > maxDisplayNameBytes, !truncated.isEmpty {
+                truncated.removeLast()
+            }
+            bytes = Data(truncated.utf8)
+        }
+        guard !bytes.isEmpty else { return nil }
+        return PaxPacket(type: .displayName, payload: Data([UInt8(bytes.count)]) + bytes)
+    }
+
+    /// The device reports its name inside a 15-byte payload, so a name plus its
+    /// length byte has to fit that.
+    static let maxDisplayNameBytes = 14
 }
 
 // MARK: - Parser helpers
