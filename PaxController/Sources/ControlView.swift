@@ -6,7 +6,6 @@ struct ControlView: View {
     @EnvironmentObject var viewModel: PaxDeviceViewModel
     @EnvironmentObject var settings: AppSettings
     @Binding var showDeviceSheet: Bool
-    @Binding var showScanSheet: Bool
 
     private var unit: TemperatureUnit { settings.temperatureUnit }
 
@@ -30,25 +29,21 @@ struct ControlView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            Button {
-                showScanSheet = true
-            } label: {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(connectionColor)
-                        .frame(width: DS.Metric.statusDot, height: DS.Metric.statusDot)
-                    Text(viewModel.connectionState.isConnected
-                         ? (viewModel.displayName ?? "PAX")
-                         : viewModel.statusHeadline)
-                }
-                .font(.system(size: 15, weight: .semibold))
-                .padding(.leading, 12)
-                .padding(.trailing, 14)
-                .frame(height: DS.Metric.capsuleHeight)
-                .background(DS.Palette.fill, in: Capsule())
+            // A readout, not a control: connecting is automatic, so there is
+            // nothing here for the user to start.
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(connectionColor)
+                    .frame(width: DS.Metric.statusDot, height: DS.Metric.statusDot)
+                Text(viewModel.connectionState.isConnected
+                     ? (viewModel.displayName ?? "PAX")
+                     : viewModel.statusHeadline)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.primary)
+            .font(.system(size: 15, weight: .semibold))
+            .padding(.leading, 12)
+            .padding(.trailing, 14)
+            .frame(height: DS.Metric.capsuleHeight)
+            .background(DS.Palette.fill, in: Capsule())
 
             if let battery = viewModel.batteryLevel {
                 HStack(spacing: 5) {
@@ -305,23 +300,19 @@ struct ControlView: View {
                 discoveredList
                 Spacer(minLength: 0)
             }
-            scanButton
+            // The only button on this screen, and only after the user has
+            // pressed Disconnect themselves: every other path back to the
+            // device happens without them.
+            if viewModel.automationPaused { resumeButton }
         }
-        // The screen is otherwise empty while disconnected, so start looking
-        // straight away rather than making the first tap a scan.
-        .onAppear(perform: startScanIfIdle)
-        .onChange(of: viewModel.connectionState) { state in
-            if state == .idle { startScanIfIdle() }
-        }
+        // Looking for the device is the app's job, not a tap the user owes it.
+        // `resumeDiscoveryIfIdle`, not `resumeAutomation`: this fires again the
+        // moment a user-requested disconnect drops us back here, and must not
+        // undo it.
+        .onAppear { viewModel.resumeDiscoveryIfIdle() }
     }
 
-    private func startScanIfIdle() {
-        guard !viewModel.connectionState.isConnected,
-              viewModel.connectionState == .idle else { return }
-        viewModel.startScan()
-    }
-
-    private var isScanning: Bool { viewModel.connectionState == .scanning }
+    private var isScanning: Bool { viewModel.isScanning }
 
     private var emptyDiscovery: some View {
         VStack(spacing: 0) {
@@ -410,16 +401,16 @@ struct ControlView: View {
         .contentShape(Rectangle())
     }
 
-    private var scanButton: some View {
+    private var resumeButton: some View {
         Button {
-            if isScanning { viewModel.stopScan() } else { viewModel.startScan() }
+            viewModel.resumeAutomation()
         } label: {
-            Text(isScanning ? "Stop scanning" : "Scan again")
+            Text("Connect")
                 .font(.system(size: 16, weight: .semibold))
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(isScanning ? DS.Palette.fill : DS.Palette.accent, in: Capsule())
-                .foregroundStyle(isScanning ? Color.primary : Color.white)
+                .background(DS.Palette.accent, in: Capsule())
+                .foregroundStyle(Color.white)
         }
         .buttonStyle(.plain)
         .padding(.horizontal, DS.Metric.gutter)
@@ -429,9 +420,12 @@ struct ControlView: View {
 
     private var statusDetail: String {
         if case .error(let message) = viewModel.connectionState { return message }
-        if isScanning || viewModel.connectionState == .waitingForDevice {
-            return "Make sure your PAX is awake and within a few metres."
+        if viewModel.automationPaused {
+            return "Disconnected. Tap Connect to look for your PAX again."
         }
-        return "Connect to your PAX to set temperature and heating mode."
+        if isScanning || viewModel.connectionState == .waitingForDevice {
+            return "Make sure your PAX is awake and within a few metres. It connects on its own."
+        }
+        return "Looking for your PAX. It connects on its own."
     }
 }

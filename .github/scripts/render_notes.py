@@ -19,7 +19,7 @@ import os
 import re
 import sys
 
-SCREEN_TITLES = {"control": "Control", "device": "Settings", "scan": "Devices"}
+SCREEN_TITLES = {"control": "Control", "device": "Settings"}
 
 # The Shortcut that refreshes sideloaded apps before their 7-day signature
 # expires. It is committed to the repo rather than only linked, so it keeps
@@ -45,7 +45,7 @@ def picture(base_url, index, name, width):
 
 
 def parse(filename):
-    """01-scan.png -> (1, 'scan')"""
+    """01-control.png -> (1, 'control')"""
     match = re.match(r"(\d+)-([a-z]+)\.png$", filename)
     if not match:
         return None

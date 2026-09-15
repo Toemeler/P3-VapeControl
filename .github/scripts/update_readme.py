@@ -13,7 +13,7 @@ import re
 
 START = "<!-- screenshots:start -->"
 END = "<!-- screenshots:end -->"
-TITLES = {"control": "Control", "device": "Settings", "scan": "Devices"}
+TITLES = {"control": "Control", "device": "Settings"}
 WIDTH = 230
 
 

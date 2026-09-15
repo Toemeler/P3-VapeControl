@@ -68,6 +68,14 @@ final class PaxDeviceViewModel: ObservableObject {
     // MARK: Connection / scan
     @Published var connectionState: ConnectionState = .idle
     @Published var scannedDevices: [ScannedDevice] = []
+    /// True while the radio is actually scanning. There is no Scan button, so
+    /// this runs by itself whenever we are disconnected; it is tracked apart
+    /// from `connectionState` because a pending auto-connect ("Waiting for
+    /// PAX…") and a scan are live at the same time.
+    @Published private(set) var isScanning = false
+    /// Set only by the Disconnect button. Nothing else stops the app from
+    /// finding and connecting to the device on its own.
+    @Published private(set) var automationPaused = false
 
     // MARK: Device telemetry
     @Published var batteryLevel: Int?
@@ -202,19 +210,29 @@ final class PaxDeviceViewModel: ObservableObject {
 
     // MARK: - Public commands
 
-    func startScan() {
+    private func startScan() {
         guard bluetooth.isPoweredOn else {
             log("Bluetooth not ready", level: .warn)
             return
         }
+        guard !isScanning else { return }
         scannedDevices.removeAll()
-        connectionState = .scanning
+        isScanning = true
+        // A failed connect leaves its message in `connectionState`; since the
+        // retry is automatic, the message would otherwise sit on screen for
+        // good while the app was already looking again.
+        switch connectionState {
+        case .idle, .error: connectionState = .scanning
+        default:            break
+        }
         bluetooth.scan()
         log("Scanning for PAX devices…", level: .info)
     }
 
-    func stopScan() {
+    private func stopScan() {
+        guard isScanning else { return }
         bluetooth.stopScan()
+        isScanning = false
         if case .scanning = connectionState { connectionState = .idle }
         log("Scan stopped", level: .info)
     }
@@ -226,21 +244,29 @@ final class PaxDeviceViewModel: ObservableObject {
         // discovery passes and duplicate traffic.
         if bluetooth.connectedPeripheral?.identifier == device.id,
            connectionState.isConnected || connectionState == .connecting
-            || connectionState == .discoveringServices || connectionState == .awaitingSerial {
+            || connectionState == .discoveringServices || connectionState == .awaitingSerial
+            || connectionState == .waitingForDevice {
             log("Already connecting to \(device.name) — ignoring the duplicate request", level: .info)
             return
         }
+        automationPaused = false
         connectionState = .connecting
         bluetooth.connect(to: device)
         log("Connecting to \(device.name) [\(device.id)]", level: .info)
     }
 
+    /// Stops and stays stopped. Everything else — launch, power-on, the device
+    /// walking out of range — is handled without the user, so a disconnect that
+    /// the user asked for has to suppress the automation or it would undo
+    /// itself within the second.
     func disconnect() {
         userInitiatedDisconnect = true
+        automationPaused = true
         connectionState = .disconnecting
+        stopScan()
         bluetooth.disconnect()
         LiveActivityController.shared.end()
-        log("Disconnecting…", level: .info)
+        log("Disconnecting… — auto-connect paused until you reconnect", level: .info)
     }
 
     // MARK: - Auto-connect
@@ -263,17 +289,74 @@ final class PaxDeviceViewModel: ObservableObject {
     /// terminated and relaunched it via state restoration. This, not scanning,
     /// is what makes background reconnection work.
     func attemptAutoConnect() {
-        guard settings.autoConnectEnabled else { return }
+        guard settings.autoConnectEnabled, !automationPaused else { return }
         guard !connectionState.isConnected, !demoMode else { return }
         guard let id = Self.storedDeviceID else { return }
 
+        // A pending connect for this device is already armed. iOS holds it
+        // until the PAX shows up, so re-issuing it would do nothing except
+        // trip the warning below, which only means "iOS has never seen it".
+        if bluetooth.connectedPeripheral?.identifier == id {
+            if connectionState == .idle { connectionState = .waitingForDevice }
+            return
+        }
+
         guard let device = bluetooth.autoConnect(toKnownIdentifier: id) else {
-            log("Auto-connect: iOS no longer knows device \(id) — scan once to re-pair", level: .warn)
+            log("Auto-connect: iOS no longer knows device \(id) — the running scan will re-pair it", level: .warn)
             return
         }
         connectionState = .waitingForDevice
         log("Auto-connect armed for \(device.name) — will connect whenever it is in range", level: .info)
         refreshLiveActivity()
+    }
+
+    /// The app carries no Scan button: discovery is continuous while we are
+    /// disconnected, and the first PAX it turns up is connected to without a
+    /// tap. Call this on launch, on radio power-on and whenever the app comes
+    /// back to the foreground.
+    func resumeAutomation() {
+        guard !demoMode else { return }
+        automationPaused = false
+        attemptAutoConnect()
+        startDiscoveryIfDisconnected()
+    }
+
+    /// Foreground pass: picks discovery back up where iOS suspended it, but
+    /// leaves a disconnect the user asked for alone.
+    func resumeDiscoveryIfIdle() {
+        guard !automationPaused else { return }
+        attemptAutoConnect()
+        startDiscoveryIfDisconnected()
+    }
+
+    /// Scans, unless a connection is already underway. A pending auto-connect
+    /// runs alongside: it is the only path that survives backgrounding, while
+    /// the scan is what finds a PAX this app has never seen.
+    private func startDiscoveryIfDisconnected() {
+        guard !demoMode, !automationPaused else { return }
+        switch connectionState {
+        case .idle, .scanning, .waitingForDevice, .error:
+            startScan()
+        case .connecting, .discoveringServices, .awaitingSerial, .ready, .disconnecting:
+            break
+        }
+    }
+
+    /// With no Scan button there is no Connect button either. A remembered
+    /// device wins over a stranger, so a second PAX in the room cannot take
+    /// the session — that one stays in the list for a tap.
+    private func autoConnectToDiscovered(_ device: ScannedDevice) {
+        guard settings.autoConnectEnabled, !automationPaused, !demoMode else { return }
+        switch connectionState {
+        case .idle, .scanning, .waitingForDevice, .error: break
+        default: return
+        }
+        if let remembered = Self.storedDeviceID, device.id != remembered {
+            log("Found \(device.name), but \(rememberedDeviceName ?? "another PAX") is the remembered device — tap to use this one", level: .info)
+            return
+        }
+        log("Auto-connecting to \(device.name)", level: .info)
+        connect(to: device)
     }
 
     func forgetRememberedDevice() {
@@ -283,7 +366,8 @@ final class PaxDeviceViewModel: ObservableObject {
         bluetooth.cancelPendingConnect()
         if !connectionState.isConnected { connectionState = .idle }
         LiveActivityController.shared.end()
-        log("Forgot the remembered device — auto-connect disarmed", level: .info)
+        log("Forgot the remembered device — the next PAX found is the new one", level: .info)
+        startDiscoveryIfDisconnected()
     }
 
     private func rememberCurrentDevice() {
@@ -367,6 +451,7 @@ final class PaxDeviceViewModel: ObservableObject {
             case .error(let msg):
                 return msg
             default:
+                if automationPaused { return "Disconnected" }
                 return Self.storedDeviceID != nil ? "Waiting for PAX…" : "Not connected"
             }
         }
@@ -823,6 +908,7 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
         // would wipe the fixture straight after init.
         guard !demoMode else { return }
         if !available {
+            isScanning = false
             connectionState = .idle
             resetDeviceState()
         }
@@ -835,16 +921,27 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
         } else {
             scannedDevices.append(device)
         }
+        autoConnectToDiscovered(device)
     }
 
     func bluetoothDidConnect() {
         log("Connected — discovering services…", level: .ble)
+        // A pending auto-connect can complete while a scan is still running;
+        // the radio has no reason to keep looking now.
+        stopScan()
         connectionState = .discoveringServices
     }
 
     func bluetoothDidFailToConnect(error: String) {
         log("Failed to connect: \(error)", level: .error)
         connectionState = .error(error)
+        // Nothing in the UI retries, so the automation has to: go straight back
+        // to looking for the device rather than leaving the error on screen.
+        // The failed peripheral is still held as the pending connect, so drop
+        // it first or the re-arm below is a no-op.
+        bluetooth.cancelPendingConnect()
+        attemptAutoConnect()
+        startDiscoveryIfDisconnected()
     }
 
     func bluetoothDidDisconnect(error: String?) {
@@ -868,11 +965,14 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
         // here would be unrecoverable, since a background reconnect is allowed
         // to update an activity but never to start one.
         attemptAutoConnect()
+        startDiscoveryIfDisconnected()
         refreshLiveActivity()
     }
 
     func bluetoothReadyForAutoConnect() {
+        guard !automationPaused else { return }
         attemptAutoConnect()
+        startDiscoveryIfDisconnected()
     }
 
     func bluetoothDiscoveredService(_ uuid: CBUUID) {

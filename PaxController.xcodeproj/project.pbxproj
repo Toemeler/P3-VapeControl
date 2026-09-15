@@ -17,7 +17,6 @@
 		AA000012 /* TemperatureDial.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000012 /* TemperatureDial.swift */; };
 		AA000013 /* ControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000013 /* ControlView.swift */; };
 		AA000014 /* DeviceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000014 /* DeviceSheet.swift */; };
-		AA000015 /* ScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000015 /* ScanSheet.swift */; };
 		AA000040 /* LedColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000040 /* LedColor.swift */; };
 		AA000041 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000041 /* AppSettings.swift */; };
 		AA000042 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000042 /* LiveActivityController.swift */; };
@@ -67,7 +66,6 @@
 		AB000012 /* TemperatureDial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemperatureDial.swift; sourceTree = "<group>"; };
 		AB000013 /* ControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlView.swift; sourceTree = "<group>"; };
 		AB000014 /* DeviceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSheet.swift; sourceTree = "<group>"; };
-		AB000015 /* ScanSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSheet.swift; sourceTree = "<group>"; };
 		AB000040 /* LedColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedColor.swift; sourceTree = "<group>"; };
 		AB000041 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		AB000042 /* LiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityController.swift; sourceTree = "<group>"; };
@@ -132,7 +130,6 @@
 				AB000012 /* TemperatureDial.swift */,
 				AB000013 /* ControlView.swift */,
 				AB000014 /* DeviceSheet.swift */,
-				AB000015 /* ScanSheet.swift */,
 				AB000040 /* LedColor.swift */,
 				AB000041 /* AppSettings.swift */,
 				AB000042 /* LiveActivityController.swift */,
@@ -268,7 +265,6 @@
 				AA000012 /* TemperatureDial.swift in Sources */,
 				AA000013 /* ControlView.swift in Sources */,
 				AA000014 /* DeviceSheet.swift in Sources */,
-				AA000015 /* ScanSheet.swift in Sources */,
 				AA000040 /* LedColor.swift in Sources */,
 				AA000041 /* AppSettings.swift in Sources */,
 				AA000042 /* LiveActivityController.swift in Sources */,

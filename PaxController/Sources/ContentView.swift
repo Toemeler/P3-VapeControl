@@ -5,7 +5,6 @@ struct ContentView: View {
     @StateObject private var settings = AppSettings.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var showDeviceSheet = false
-    @State private var showScanSheet = false
 
     /// Launch arguments land in UserDefaults' argument domain, so the
     /// screenshot workflow can open a sheet with `simctl launch ... -uiScreen
@@ -14,7 +13,7 @@ struct ContentView: View {
     private let launchScreen = UserDefaults.standard.string(forKey: "uiScreen")
 
     var body: some View {
-        ControlView(showDeviceSheet: $showDeviceSheet, showScanSheet: $showScanSheet)
+        ControlView(showDeviceSheet: $showDeviceSheet)
             .environmentObject(viewModel)
             .environmentObject(settings)
             .sheet(isPresented: $showDeviceSheet) {
@@ -22,23 +21,19 @@ struct ContentView: View {
                     .environmentObject(viewModel)
                     .environmentObject(settings)
             }
-            .sheet(isPresented: $showScanSheet) {
-                ScanSheet()
-                    .environmentObject(viewModel)
-                    .environmentObject(settings)
-            }
             .tint(DS.Palette.accent)
             .onAppear {
-                switch launchScreen {
-                case "device": showDeviceSheet = true
-                case "scan":   showScanSheet = true
-                default:       break
-                }
+                if launchScreen == "device" { showDeviceSheet = true }
             }
             .onChange(of: scenePhase) { phase in
                 // A background reconnect can only *update* a Live Activity, never
-                // start one, so retry the start whenever we are foregrounded.
-                if phase == .active { viewModel.refreshLiveActivity() }
+                // start one, so retry the start whenever we are foregrounded —
+                // and pick discovery back up, since iOS suspends a scan that was
+                // running when the app went away.
+                if phase == .active {
+                    viewModel.refreshLiveActivity()
+                    viewModel.resumeDiscoveryIfIdle()
+                }
             }
     }
 }

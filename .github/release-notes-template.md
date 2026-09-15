@@ -25,7 +25,7 @@ A free Apple ID is enough — see **AutoRefreshApps** below for what that means 
 4. Install **[LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044)**, tap **Connect**.
 5. Open **SideStore**, sign in with the same account, *My Apps* → tap the **7 DAYS** counter.
 6. In **SideStore** → *Sources* → **+**, add `{source_url}`.
-7. Install **PAX Controller**, open it, tap *Scan*.
+7. Install **PAX Controller** and open it — it finds and connects to your PAX by itself.
 
 <details>
 <summary><b>Problems</b></summary>
@@ -34,7 +34,7 @@ A free Apple ID is enough — see **AutoRefreshApps** below for what that means 
 
 - **"Not connected to VPN"** — reconnect LocalDevVPN.
 - **Install or refresh fails** — in iLoader, click *Place pairing file*.
-- **Finds no device** — allow Bluetooth on first scan, make sure the PAX is awake.
+- **Finds no device** — allow Bluetooth when asked, make sure the PAX is awake.
 
 </details>
 

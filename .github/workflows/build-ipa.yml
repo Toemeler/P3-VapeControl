@@ -169,7 +169,7 @@ jobs:
           rm -rf screenshots
           python3 .github/scripts/capture_screens.py \
             "$UDID" build/release/PaxController.app de.marcomeissner.PaxController \
-            screenshots control:control device:device scan:scan
+            screenshots control:control device:device
           ls -lh screenshots
 
       - name: Commit screenshots

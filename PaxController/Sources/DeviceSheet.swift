@@ -203,7 +203,7 @@ struct DeviceSheet: View {
         Section {
             Toggle("Reconnect automatically", isOn: $settings.autoConnectEnabled)
                 .onChange(of: settings.autoConnectEnabled) { enabled in
-                    if enabled { viewModel.attemptAutoConnect() }
+                    if enabled { viewModel.resumeAutomation() }
                 }
             if let name = viewModel.rememberedDeviceName {
                 row("Remembered", value: name)
