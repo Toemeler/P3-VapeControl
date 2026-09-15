@@ -185,6 +185,36 @@ jobs:
           # alone does not undo one that was already set.
           xcrun simctl status_bar "$UDID" clear || true
 
+      - name: Run unit tests
+        if: steps.check.outputs.skip != 'true'
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          # A host-less unit-test bundle on purpose: the tests cover the wire
+          # format and the Lock Screen's arithmetic, none of which needs the app
+          # to launch — and launching the app in this simulator is the flakiest
+          # step in this workflow. The sources under test compile into the
+          # bundle, so there is no app to install and nothing to wedge.
+          xcodebuild test \
+            -project PaxController.xcodeproj \
+            -scheme PaxControllerTests \
+            -destination "platform=iOS Simulator,id=${{ steps.boot.outputs.udid }}" \
+            SYMROOT="$PWD/build-tests" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            2>&1 | tee tests.log
+
+      - name: Upload the test log when it fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log
+          path: tests.log
+          if-no-files-found: ignore
+
       - name: Capture the app's screens
         if: steps.check.outputs.skip != 'true'
         timeout-minutes: 20

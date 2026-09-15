@@ -14,39 +14,56 @@ struct PaxStatusLiveActivity: Widget {
                 .activityBackgroundTint(Color.black.opacity(0.55))
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
-            let accent = context.state.accent
+            let state = context.state
+            let accent = state.accent
+            // The expanded island gets the same ring as the Lock Screen card,
+            // for the same reason the three card states share a skeleton: the
+            // two surfaces are one app, and a reading should not have to be
+            // re-learned because it moved a few hundred points up the screen.
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label(context.state.batteryText, systemImage: context.state.batteryIcon)
-                        .font(.caption)
-                        .foregroundColor(accent)
+                    StatusRing(state: state)
+                        .frame(width: 38, height: 38)
+                        .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text(context.state.leadNumber)
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(accent)
-                        .contentTransition(.numericText())
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(state.leadNumber)
+                            .font(.title3.monospacedDigit().weight(.semibold))
+                            .foregroundColor(accent)
+                            .contentTransition(.numericText())
+                        Label(state.batteryText, systemImage: state.batteryIcon)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack {
                         Text(context.attributes.deviceName)
                             .font(.headline)
-                        Spacer()
-                        Text(context.state.headline)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(state.headline)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
                     }
                 }
             } compactLeading: {
-                Image(systemName: context.state.statusIcon)
+                Image(systemName: state.statusIcon)
                     .foregroundColor(accent)
             } compactTrailing: {
-                Text(context.state.isConnected ? context.state.batteryText : "--")
+                // The compact trailing slot is a few characters wide, so it
+                // carries whichever number the state is actually about rather
+                // than always the battery: the temperature while the oven is
+                // doing something, the charge while it is on the charger.
+                Text(state.compactNumber)
                     .font(.caption2.monospacedDigit())
                     .foregroundColor(accent)
                     .contentTransition(.numericText())
             } minimal: {
-                Image(systemName: context.state.statusIcon)
+                Image(systemName: state.statusIcon)
                     .foregroundColor(accent)
             }
         }
@@ -203,6 +220,15 @@ private extension PaxActivityAttributes.ContentState {
         case .waiting:  return .secondary
         case .heating:  return LedColor.warmUp(progress: warmUpFraction).color
         default:        return accent
+        }
+    }
+
+    /// Short enough for the compact island, and still the number that matters.
+    var compactNumber: String {
+        switch phase {
+        case .waiting:  return "--"
+        case .charging: return batteryText
+        default:        return actualTempText
         }
     }
 
