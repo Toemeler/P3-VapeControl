@@ -13,6 +13,14 @@ struct ControlView: View {
         viewModel.connectionState.isConnected && viewModel.paxServiceConfirmed
     }
 
+    /// The oven is off on the charger, so the steppers, presets and modes have
+    /// nothing to act on. They stay exactly where they are and grey out rather
+    /// than disappearing: a screen that rebuilds itself every time the device
+    /// is put down is worse than one that goes quiet.
+    private var controlsActive: Bool {
+        canSendCommands && viewModel.isCharging != true
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             topBar
@@ -22,7 +30,7 @@ struct ControlView: View {
                 disconnected
             }
         }
-        .background(Color(.systemBackground))
+        .background(DS.Palette.canvas)
     }
 
     // MARK: - Top bar
@@ -115,6 +123,9 @@ struct ControlView: View {
             target: viewModel.customTargetTempC,
             accent: DS.Palette.accent,
             cadence: viewModel.temperatureCadence,
+            batteryLevel: viewModel.batteryLevel,
+            isCharging: viewModel.isCharging == true,
+            heatingState: viewModel.heatingState,
             onScrub: { viewModel.customTargetTempC = $0 },
             onCommit: { celsius in
                 guard canSendCommands else { return }
@@ -123,7 +134,7 @@ struct ControlView: View {
         ) {
             dialCentre
         }
-        .allowsHitTesting(canSendCommands)
+        .allowsHitTesting(controlsActive)
         .overlay(alignment: .bottomLeading) {
             rangeLabel(DS.Range.min).padding(.leading, 46).padding(.bottom, 30)
         }
@@ -166,11 +177,13 @@ struct ControlView: View {
 
     private var heatingLabel: String {
         guard viewModel.connectionState.isConnected else { return "OFFLINE" }
+        if viewModel.isCharging == true { return "CHARGING" }
         guard let state = viewModel.heatingState else { return "—" }
         return state.description.uppercased()
     }
 
     private var heatingColor: Color {
+        if viewModel.isCharging == true { return DS.Palette.charge }
         switch viewModel.heatingState {
         case .heating, .boosting:   return DS.Palette.accent
         case .ready:                return .green
@@ -216,8 +229,8 @@ struct ControlView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color.primary)
-        .disabled(!canSendCommands)
-        .opacity(canSendCommands ? 1 : 0.4)
+        .disabled(!controlsActive)
+        .opacity(controlsActive ? 1 : 0.32)
         .accessibilityLabel(delta > 0 ? "Increase target" : "Decrease target")
     }
 
@@ -240,12 +253,12 @@ struct ControlView: View {
                         .foregroundStyle(isActive ? DS.Palette.accent : Color.primary)
                 }
                 .buttonStyle(.plain)
-                .disabled(!canSendCommands)
+                .disabled(!controlsActive)
             }
         }
         .padding(.horizontal, DS.Metric.gutter)
         .padding(.top, 24)
-        .opacity(canSendCommands ? 1 : 0.4)
+        .opacity(controlsActive ? 1 : 0.32)
     }
 
     // MARK: - Heating mode
@@ -282,13 +295,13 @@ struct ControlView: View {
                         .foregroundStyle(isActive ? Color.white : Color.secondary)
                     }
                     .buttonStyle(.plain)
-                    .disabled(!canSendCommands)
+                    .disabled(!controlsActive)
                 }
             }
             .padding(.horizontal, DS.Metric.gutter)
         }
         .padding(.bottom, 12)
-        .opacity(canSendCommands ? 1 : 0.4)
+        .opacity(controlsActive ? 1 : 0.32)
     }
 
     // MARK: - Disconnected

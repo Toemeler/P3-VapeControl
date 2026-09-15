@@ -19,6 +19,12 @@ struct TemperatureDial<Center: View>: View {
     /// over slightly longer than this, so it is still travelling towards one
     /// reading when the next arrives.
     let cadence: Double
+    /// 0…100. The battery ring's thickness is the reading: a full battery is a
+    /// hairline, an empty one is heavy.
+    let batteryLevel: Int?
+    let isCharging: Bool
+    /// Drives the oven ring's swell during a draw.
+    let heatingState: PaxHeatingState?
     private let center: Center
     @State private var isScrubbing = false
 
@@ -26,6 +32,9 @@ struct TemperatureDial<Center: View>: View {
          target: Double,
          accent: Color,
          cadence: Double = 1,
+         batteryLevel: Int? = nil,
+         isCharging: Bool = false,
+         heatingState: PaxHeatingState? = nil,
          onScrub: @escaping (Double) -> Void,
          onCommit: @escaping (Double) -> Void,
          @ViewBuilder center: () -> Center) {
@@ -33,6 +42,9 @@ struct TemperatureDial<Center: View>: View {
         self.target = target
         self.accent = accent
         self.cadence = cadence
+        self.batteryLevel = batteryLevel
+        self.isCharging = isCharging
+        self.heatingState = heatingState
         self.onScrub = onScrub
         self.onCommit = onCommit
         self.center = center()
@@ -41,6 +53,11 @@ struct TemperatureDial<Center: View>: View {
     /// Long enough to carry the arc into the next reading, short enough that it
     /// is never chasing one that has already been replaced.
     private var travel: Double { min(1.4, cadence * 1.15) }
+
+    /// Drives the highlight that travels around the battery ring while it
+    /// charges. Started on appear so the rotation is already running whenever
+    /// the ring becomes visible.
+    @State private var chargeSpin = false
 
     private var side: CGFloat { DS.Dial.canvas }
     private var mid: CGFloat { side / 2 }
@@ -51,12 +68,14 @@ struct TemperatureDial<Center: View>: View {
         ZStack {
             track
             aboveVendorMax
+            batteryRing
             warmUp
             progress
             presetTicks
             targetMarker
             center
         }
+        .onAppear { chargeSpin = true }
         .frame(width: side, height: side)
         .contentShape(Circle())
         .gesture(scrub)
@@ -82,17 +101,91 @@ struct TemperatureDial<Center: View>: View {
             .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
     }
 
+    // MARK: - Battery
+
+    /// How thick the battery's ring is drawn. The reading is the thickness
+    /// rather than a number: nearly full is a hairline you stop noticing,
+    /// nearly empty is heavy and red, and charging is always substantial.
+    private var batteryStroke: CGFloat {
+        guard let level = batteryLevel else { return 0 }
+        let emptiness = 1 - min(1, max(0, CGFloat(level) / 100))
+        let resting = DS.Dial.batteryStrokeFull
+            + (DS.Dial.batteryStrokeEmpty - DS.Dial.batteryStrokeFull) * emptiness
+        return isCharging ? max(resting, DS.Dial.batteryStrokeCharging) : resting
+    }
+
+    private var batteryColour: Color {
+        if isCharging { return DS.Palette.charge }
+        guard let level = batteryLevel, level <= 15 else {
+            return Color.secondary.opacity(0.45)
+        }
+        return DS.Palette.low
+    }
+
+    @ViewBuilder
+    private var batteryRing: some View {
+        if let level = batteryLevel {
+            let diameter = (DS.Dial.radius - DS.Dial.batteryInset) * 2
+            let filled = CGFloat(min(100, max(0, level))) / 100
+            ZStack {
+                Circle()
+                    .trim(from: 0, to: CGFloat(sweepFraction))
+                    .stroke(DS.Palette.track.opacity(0.5),
+                            style: StrokeStyle(lineWidth: batteryStroke, lineCap: .round))
+                Circle()
+                    .trim(from: 0, to: CGFloat(sweepFraction) * filled)
+                    .stroke(batteryColour,
+                            style: StrokeStyle(lineWidth: batteryStroke, lineCap: .round))
+                if isCharging {
+                    // A highlight travelling the ring: charging is current
+                    // moving, not a level rising, so nothing here changes length.
+                    Circle()
+                        .trim(from: 0, to: 0.06)
+                        .stroke(Color.white.opacity(0.35),
+                                style: StrokeStyle(lineWidth: batteryStroke, lineCap: .round))
+                        .rotationEffect(.degrees(chargeSpin ? 360 : 0))
+                        .animation(.linear(duration: 2.6).repeatForever(autoreverses: false),
+                                   value: chargeSpin)
+                        .mask(
+                            Circle()
+                                .trim(from: 0, to: CGFloat(sweepFraction) * filled)
+                                .stroke(Color.black,
+                                        style: StrokeStyle(lineWidth: batteryStroke, lineCap: .round))
+                                .rotationEffect(.degrees(DS.Dial.startAngle))
+                                .frame(width: diameter, height: diameter)
+                        )
+                }
+            }
+            .rotationEffect(.degrees(DS.Dial.startAngle))
+            .frame(width: diameter, height: diameter)
+            .animation(.easeInOut(duration: 0.9), value: batteryStroke)
+            .animation(.easeInOut(duration: 0.9), value: filled)
+        }
+    }
+
+    // MARK: - Oven
+
+    /// The oven's own ring swells while you draw on it and settles back after.
+    private var progressStroke: CGFloat {
+        heatingState == .boosting ? DS.Dial.stroke + DS.Dial.inhaleSwell : DS.Dial.stroke
+    }
+
     private var progress: some View {
         Circle()
             .trim(from: 0, to: CGFloat(sweepFraction * DS.Range.fraction(of: current ?? DS.Range.min)))
             .stroke(accent,
-                    style: StrokeStyle(lineWidth: DS.Dial.stroke, lineCap: .round))
+                    style: StrokeStyle(lineWidth: progressStroke, lineCap: .round))
             .rotationEffect(.degrees(DS.Dial.startAngle))
             .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
             // Linear, and just longer than the gap between readings, so the arc
             // is still travelling towards one temperature when the next
             // arrives: it moves continuously rather than stepping and settling.
             .animation(.linear(duration: travel), value: current)
+            // Slow out over a draw, quicker back once it ends: the swell should
+            // feel like it is being pulled, and the release like letting go.
+            .animation(heatingState == .boosting
+                       ? .easeOut(duration: 3.2) : .easeInOut(duration: 0.7),
+                       value: progressStroke)
     }
 
     /// The climb from cold to the bottom of the scale, on a ring of its own
@@ -104,7 +197,7 @@ struct TemperatureDial<Center: View>: View {
         let diameter = (DS.Dial.radius - DS.Dial.warmUpInset) * 2
         return Circle()
             .trim(from: 0, to: CGFloat(sweepFraction * filled))
-            .stroke(accent.opacity(0.4),
+            .stroke(accent.opacity(heatingState == .heating ? 0.75 : 0.4),
                     style: StrokeStyle(lineWidth: DS.Dial.warmUpStroke, lineCap: .round))
             .rotationEffect(.degrees(DS.Dial.startAngle))
             .frame(width: diameter, height: diameter)

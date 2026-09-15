@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Measurements lifted from the design canvas, so the screen matches it 1:1.
 /// Everything here is in points on a 390 x 844 frame.
@@ -17,6 +18,16 @@ enum DS {
         /// The warm-up ring sits just inside the main one.
         static let warmUpInset: CGFloat = 19
         static let warmUpStroke: CGFloat = 3.5
+        /// The battery ring nests inside both, the way Activity rings nest.
+        static let batteryInset: CGFloat = 33
+        /// A full battery is a hairline; an empty one is heavy enough to
+        /// notice from across the room, which is the point.
+        static let batteryStrokeFull: CGFloat = 3
+        static let batteryStrokeEmpty: CGFloat = 13
+        /// Charging always reads as substantial, whatever the level.
+        static let batteryStrokeCharging: CGFloat = 11
+        /// How much thicker the oven's ring swells over a draw.
+        static let inhaleSwell: CGFloat = 9
         /// Half the length of the radial target marker.
         static let markerReach: CGFloat = 13
         static let markerWidth: CGFloat = 4.5
@@ -36,15 +47,35 @@ enum DS {
     }
 
     enum Palette {
-        /// Capsules and inactive chips.
-        static let fill = Color(.tertiarySystemFill)
-        /// The unfilled part of the dial arc.
-        static let track = Color(.secondarySystemFill)
+        /// The screen itself. Not black: a dial and three rings sitting on pure
+        /// black have no ground to sit on, and every edge in the layout becomes
+        /// a hard cut. This is a near-neutral charcoal with a trace of warmth
+        /// to meet the orange, and an off-white in light mode for the same
+        /// reason — paper rather than glare.
+        static let canvas = dynamic(dark: 0x17171A, light: 0xF4F3F1)
+        /// Capsules, chips and mode tiles: one step up from the canvas.
+        static let fill = dynamic(dark: 0x2A2A2F, light: 0xE6E4E1)
+        /// The unfilled part of a ring.
+        static let track = dynamic(dark: 0x2F2F35, light: 0xDCDAD6)
         /// The LED color chosen in settings, orange until changed. Computed so
         /// every existing call site re-themes without being rewired; views
         /// re-render on change because they observe AppSettings.
         static var accent: Color { LedColor.current.color }
         static var accentTint: Color { accent.opacity(0.15) }
+        /// A battery with almost nothing left.
+        static let low = Color(red: 1, green: 0.27, blue: 0.23)
+        /// A battery filling.
+        static let charge = Color(red: 0.19, green: 0.82, blue: 0.35)
+
+        private static func dynamic(dark: UInt32, light: UInt32) -> Color {
+            Color(UIColor { traits in
+                let hex = traits.userInterfaceStyle == .dark ? dark : light
+                return UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255,
+                               green: CGFloat((hex >> 8) & 0xFF) / 255,
+                               blue: CGFloat(hex & 0xFF) / 255,
+                               alpha: 1)
+            })
+        }
     }
 
     /// The oven's usable range. `PaxPresetTemp` sits inside it.

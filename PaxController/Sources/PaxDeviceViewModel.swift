@@ -187,6 +187,7 @@ final class PaxDeviceViewModel: ObservableObject {
     /// The faster, smaller poll behind the dial's movement.
     private var temperatureTimer: AnyCancellable?
     private var sinceTemperatureRequest: TimeInterval = 0
+    private var sinceStateRequest: TimeInterval = 0
     /// Whether anyone is looking. Polling four times a second at a dial nobody
     /// can see is two batteries spent on nothing.
     private var appIsActive = true
@@ -1150,14 +1151,15 @@ final class PaxDeviceViewModel: ObservableObject {
             // the PAX happened to be doing then, so putting it on the charger
             // never changed the headline and the heating state showed through
             // instead.
+            // Temperature, oven state and working target ride their own
+            // timers; asking again here would spend the budget twice.
             let attrs: [PaxMessageType] = [
-                .actualTemp, .heaterSetPoint, .battery,
-                .heatingState, .lockStatus, .dynamicMode,
-                .currentTargetTemp, .chargeStatus, .displayName
+                .heaterSetPoint, .battery, .lockStatus,
+                .dynamicMode, .chargeStatus, .displayName
             ]
             let packet = PaxPacket.statusRequest(attributes: attrs)
             try self.sendPacket(packet)
-            self.log("Sent STATUS_REQUEST for core attributes", level: .tx)
+            self.log("Sent STATUS_REQUEST for the slow attributes", level: .tx)
         }
     }
 
@@ -1569,14 +1571,19 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     private func startPolling() {
-        // The PAX 3 says nothing unless asked, so how smoothly the dial moves is
-        // decided here. Everything is asked for every three seconds; the
-        // temperature and what the oven is doing are asked for every second,
-        // which is one small packet in between and is what lets the ring travel
-        // instead of stepping.
+        // The link, not the timer, is the limit. Every attribute comes back as
+        // its own notification and read, and this device delivers about eight a
+        // second — measured at a 120 ms median. Asking for more than that does
+        // not make the dial smoother, it makes a queue: four requests a second
+        // for three attributes each is twelve a second against a budget of
+        // eight, and the readings then arrive in bursts seconds apart.
+        //
+        // So the three polls are sized to fit inside that budget, about half of
+        // it: the temperature alone twice a second, what the oven is doing every
+        // two, and everything else every six.
         pollTimer?.cancel()
         unansweredPolls = 0
-        pollTimer = Timer.publish(every: 3, on: .main, in: .common)
+        pollTimer = Timer.publish(every: 6, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -1586,6 +1593,7 @@ final class PaxDeviceViewModel: ObservableObject {
             }
         temperatureTimer?.cancel()
         sinceTemperatureRequest = 0
+        sinceStateRequest = 0
         // Ticks at the fastest rate the dial ever needs; each tick decides
         // whether this is a moment worth asking about.
         temperatureTimer = Timer.publish(every: Self.temperatureTick, on: .main, in: .common)
@@ -1595,11 +1603,13 @@ final class PaxDeviceViewModel: ObservableObject {
             }
     }
 
-    /// The shortest gap between temperature readings. Four a second: a PAX 3
-    /// climbs about two degrees in that time, so every reading is new, and the
-    /// link carries it without noticing — a connection interval is tens of
-    /// milliseconds, and the request is one packet that needs no acknowledgement.
-    private static let temperatureTick: TimeInterval = 0.25
+    /// The shortest gap between temperature readings. Twice a second leaves
+    /// the link about half idle, which is what keeps the readings arriving on
+    /// time rather than in a burst.
+    private static let temperatureTick: TimeInterval = 0.5
+    /// How often the oven's state and working target are asked for. They change
+    /// in steps rather than continuously, so they do not need the fast lane.
+    private static let stateTick: TimeInterval = 2
 
     /// How often to actually ask, by what the oven is doing. An oven climbing
     /// towards its set point earns every reading; one sitting in standby does
@@ -1608,25 +1618,40 @@ final class PaxDeviceViewModel: ObservableObject {
         guard appIsActive else { return 3 }
         switch heatingState {
         case .heating, .boosting, .cooling: return Self.temperatureTick
-        case .ready:                        return 1
-        default:                            return 2
+        case .ready:                        return 1.5
+        default:                            return 3
         }
     }
 
     private func temperatureTickFired() {
         sinceTemperatureRequest += Self.temperatureTick
-        guard sinceTemperatureRequest >= temperatureCadence - 0.01 else { return }
-        sinceTemperatureRequest = 0
-        requestTemperature()
+        sinceStateRequest += Self.temperatureTick
+
+        if sinceStateRequest >= Self.stateTick - 0.01 {
+            sinceStateRequest = 0
+            requestOvenState()
+        } else if sinceTemperatureRequest >= temperatureCadence - 0.01 {
+            // Never both in the same tick: two attributes at once is a quarter
+            // of a second of link time, and the next tick is half a second away.
+            sinceTemperatureRequest = 0
+            requestTemperature()
+        }
     }
 
-    /// The smallest useful question: where the oven is, where it is heading,
-    /// and what it is doing.
+    /// One attribute, which is one reply. This is the fast lane and it stays
+    /// one attribute wide.
     private func requestTemperature() {
         guard connectionState.isConnected else { return }
         enqueue {
+            try self.sendPacket(PaxPacket.statusRequest(attributes: [.actualTemp]))
+        }
+    }
+
+    private func requestOvenState() {
+        guard connectionState.isConnected else { return }
+        enqueue {
             try self.sendPacket(PaxPacket.statusRequest(
-                attributes: [.actualTemp, .currentTargetTemp, .heatingState]))
+                attributes: [.heatingState, .currentTargetTemp]))
         }
     }
 
