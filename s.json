@@ -1,0 +1,45 @@
+{
+  "name": "P3 VapeControl",
+  "identifier": "io.github.toemeler.p3vapecontrol",
+  "subtitle": "Bluetooth control for the PAX 3",
+  "description": "Monitor and control a PAX 3 vaporizer over Bluetooth: battery level, heating state, live temperature readout and four oven presets (180/193/204/215 C).\n\nIndependent tool, not affiliated with or endorsed by PAX Labs.",
+  "iconURL": "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/icon.png",
+  "website": "https://github.com/Toemeler/P3-VapeControl",
+  "tintColor": "FF7A1A",
+  "apps": [
+    {
+      "name": "PAX Controller",
+      "bundleIdentifier": "de.marcomeissner.PaxController",
+      "developerName": "Toemeler",
+      "subtitle": "Bluetooth control for the PAX 3",
+      "localizedDescription": "Monitor and control a PAX 3 vaporizer over Bluetooth: battery level, heating state, live temperature readout and four oven presets (180/193/204/215 C).\n\nIndependent tool, not affiliated with or endorsed by PAX Labs.",
+      "iconURL": "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/icon.png",
+      "tintColor": "FF7A1A",
+      "category": "utilities",
+      "screenshots": [
+        "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/screenshots/01-scan-dark.png",
+        "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/screenshots/01-scan.png",
+        "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/screenshots/02-device-dark.png",
+        "https://raw.githubusercontent.com/Toemeler/P3-VapeControl/main/screenshots/02-device.png"
+      ],
+      "versions": [
+        {
+          "version": "1.0.53",
+          "buildVersion": "53",
+          "date": "2026-09-15T09:10:32Z",
+          "localizedDescription": "Automated build build-53.",
+          "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/build-53/PaxController.ipa",
+          "size": 225817,
+          "sha256": "294fee0afde7c1a410f0bed23886e261cba118a5dd54f7410b34bee37c9443cf",
+          "minOSVersion": "16.0"
+        }
+      ],
+      "version": "1.0.53",
+      "versionDate": "2026-09-15T09:10:32Z",
+      "versionDescription": "Automated build build-53.",
+      "downloadURL": "https://github.com/Toemeler/P3-VapeControl/releases/download/build-53/PaxController.ipa",
+      "size": 225817
+    }
+  ],
+  "news": []
+}
