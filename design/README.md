@@ -3,6 +3,11 @@
 Artboards for the charging state and the Lock Screen card, as mockups rather
 than shipped code — decide here, then build it in `PaxController/Sources`.
 
+Settled so far: on the charger the dial stays, dimmed, still meaning
+temperature, and the space the controls had carries the charge. Which shape it
+takes there, and how the three Lock Screen states relate to each other, are
+still open.
+
 Measurements are lifted from `DesignSystem.swift` so the mockups and the app
 agree: a 390 × 844 frame, a 380 pt dial whose arc runs 270° clockwise from
 135° at radius 164 with a 26 pt stroke, a 52 pt top bar, 38 pt capsules, the
@@ -10,9 +15,9 @@ agree: a 390 × 844 frame, a 380 pt dial whose arc runs 270° clockwise from
 
 | File | |
 |------|--|
-| `Main.dc.html` | Charging, direction A — the dial re-pointed at the battery |
-| `ChargeQuiet.dc.html` | Charging, direction B — dial keeps meaning temperature, card below |
-| `ChargeMinimal.dc.html` | Charging, direction C — charging and nothing else |
+| `Main.dc.html` | Charging B1 — the charge bar as the object, number inside its fill |
+| `ChargeRingEcho.dc.html` | Charging B2 — a second ring echoing the dial's geometry |
+| `ChargeType.dc.html` | Charging B3 — tracked caps, tabular figures, a hairline |
 | `LockUsing.dc.html` | Lock Screen while heating, three directions |
 | `LockCharging.dc.html` | Lock Screen on the charger, three directions |
 | `LockScanning.dc.html` | Lock Screen while waiting for the device, three directions |
