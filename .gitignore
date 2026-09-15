@@ -13,5 +13,9 @@ Pods/
 .build/
 .swiftpm/
 
+# Python byte cache, from running the scripts in .github/scripts directly
+__pycache__/
+*.pyc
+
 # macOS
 .DS_Store
