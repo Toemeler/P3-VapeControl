@@ -14,8 +14,9 @@ struct DeviceSheet: View {
     /// the field under the user's cursor mid-rename.
     @State private var draftName: String = ""
     @FocusState private var nameFieldFocused: Bool
-    @State private var confirmingLipDetection = false
-    @State private var pendingLipDetection = false
+    @State private var confirmingLipChange = false
+    @State private var pendingLipValue = false
+    @State private var pendingLipSwitch: LipSwitch = .cooling
 
     private var unit: TemperatureUnit { settings.temperatureUnit }
 
@@ -149,12 +150,13 @@ struct DeviceSheet: View {
     @ViewBuilder
     private var ovenSection: some View {
         Section {
-            Toggle("Lip detection", isOn: Binding(
-                get: { viewModel.lipDetectionEnabled },
-                set: { wanted in
-                    pendingLipDetection = wanted
-                    confirmingLipDetection = true
-                }))
+            Toggle("Cool down when set aside", isOn: Binding(
+                get: { viewModel.lipCoolingEnabled },
+                set: { ask(.cooling, $0) }))
+                .disabled(!viewModel.canSetLipDetection)
+            Toggle("Switch off when unused", isOn: Binding(
+                get: { viewModel.lipShutdownEnabled },
+                set: { ask(.shutdown, $0) }))
                 .disabled(!viewModel.canSetLipDetection)
             if viewModel.canSetLipDetection {
                 Button("Restore factory heating settings") {
@@ -168,9 +170,15 @@ struct DeviceSheet: View {
                     .foregroundStyle(.orange)
             }
         } header: {
-            Text("Oven")
+            Text("Lip detection")
         } footer: {
             Text(lipDetectionNote)
+        }
+        .alert("Write heating parameters?", isPresented: $confirmingLipChange) {
+            Button("Cancel", role: .cancel) { }
+            Button("Write", role: .destructive) { commitLipChange() }
+        } message: {
+            Text(confirmLipDetectionMessage)
         }
 
         Section {
@@ -197,13 +205,20 @@ struct DeviceSheet: View {
         } footer: {
             Text(bitProbeNote)
         }
-        .alert("Write heating parameters?", isPresented: $confirmingLipDetection) {
-            Button("Cancel", role: .cancel) { }
-            Button("Write", role: .destructive) {
-                viewModel.setLipDetection(pendingLipDetection)
-            }
-        } message: {
-            Text(confirmLipDetectionMessage)
+    }
+
+    private enum LipSwitch { case cooling, shutdown }
+
+    private func ask(_ which: LipSwitch, _ value: Bool) {
+        pendingLipSwitch = which
+        pendingLipValue = value
+        confirmingLipChange = true
+    }
+
+    private func commitLipChange() {
+        switch pendingLipSwitch {
+        case .cooling:  viewModel.setLipCooling(pendingLipValue)
+        case .shutdown: viewModel.setLipShutdown(pendingLipValue)
         }
     }
 
@@ -213,21 +228,17 @@ struct DeviceSheet: View {
                 ? "This PAX does not report the heating parameters attribute, so lip detection cannot be changed from here."
                 : "Connect to the PAX to change this."
         }
-        let head = "With lip detection off the oven holds the set point whether or not it senses a draw — no boost, no cooling when the lips leave it, and no power-off a few minutes later. "
+        let head = "The lip sensor does two things, and they are worth wanting separately. "
+            + "Cooling drops the temperature when it stops sensing your lips, which is what gets in the way of a water-pipe adapter. "
+            + "Switching off is what stops a forgotten oven running a few minutes after the last draw — leave it on unless you have a reason not to. "
         guard let bit = settings.heaterOptionBit else {
             return head
-                + "This PAX stops its oven when sent the bits the official app calls the lip sensor, so one of them is its heater. Run \u{201C}Find the heater bit\u{201D} below before using this switch. "
-                + "Until then nothing is written unless you tap, and the setting does not survive a mode change or a reconnect."
+                + "Neither has been written yet on this PAX: the bits the official app groups with them include one that is this device\u{2019}s heater, "
+                + "and clearing it stops the oven. Run \u{201C}Find the heater bit\u{201D} below first."
         }
         return head
-            + "Bit \(bit) is this PAX\u{2019}s heater and is left alone, so the switch should no longer stop the oven. "
-            + "The setting is re-sent after a mode change and on every connection, since the device does not keep it. The PAX never reports this attribute back, so the switch shows what was last sent, not a reading."
-    }
-
-    private var confirmLipDetectionMessage: String {
-        settings.heaterOptionBit == nil
-            ? "This rewrites the whole heating algorithm, not one setting, and on this PAX it has stopped the oven — the heater bit has not been identified yet. Run \u{201C}Find the heater bit\u{201D} first. If the oven does stop, restore the factory settings and power-cycle the PAX."
-            : "This rewrites the whole heating algorithm, not one setting. The heater bit found on this PAX is left alone, so the oven should keep running. If it does not, restore the factory settings below."
+            + "Bit \(bit) is this PAX\u{2019}s heater and is held out of every write. "
+            + "Both are re-sent after a mode change and on every connection, since the device does not keep them, and the PAX never reports the attribute back — so these show what was last sent, not a reading."
     }
 
     private var bitProbeNote: String {

@@ -1249,16 +1249,22 @@ final class PaxDeviceViewModel: ObservableObject {
             // back over the change that was just made.
             self.deviceHeatingParams = nil
         }
-        // A Dynamic Mode is itself a block of heating parameters, so a mode
-        // change is the moment the lip setting would be lost. Re-asserting it
-        // is only safe once the probe has found this device's heater bit —
-        // before that, an automatic write is how the oven got switched off with
-        // nothing on screen to say why. So this stays a deliberate tap until
-        // there is a measurement, and becomes automatic after.
-        guard settings.heaterOptionBit != nil, !settings.lipDetectionEnabled else { return }
+        // A Dynamic Mode *is* a block of heating parameters, and the official
+        // app writes both attributes for one mode change. This app only ever
+        // sent the byte, so whether the mode took at all depended on the
+        // firmware filling the block in by itself — which it may not do. Now
+        // the block goes with it: `deviceHeatingParams` was just cleared, so
+        // the write below starts from the new mode's own preset, carrying the
+        // lip choice along rather than losing it.
+        //
+        // Only once the probe has found this device's heater bit. Before that
+        // an automatic write is how the oven got switched off with nothing on
+        // screen to say why, so an unmeasured device still gets the byte alone,
+        // exactly as before.
+        guard settings.heaterOptionBit != nil else { return }
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 400_000_000)
-            self?.applyLipDetection(reason: "after a mode change")
+            self?.applyLipSettings(reason: "with the \(mode.label) parameters")
         }
     }
 
@@ -1279,34 +1285,43 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     var lipDetectionEnabled: Bool { settings.lipDetectionEnabled }
+    var lipCoolingEnabled: Bool { settings.lipCoolingEnabled }
+    var lipShutdownEnabled: Bool { settings.lipShutdownEnabled }
 
-    /// Turns the lip sensor's hold over the oven on or off.
+    /// The two halves of the lip sensor's hold over the oven.
     ///
-    /// In the official app's naming, three of the eight option bits are the lip
-    /// sensor: the boost while a draw is detected, the cooldown that starts
-    /// when it stops seeing one, and the shutdown that follows. On this
-    /// firmware one of those three is the heater instead — clearing all three
-    /// stops the oven — so whichever bit the probe identifies is held back from
-    /// the write. Until it has run, the write is the official app's and the
-    /// oven is expected to stop.
-    func setLipDetection(_ enabled: Bool) {
-        settings.lipDetectionEnabled = enabled
-        applyLipDetection(reason: enabled ? "on" : "off")
+    /// The official app groups three option bits under the lip sensor: a boost
+    /// while a draw is detected, the cooldown that starts when it stops seeing
+    /// one, and the shutdown that follows. On a PAX 3 the first of those is the
+    /// heater instead — clearing it is what stopped the oven — so there are two
+    /// to offer, not three, and whichever bit the probe identifies as the
+    /// heater is held out of every write.
+    ///
+    /// Cooling and shutdown are worth separating: a water-pipe adapter runs
+    /// into the cooldown, while the shutdown is the thing that stops a
+    /// forgotten oven running, and someone may well want one without the other.
+    func setLipCooling(_ enabled: Bool) {
+        settings.lipCoolingEnabled = enabled
+        applyLipSettings(reason: "cooldown \(enabled ? "on" : "off")")
+    }
+
+    func setLipShutdown(_ enabled: Bool) {
+        settings.lipShutdownEnabled = enabled
+        applyLipSettings(reason: "auto power-off \(enabled ? "on" : "off")")
     }
 
     /// Writes the current lip-detection choice, starting from a complete set of
     /// parameters: what the device reported if it ever has, and otherwise the
     /// vendor preset for the mode it is in. Nothing is assembled field by
     /// field, and nothing goes out that fails the plausibility check.
-    private func applyLipDetection(reason: String) {
+    private func applyLipSettings(reason: String) {
         let mode = dynamicMode ?? .standard
         var params = deviceHeatingParams ?? PaxHeatingParams.stock(for: mode)
-        let enabled = settings.lipDetectionEnabled
-        if enabled {
-            params.options.formUnion(PaxHeatingParams.Options.lipDetection)
-        } else {
-            params.options.subtract(lipBitsToClear)
-        }
+        // Start from the preset's own lip bits, then take away only what the
+        // user has turned off. Setting them from scratch would invent values
+        // for a mode whose preset leaves one of them clear.
+        params.options.formUnion(PaxHeatingParams.Options.lipDetection)
+        params.options.subtract(lipBitsToClear)
         // The same word carries the bit that decides whether the oven heats at
         // all. A write that cleared it would look like a dead device — which is
         // exactly what happened before the probe existed. The measured bit wins
@@ -1316,26 +1331,33 @@ final class PaxDeviceViewModel: ObservableObject {
             PaxHeatingParams.Options(rawValue: 1 << UInt16($0))
         } ?? .heater)
         heatingParamsStoppedOven = false
-        writeHeatingParams(params, note: "lip detection \(enabled ? "on" : "off") \(reason), from the \(mode.label) preset")
+        writeHeatingParams(params, note: "\(reason), from the \(mode.label) preset")
     }
 
-    /// Puts the current mode's factory heating parameters back, lip detection
-    /// included, and clears the app's memory of the switch. The way out if a
-    /// write ever leaves the oven behaving oddly.
+    /// Puts the current mode's factory heating parameters back, both lip
+    /// behaviours included, and clears the app's memory of the switches. The
+    /// way out if a write ever leaves the oven behaving oddly.
     func restoreStockHeatingParams() {
         let mode = dynamicMode ?? .standard
         let params = PaxHeatingParams.stock(for: mode)
-        settings.lipDetectionEnabled = true
+        settings.lipCoolingEnabled = true
+        settings.lipShutdownEnabled = true
         deviceHeatingParams = nil
         heatingParamsStoppedOven = false
         writeHeatingParams(params, note: "restoring the stock \(mode.label) preset")
     }
 
-    /// The lip bits, less whichever one this firmware uses for the heater. The
-    /// official app's naming says that is bit 2 and that these three are safe;
-    /// this PAX says otherwise, and the probe is what settles it.
+    /// Which lip bits a write should clear: the ones whose switch is off, never
+    /// the heater. The official app's naming says the heater is bit 2 and that
+    /// all three lip bits are safe to clear; this PAX says otherwise, and the
+    /// probe is what settles it.
     private var lipBitsToClear: PaxHeatingParams.Options {
-        var bits = PaxHeatingParams.Options.lipDetection
+        var bits: PaxHeatingParams.Options = []
+        if !settings.lipCoolingEnabled  { bits.insert(.noLipCooling) }
+        if !settings.lipShutdownEnabled { bits.insert(.noLipShutdown) }
+        // Never the heater, whichever bit this device keeps it in. The official
+        // app groups bit 0 with these two; on a PAX 3 that bit is the heater,
+        // and clearing it is what stopped the oven.
         if let bit = settings.heaterOptionBit {
             bits.remove(PaxHeatingParams.Options(rawValue: 1 << UInt16(bit)))
         }
@@ -1481,9 +1503,9 @@ final class PaxDeviceViewModel: ObservableObject {
         // A report is worth everything here — it is the only thing that could
         // settle what this firmware's block actually looks like — but it does
         // not trigger a write. Nothing writes 0x19 without a tap.
-        let deviceSaysOn = !params.options.isDisjoint(with: PaxHeatingParams.Options.lipDetection)
-        settings.lipDetectionEnabled = deviceSaysOn
-        log("The device reports lip detection \(deviceSaysOn ? "on" : "off") — the switch now follows it",
+        settings.lipCoolingEnabled = params.options.contains(.noLipCooling)
+        settings.lipShutdownEnabled = params.options.contains(.noLipShutdown)
+        log("The device reports cooldown \(settings.lipCoolingEnabled ? "on" : "off") and auto power-off \(settings.lipShutdownEnabled ? "on" : "off") — the switches now follow it",
             level: .info)
     }
 
@@ -1694,7 +1716,7 @@ final class PaxDeviceViewModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 guard let self, self.connectionState.isConnected,
                       !self.settings.lipDetectionEnabled else { return }
-                self.applyLipDetection(reason: "on connect")
+                self.applyLipSettings(reason: "on connect")
             }
         }
     }

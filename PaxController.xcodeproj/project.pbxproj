@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA000100 /* PaxProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000100 /* PaxProtocolTests.swift */; };
+		AA000101 /* PaxActivityStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000101 /* PaxActivityStateTests.swift */; };
+		AA000110 /* PaxProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000003 /* PaxProtocol.swift */; };
+		AA000111 /* PaxColorTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000044 /* PaxColorTheme.swift */; };
+		AA000112 /* LedColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000040 /* LedColor.swift */; };
+		AA000113 /* PaxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000043 /* PaxActivityAttributes.swift */; };
 		AA000001 /* PaxControllerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000001 /* PaxControllerApp.swift */; };
 		AA000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000002 /* ContentView.swift */; };
 		AA000003 /* PaxProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000003 /* PaxProtocol.swift */; };
@@ -69,6 +75,9 @@
 /* Begin PBXFileReference section */
 		AB000001 /* PaxControllerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxControllerApp.swift; sourceTree = "<group>"; };
 		AB000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AB000100 /* PaxProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxProtocolTests.swift; sourceTree = "<group>"; };
+		AB000101 /* PaxActivityStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxActivityStateTests.swift; sourceTree = "<group>"; };
+		AC000004 /* PaxControllerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PaxControllerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB000003 /* PaxProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxProtocol.swift; sourceTree = "<group>"; };
 		AB000004 /* BluetoothManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothManager.swift; sourceTree = "<group>"; };
 		AB000007 /* DebugConsoleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugConsoleView.swift; sourceTree = "<group>"; };
@@ -104,6 +113,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AD000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AD000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -121,11 +137,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		AE000010 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				AB000100 /* PaxProtocolTests.swift */,
+				AB000101 /* PaxActivityStateTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
 		AC000002 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				AC000001 /* PaxController.app */,
 				AC000003 /* PaxLiveActivityExtension.appex */,
+				AC000004 /* PaxControllerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -136,6 +162,7 @@
 				AE000002 /* Sources */,
 				AE000003 /* Resources */,
 				AE000004 /* LiveActivity */,
+				AE000010 /* Tests */,
 				AC000002 /* Products */,
 			);
 			path = PaxController;
@@ -233,6 +260,22 @@
 			productReference = AC000003 /* PaxLiveActivityExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		AF000003 /* PaxControllerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BA000004 /* Build configuration list for PBXNativeTarget "PaxControllerTests" */;
+			buildPhases = (
+				AG000003 /* Sources */,
+				AD000003 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PaxControllerTests;
+			productName = PaxControllerTests;
+			productReference = AC000004 /* PaxControllerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -247,6 +290,9 @@
 						CreatedOnToolsVersion = 15.0;
 					};
 					AF000002 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					AF000003 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
@@ -266,6 +312,7 @@
 			targets = (
 				AF000001 /* PaxController */,
 				AF000002 /* PaxLiveActivityExtension */,
+				AF000003 /* PaxControllerTests */,
 			);
 		};
 /* End PBXProject section */
@@ -288,6 +335,19 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AG000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000100 /* PaxProtocolTests.swift in Sources */,
+				AA000101 /* PaxActivityStateTests.swift in Sources */,
+				AA000110 /* PaxProtocol.swift in Sources */,
+				AA000111 /* PaxColorTheme.swift in Sources */,
+				AA000112 /* LedColor.swift in Sources */,
+				AA000113 /* PaxActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AG000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -553,6 +613,44 @@
 			};
 			name = Release;
 		};
+		BC000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.marcomeissner.PaxControllerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "PaxController/Sources/PaxController-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BC000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.marcomeissner.PaxControllerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "PaxController/Sources/PaxController-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -579,6 +677,15 @@
 			buildConfigurations = (
 				BC000003 /* Debug */,
 				BC000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BA000004 /* Build configuration list for PBXNativeTarget "PaxControllerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC000005 /* Debug */,
+				BC000006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
