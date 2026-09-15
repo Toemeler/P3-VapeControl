@@ -298,6 +298,33 @@ struct ControlView: View {
 
     private var disconnected: some View {
         VStack(spacing: 0) {
+            if viewModel.scannedDevices.isEmpty {
+                // Carries its own spacers, so it centres in what is left.
+                emptyDiscovery
+            } else {
+                discoveredList
+                Spacer(minLength: 0)
+            }
+            scanButton
+        }
+        // The screen is otherwise empty while disconnected, so start looking
+        // straight away rather than making the first tap a scan.
+        .onAppear(perform: startScanIfIdle)
+        .onChange(of: viewModel.connectionState) { state in
+            if state == .idle { startScanIfIdle() }
+        }
+    }
+
+    private func startScanIfIdle() {
+        guard !viewModel.connectionState.isConnected,
+              viewModel.connectionState == .idle else { return }
+        viewModel.startScan()
+    }
+
+    private var isScanning: Bool { viewModel.connectionState == .scanning }
+
+    private var emptyDiscovery: some View {
+        VStack(spacing: 0) {
             Spacer()
             Image(systemName: "thermometer.medium")
                 .font(.system(size: 42, weight: .light))
@@ -305,7 +332,7 @@ struct ControlView: View {
                 .frame(width: 84, height: 84)
                 .background(DS.Palette.fill, in: Circle())
 
-            Text(statusHeadline)
+            Text(viewModel.statusHeadline)
                 .font(.system(size: 22, weight: .bold))
                 .tracking(-0.4)
                 .padding(.top, 20)
@@ -318,31 +345,93 @@ struct ControlView: View {
                 .padding(.horizontal, 40)
 
             Spacer()
-
-            Button {
-                showScanSheet = true
-            } label: {
-                Text("Connect to a PAX")
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(DS.Palette.accent, in: Capsule())
-                    .foregroundStyle(Color.white)
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, DS.Metric.gutter)
-            .padding(.bottom, 20)
         }
     }
 
-    private var statusHeadline: String {
-        if case .error = viewModel.connectionState { return "Connection failed" }
-        if viewModel.connectionState == .idle { return "Not connected" }
-        return viewModel.connectionState.displayString
+    private var discoveredList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text("Available devices")
+                    .font(.system(size: 12, weight: .bold))
+                    .tracking(1.2)
+                    .textCase(.uppercase)
+                    .foregroundStyle(.secondary)
+                if isScanning {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            VStack(spacing: 8) {
+                ForEach(viewModel.scannedDevices) { device in
+                    Button {
+                        viewModel.connect(to: device)
+                    } label: {
+                        discoveredRow(device)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, DS.Metric.gutter)
+        }
+    }
+
+    private func discoveredRow(_ device: ScannedDevice) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "thermometer.medium")
+                .font(.system(size: 19))
+                .foregroundStyle(DS.Palette.accent)
+                .frame(width: 42, height: 42)
+                .background(DS.Palette.accentTint, in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(device.name)
+                    .font(.system(size: 17, weight: .semibold))
+                    .tracking(-0.2)
+                Text("\(device.rssi) dBm")
+                    .font(.system(size: 12))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 66)
+        .background(DS.Palette.fill,
+                    in: RoundedRectangle(cornerRadius: DS.Metric.modeRadius, style: .continuous))
+        .foregroundStyle(Color.primary)
+        .contentShape(Rectangle())
+    }
+
+    private var scanButton: some View {
+        Button {
+            if isScanning { viewModel.stopScan() } else { viewModel.startScan() }
+        } label: {
+            Text(isScanning ? "Stop scanning" : "Scan again")
+                .font(.system(size: 16, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(isScanning ? DS.Palette.fill : DS.Palette.accent, in: Capsule())
+                .foregroundStyle(isScanning ? Color.primary : Color.white)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, DS.Metric.gutter)
+        .padding(.top, 14)
+        .padding(.bottom, 20)
     }
 
     private var statusDetail: String {
         if case .error(let message) = viewModel.connectionState { return message }
+        if isScanning || viewModel.connectionState == .waitingForDevice {
+            return "Make sure your PAX is awake and within a few metres."
+        }
         return "Connect to your PAX to set temperature and heating mode."
     }
 }
