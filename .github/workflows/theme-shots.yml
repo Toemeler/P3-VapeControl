@@ -1,0 +1,143 @@
+# Renders the control screen once per theme and puts the images on a scratch
+# branch, so a theme can be looked at rather than reasoned about.
+#
+# It publishes nothing: no release, no IPA, no feed, and it never touches a
+# working branch. The images land on `claude/theme-shots`, which exists only to
+# carry them and is safe to delete.
+
+name: Theme screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      themes:
+        description: "Space-separated theme ids, or blank for all of them"
+        type: string
+        default: ""
+      scale:
+        description: "Longest edge in pixels; smaller keeps the branch light"
+        type: string
+        default: "1266"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    name: Render every theme
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain info
+        run: xcodebuild -version
+
+      # Release, like the README captures: the point is what a real install
+      # looks like, not what a debug build looks like.
+      - name: Build the app for the simulator
+        run: |
+          set -o pipefail
+          .github/scripts/build_app.sh Release iphonesimulator \
+            de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee simbuild.log
+          mkdir -p build/release
+          mv build/Release-iphonesimulator/PaxController.app build/release/
+          git checkout -- PaxController/Resources/Info.plist
+
+      - name: Pick a simulator
+        id: sim
+        run: python3 .github/scripts/pick_simulator.py
+
+      - name: Boot simulator
+        id: boot
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          UDID="${{ steps.sim.outputs.existing_udid }}"
+          DEVICE_TYPE="${{ steps.sim.outputs.device_type }}"
+          if [ -z "$UDID" ] && [ -z "$DEVICE_TYPE" ]; then
+            echo "::error::pick_simulator.py produced no device"
+            exit 1
+          fi
+          if [ -z "$UDID" ]; then
+            UDID=$(xcrun simctl create "ci-theme-shots" \
+              "$DEVICE_TYPE" "${{ steps.sim.outputs.runtime }}")
+          fi
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+          # Same dance as the release workflow: bootstatus hangs on these
+          # runners, and Booted arrives before SpringBoard can host an app.
+          xcrun simctl boot "$UDID" || true
+          STATE=Unknown
+          for _ in $(seq 1 90); do
+            STATE=$(python3 .github/scripts/simctl_helper.py state "$UDID")
+            [ "$STATE" = "Booted" ] && break
+            sleep 5
+          done
+          if [ "$STATE" != "Booted" ]; then
+            echo "::error::simulator never reached Booted (last state: $STATE)"
+            exit 1
+          fi
+          READY="waiting: not probed"
+          for _ in $(seq 1 24); do
+            READY=$(python3 .github/scripts/simctl_helper.py ready "$UDID")
+            case "$READY" in ready*) break ;; esac
+            sleep 5
+          done
+          case "$READY" in
+            ready*) echo "Device can host an app ($READY)." ;;
+            *) echo "::warning::booted but never became ready ($READY); launching anyway" ;;
+          esac
+          xcrun simctl status_bar "$UDID" clear || true
+
+      - name: Capture each theme
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          THEMES="${{ inputs.themes }}"
+          if [ -z "$THEMES" ]; then
+            # Read the ids out of the catalogue rather than restating them, so
+            # a theme added later is captured without editing this file.
+            THEMES=$(grep -o 'id: "[a-z-]*"' \
+              PaxController/Sources/Theme/ThemeCatalog.swift \
+              | sed 's/id: "//; s/"//' | tr '\n' ' ')
+          fi
+          echo "Capturing: $THEMES"
+          SPECS=""
+          for t in $THEMES; do SPECS="$SPECS $t:control:$t"; done
+          python3 .github/scripts/capture_screens.py \
+            "${{ steps.boot.outputs.udid }}" \
+            build/release/PaxController.app \
+            de.marcomeissner.PaxController \
+            theme-shots $SPECS
+          # Half resolution: enough to judge type, spacing and colour, a
+          # quarter of the bytes on a branch that only exists to be looked at.
+          for f in theme-shots/*.png; do sips -Z "${{ inputs.scale }}" "$f" >/dev/null; done
+          ls -lh theme-shots
+
+      - name: Put them on the scratch branch
+        run: |
+          set -euo pipefail
+          git config user.name "Toemeler"
+          git config user.email "87390876+Toemeler@users.noreply.github.com"
+          # A fresh root every time: this branch is a viewport, not history, and
+          # keeping the images out of any real branch keeps them out of the app.
+          git checkout --orphan theme-shots-tmp
+          git rm -rq --cached . || true
+          git add -f theme-shots
+          git commit -qm "Theme screenshots from ${GITHUB_SHA:0:7}"
+          git push -f origin HEAD:refs/heads/claude/theme-shots
+          echo "Pushed to claude/theme-shots"
+
+      - name: Also upload as an artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: theme-shots
+          path: theme-shots
+          if-no-files-found: warn

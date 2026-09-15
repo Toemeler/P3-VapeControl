@@ -13,8 +13,13 @@ Every simctl call runs with a deadline, and the ones that race the simulator
 coming up are retried: simctl blocks indefinitely when the simulator is
 wedged, and macOS ships no coreutils `timeout` to bound it with.
 
+A spec may name a theme as well: `name:screen:theme` selects that theme
+through the `selectedThemeID` launch argument, which is the same key
+`ThemeStore` persists to, so a capture can walk every theme without the app
+knowing it is being driven.
+
 Usage:
-  capture_screens.py <udid> <app> <bundle id> <out dir> <name:screen>...
+  capture_screens.py <udid> <app> <bundle id> <out dir> <name:screen[:theme]>...
 """
 import os
 import subprocess
@@ -76,14 +81,17 @@ def install(udid, app_path, attempts=6):
     sys.exit(f"::error::could not install {app_path} after {attempts} attempts")
 
 
-def launch(udid, bundle_id, screen, attempts=3):
+def launch(udid, bundle_id, screen, theme=None, attempts=3):
     """Start the app on a screen and confirm it stayed up."""
     last_pid = ""
+    arguments = ["-uiScreen", screen, "-uiDemo", "YES"]
+    if theme:
+        arguments += ["-selectedThemeID", theme]
     for attempt in range(1, attempts + 1):
         result = run(
             [
                 "xcrun", "simctl", "launch", "--terminate-running-process",
-                udid, bundle_id, "-uiScreen", screen, "-uiDemo", "YES",
+                udid, bundle_id, *arguments,
             ],
             timeout=120,
             fatal=False,
@@ -113,8 +121,9 @@ def main():
     udid, app_path, bundle_id, out_dir = sys.argv[1:5]
     screens = []
     for spec in sys.argv[5:]:
-        name, _, screen = spec.partition(":")
-        screens.append((name, screen or name))
+        name, _, rest = spec.partition(":")
+        screen, _, theme = rest.partition(":")
+        screens.append((name, screen or name, theme or None))
     if not screens:
         sys.exit("::error::no screens requested")
 
@@ -127,8 +136,8 @@ def main():
 
     install(udid, app_path)
 
-    for index, (name, screen) in enumerate(screens, start=1):
-        launch(udid, bundle_id, screen)
+    for index, (name, screen, theme) in enumerate(screens, start=1):
+        launch(udid, bundle_id, screen, theme=theme)
         for appearance in ("light", "dark"):
             run(["xcrun", "simctl", "ui", udid, "appearance", appearance],
                 timeout=60, check=False, fatal=False)
