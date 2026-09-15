@@ -1,0 +1,46 @@
+# Compiles the app for the simulator and nothing else: no screenshots, no IPA,
+# no release, no commits. It exists so a branch can be told whether it builds
+# without publishing anything.
+#
+# The real Build workflow still owns releases; this one is deliberately cheap
+# and safe to run on every push.
+
+name: Compile check
+
+on:
+  push:
+    paths:
+      - "PaxController/**"
+      - "PaxController.xcodeproj/**"
+      - ".github/scripts/build_app.sh"
+      - ".github/workflows/compile-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push supersedes whatever is still compiling on the same ref.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build for the simulator
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show the toolchain
+        run: xcodebuild -version
+
+      # Debug and the simulator SDK: the point is whether it compiles, and a
+      # simulator build needs no signing identity to reach the linker.
+      - name: Build
+        run: |
+          bash .github/scripts/build_app.sh \
+            Debug \
+            iphonesimulator \
+            com.p3vapecontrol.compilecheck \
+            "P3 VapeControl"

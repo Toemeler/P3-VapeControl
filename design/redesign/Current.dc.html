@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #FF6A00; } a:hover { color: #E05D00; }
+  </style>
+</helmet>
+
+<!-- The screen as it ships today, at the same reading, for comparison. Tokens
+     lifted from DesignSystem.swift: canvas #17171A, fill #2A2A2F, track #2F2F35. -->
+<div style="width: 390px; height: 844px; background: #17171A; color: #FFFFFF; display: flex; flex-direction: column;">
+
+  <div style="height: 44px;"></div>
+
+  <div style="height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px;">
+    <div style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px 0 12px; background: #2A2A2F; border-radius: 19px;">
+      <div style="width: 8px; height: 8px; border-radius: 4px; background: #30D158;"></div>
+      <div style="font-size: 15px; font-weight: 600;">PAX 3</div>
+    </div>
+    <div style="height: 38px; padding: 0 13px; background: #2A2A2F; border-radius: 19px; display: flex; align-items: center; font-size: 15px; font-weight: 600;">78%</div>
+    <div style="flex-grow: 1;"></div>
+    <div style="width: 38px; height: 38px; border-radius: 19px; background: #2A2A2F; display: flex; align-items: center; justify-content: center;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M4.2 12a7.8 7.8 0 0 1 .3-2.1l-2-1.5 2-3.4 2.3 1a7.8 7.8 0 0 1 1.8-1l.3-2.5h4l.3 2.5c.65.26 1.25.6 1.8 1l2.3-1 2 3.4-2 1.5a7.8 7.8 0 0 1 0 4.2l2 1.5-2 3.4-2.3-1a7.8 7.8 0 0 1-1.8 1l-.3 2.5h-4l-.3-2.5a7.8 7.8 0 0 1-1.8-1l-2.3 1-2-3.4 2-1.5A7.8 7.8 0 0 1 4.2 12z"/></svg>
+    </div>
+  </div>
+
+  <div style="width: 390px; height: 380px; position: relative; display: flex; align-items: center; justify-content: center;">
+    <svg width="380" height="380" viewBox="0 0 380 380" style="position: absolute; top: 0; left: 5px;">
+      <circle cx="190" cy="190" r="164" fill="none" stroke="#2F2F35" stroke-width="26" stroke-linecap="round" stroke-dasharray="772.8 1030.4" transform="rotate(135 190 190)"/>
+      <circle cx="190" cy="190" r="164" fill="none" stroke="#6B4520" stroke-width="26" stroke-linecap="round" stroke-dasharray="171.7 1030.4" stroke-dashoffset="-600.9" transform="rotate(135 190 190)"/>
+      <circle cx="190" cy="190" r="164" fill="none" stroke="#FF6A00" stroke-width="26" stroke-linecap="round" stroke-dasharray="230.1 1030.4" transform="rotate(135 190 190)"/>
+      <circle cx="190" cy="190" r="145" fill="none" stroke="rgba(235,235,245,0.28)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="683.3 911.1" transform="rotate(135 190 190)"/>
+      <circle cx="190" cy="190" r="131" fill="none" stroke="#232327" stroke-width="5.2" stroke-linecap="round" stroke-dasharray="617.3 823.1" transform="rotate(135 190 190)"/>
+      <circle cx="190" cy="190" r="131" fill="none" stroke="rgba(235,235,245,0.32)" stroke-width="5.2" stroke-linecap="round" stroke-dasharray="481.5 823.1" transform="rotate(135 190 190)"/>
+      <line x1="63.4" y1="107.8" x2="41.6" y2="93.6" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round"/>
+      <circle cx="59.2" cy="59.2" r="1.3" fill="rgba(235,235,245,0.5)"/>
+      <circle cx="320.8" cy="59.2" r="1.3" fill="rgba(235,235,245,0.5)"/>
+      <circle cx="190" cy="5" r="1.3" fill="rgba(235,235,245,0.5)"/>
+    </svg>
+
+    <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 6px; padding-bottom: 4px;">
+        <div style="width: 8px; height: 8px; border-radius: 4px; background: #30D158;"></div>
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 1.3px; color: #30D158;">READY</div>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 2px;">
+        <div style="font-size: 66px; font-weight: 600; letter-spacing: -2.3px; font-variant-numeric: tabular-nums;">193.4</div>
+        <div style="font-size: 21px; font-weight: 600; color: rgba(235,235,245,0.6);">&#176;C</div>
+      </div>
+    </div>
+
+    <div style="position: absolute; left: 46px; bottom: 30px; font-size: 12px; color: rgba(235,235,245,0.6); font-variant-numeric: tabular-nums;">180&#176;</div>
+    <div style="position: absolute; right: 46px; bottom: 30px; font-size: 12px; color: rgba(235,235,245,0.6); font-variant-numeric: tabular-nums;">225&#176;</div>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: center; gap: 26px; padding-top: 22px;">
+    <div style="width: 52px; height: 52px; border-radius: 26px; background: #2A2A2F; display: flex; align-items: center; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"><path d="M4 10h12"/></svg>
+    </div>
+    <div style="width: 120px; display: flex; flex-direction: column; align-items: center; gap: 1px;">
+      <div style="font-size: 25px; font-weight: 600; letter-spacing: -0.5px; font-variant-numeric: tabular-nums;">193&#176;C</div>
+      <div style="font-size: 12px; color: rgba(235,235,245,0.6);">Target</div>
+    </div>
+    <div style="width: 52px; height: 52px; border-radius: 26px; background: #2A2A2F; display: flex; align-items: center; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"><path d="M4 10h12M10 4v12"/></svg>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 9px; padding: 24px 16px 0;">
+    <div style="flex-grow: 1; height: 40px; border-radius: 20px; background: #2A2A2F; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums;">180&#176;</div>
+    <div style="flex-grow: 1; height: 40px; border-radius: 20px; background: rgba(255,106,0,0.15); color: #FF6A00; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">193&#176;</div>
+    <div style="flex-grow: 1; height: 40px; border-radius: 20px; background: #2A2A2F; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums;">204&#176;</div>
+    <div style="flex-grow: 1; height: 40px; border-radius: 20px; background: #2A2A2F; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums;">215&#176;</div>
+  </div>
+
+  <div style="flex-grow: 1;"></div>
+
+  <div style="padding-bottom: 12px;">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: 1.2px; color: rgba(235,235,245,0.6); padding: 0 20px 10px;">HEATING MODE</div>
+    <div style="display: flex; gap: 8px; padding: 0 16px;">
+      <div style="flex-grow: 1; height: 72px; border-radius: 18px; background: #FF6A00; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="3.6"/><path d="M12 3v2.4M12 18.6V21M3 12h2.4M18.6 12H21M5.6 5.6l1.7 1.7M16.7 16.7l1.7 1.7M18.4 5.6l-1.7 1.7M7.3 16.7l-1.7 1.7"/></svg>
+        <div style="font-size: 10.5px; font-weight: 600;">Standard</div>
+      </div>
+      <div style="flex-grow: 1; height: 72px; border-radius: 18px; background: #2A2A2F; color: rgba(235,235,245,0.6); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c.5 3.8-1.9 5.5-3.6 7.4A8.3 8.3 0 0 0 6 16a6 6 0 0 0 12 .4c0-2.7-1.2-4.4-2.3-5.9-.4 1-1.2 1.7-2 2 .7-3.1-.3-7-1.7-9.5z"/></svg>
+        <div style="font-size: 10.5px; font-weight: 600;">Boost</div>
+      </div>
+      <div style="flex-grow: 1; height: 72px; border-radius: 18px; background: #2A2A2F; color: rgba(235,235,245,0.6); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5.5-13 16-13 0 9-5.5 13-13 13H4z"/></svg>
+        <div style="font-size: 10.5px; font-weight: 600;">Efficiency</div>
+      </div>
+      <div style="flex-grow: 1; height: 72px; border-radius: 18px; background: #2A2A2F; color: rgba(235,235,245,0.6); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
+        <div style="font-size: 10.5px; font-weight: 600;">Stealth</div>
+      </div>
+      <div style="flex-grow: 1; height: 72px; border-radius: 18px; background: #2A2A2F; color: rgba(235,235,245,0.6); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l1.7 4.3 4.3 1.7-4.3 1.7L12 15.5l-1.7-4.3L6 9.5l4.3-1.7z"/><path d="M18.2 16l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>
+        <div style="font-size: 10.5px; font-weight: 600;">Flavour</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height: 34px;"></div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: Manrope, "Helvetica Neue", system-ui, sans-serif; }
+    a { color: #C2522A; } a:hover { color: #9C3E1D; }
+    .tag { font-size: 10px; font-weight: 700; letter-spacing: 0.17em; text-transform: uppercase; color: rgba(40,34,26,0.45); }
+  </style>
+</helmet>
+
+<!-- The app shows you the thing, and you touch the thing. The vessel is
+     deliberately generic - a plain capsule, no likeness of any product - and
+     it fills with heat from the bottom as the oven climbs. Drag it to set. -->
+<div style="width: 390px; height: 844px; background: radial-gradient(120% 70% at 50% 34%, #F0EDE6 0%, #E4E0D7 58%, #D8D3C8 100%); color: #282219; display: flex; flex-direction: column; align-items: center;">
+
+  <div style="height: 44px;"></div>
+
+  <div style="width: 390px; display: flex; align-items: center; height: 30px; padding: 0 24px; box-sizing: border-box;">
+    <div class="tag" style="color: #282219;">pax 3</div>
+    <div style="flex-grow: 1;"></div>
+    <div class="tag">78%</div>
+  </div>
+
+  <div style="height: 20px;"></div>
+
+  <!-- the vessel -->
+  <div style="position: relative; width: 118px; height: 360px;">
+    <div style="position: absolute; left: 0; top: 0; width: 118px; height: 360px; box-sizing: border-box; border-radius: 22px; background: linear-gradient(100deg, #FBF8F2 0%, #EFEBE2 42%, #DCD6C9 100%); border: 1px solid rgba(40,34,26,0.16); box-shadow: 0 26px 42px rgba(40,34,26,0.16), 0 3px 8px rgba(40,34,26,0.10);"></div>
+
+    <!-- the oven, seen through the body -->
+    <div style="position: absolute; left: 17px; top: 24px; width: 84px; height: 312px; border-radius: 9px; overflow: hidden; background: rgba(40,34,26,0.07); box-shadow: inset 0 1px 3px rgba(40,34,26,0.16);">
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 83.8%; background: linear-gradient(to top, #A8421F 0%, #C2522A 48%, #E4915A 100%);"></div>
+      <div style="position: absolute; left: 0; right: 0; bottom: 83.8%; height: 1.5px; background: #F6CBA4;"></div>
+    </div>
+
+    <!-- a seam, so it reads as an object rather than a shape -->
+    <div style="position: absolute; left: 1px; right: 1px; top: 120px; height: 1px; background: rgba(40,34,26,0.10);"></div>
+
+    <!-- target index, machined into the left edge -->
+    <div style="position: absolute; left: -14px; bottom: 24px; height: 312px; width: 10px;">
+      <div style="position: absolute; left: 0; bottom: 83.59%; width: 10px; height: 2px; background: #282219;"></div>
+      <div class="tag" style="position: absolute; left: -34px; bottom: 83.59%; margin-bottom: -6px; font-size: 9px; color: #282219;">193</div>
+    </div>
+
+    <!-- battery, integrated into the body's right flank -->
+    <div style="position: absolute; right: 6px; top: 40px; width: 3px; height: 280px; border-radius: 2px; background: rgba(40,34,26,0.10);">
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 78%; border-radius: 2px; background: rgba(40,34,26,0.34);"></div>
+    </div>
+  </div>
+
+  <div style="height: 24px;"></div>
+
+  <!-- the reading, subordinate to the object -->
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+    <div class="tag" style="color: #282219;">ready</div>
+    <div style="display: flex; align-items: baseline; gap: 4px;">
+      <div style="font-size: 54px; font-weight: 600; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums;">193.4</div>
+      <div style="font-size: 17px; font-weight: 600; color: rgba(40,34,26,0.45);">&#176;C</div>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1;"></div>
+
+  <!-- controls, kept as furniture -->
+  <div style="width: 390px; padding: 0 24px; box-sizing: border-box; display: flex; align-items: center; gap: 16px;">
+    <div style="width: 48px; height: 48px; border-radius: 24px; background: rgba(40,34,26,0.07); display: flex; align-items: center; justify-content: center;">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#282219" stroke-width="1.8" stroke-linecap="round"><path d="M3 8h10"/></svg>
+    </div>
+    <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+      <div class="tag">target</div>
+      <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums;">193 &#176;C</div>
+    </div>
+    <div style="width: 48px; height: 48px; border-radius: 24px; background: rgba(40,34,26,0.07); display: flex; align-items: center; justify-content: center;">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#282219" stroke-width="1.8" stroke-linecap="round"><path d="M3 8h10M8 3v10"/></svg>
+    </div>
+  </div>
+
+  <div style="width: 390px; padding: 14px 24px 0; box-sizing: border-box; display: flex; justify-content: center; gap: 22px; font-size: 14px; font-weight: 500;">
+    <div style="color: rgba(40,34,26,0.45);">180&#176;</div>
+    <div style="color: #C2522A; font-weight: 700;">193&#176;</div>
+    <div style="color: rgba(40,34,26,0.45);">204&#176;</div>
+    <div style="color: rgba(40,34,26,0.45);">215&#176;</div>
+  </div>
+
+  <div style="height: 18px;"></div>
+
+  <!-- mode: swipe the object sideways -->
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 9px; padding-bottom: 8px;">
+    <div style="display: flex; align-items: center; gap: 14px; height: 30px;">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="rgba(40,34,26,0.4)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+      <div style="font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">standard</div>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="rgba(40,34,26,0.4)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
+    </div>
+    <div style="display: flex; gap: 7px;">
+      <div style="width: 7px; height: 7px; border-radius: 4px; background: #282219;"></div>
+      <div style="width: 7px; height: 7px; border-radius: 4px; background: rgba(40,34,26,0.20);"></div>
+      <div style="width: 7px; height: 7px; border-radius: 4px; background: rgba(40,34,26,0.20);"></div>
+      <div style="width: 7px; height: 7px; border-radius: 4px; background: rgba(40,34,26,0.20);"></div>
+      <div style="width: 7px; height: 7px; border-radius: 4px; background: rgba(40,34,26,0.20);"></div>
+    </div>
+  </div>
+
+  <div style="height: 34px;"></div>
+</div>
+</x-dc>
+</body>
+</html>

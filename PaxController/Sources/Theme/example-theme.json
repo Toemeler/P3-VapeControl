@@ -1,0 +1,70 @@
+{
+  "id": "midnight",
+  "name": "Midnight",
+  "author": "you",
+  "summary": "A theme file only has to say what it changes. Everything left out falls back to the shipped values.",
+
+  "shell": "stacked",
+  "hero": "linearScale",
+  "target": "stepperPlate",
+  "presets": "plates",
+  "modes": "switchBar",
+
+  "typography": {
+    "design": "rounded",
+    "labelCase": "lower",
+    "labelTracking": 1.0,
+    "labelSize": 11,
+    "heroWeight": "medium",
+    "heroTracking": -2.4,
+    "tabular": true
+  },
+
+  "metrics": {
+    "gutter": 22,
+    "radius": 14,
+    "plateRadius": 14,
+    "heroSize": 78,
+    "presetHeight": 46,
+    "modeHeight": 52,
+    "scaleStroke": 8,
+    "sectionGap": 22
+  },
+
+  "dark": {
+    "canvas": "#0E1116",
+    "plate": "#171C24",
+    "track": "#FFFFFF1A",
+    "ink": "#E8EDF5",
+    "muted": "#8A94A6",
+    "hairline": "#FFFFFF1F",
+    "accent": "#5AC8FA",
+    "onAccent": "#0E1116",
+    "ready": "#5AC8FA",
+    "heating": "#FFB340",
+    "cooling": "#8A94A6",
+    "charging": "#4ED07A",
+    "offline": "#5A6273",
+    "low": "#FF6B5E"
+  },
+
+  "light": {
+    "canvas": "#F2F5FA",
+    "plate": "#FFFFFF",
+    "track": "#0E11161A",
+    "ink": "#0E1116",
+    "muted": "#5A6273",
+    "hairline": "#0E11162E",
+    "accent": "#0A84C8",
+    "onAccent": "#FFFFFF",
+    "ready": "#0A84C8",
+    "heating": "#C97A00",
+    "cooling": "#5A6273",
+    "charging": "#1E8F4E",
+    "offline": "#8A94A6",
+    "low": "#D6392B"
+  },
+
+  "accentFollowsLed": false,
+  "formatVersion": 1
+}
