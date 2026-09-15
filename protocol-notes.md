@@ -183,7 +183,13 @@ The device will respond with individual notification packets for each requested 
 | HeatingState (0x20) | ✅ |
 | LockStatus (0x06) | ✅ |
 | CurrentTargetTemp (0x1F) | ✅ |
-| DisplayName (0x0A) | ✅ |
+| DisplayName (0x0A) read | ✅ |
+| DisplayName (0x0A) write — rename | ✅ |
+| ColorTheme (0x14) write, one colour or per state | ✅ |
+| Brightness (0x15) read + write | ✅ |
+| HapticMode (0x17) read + amplitude write | ✅ |
+| SupportedAttributes (0x18) decode | ✅ |
+| Attribute probe (read-only, see below) | ✅ |
 | Firmware / model from Device Info | ✅ |
 
 ---
@@ -254,19 +260,56 @@ Full RGB is supported; this is not a palette of preset themes.
 > seconds later, while a session that never wrote `ColorTheme` stayed up for
 > over a minute. Get the count right.
 
+## Separating payload from padding
+
+The plaintext past an attribute's real payload is **uninitialised buffer**, not
+zero padding — confirmed across seven attributes on this device. A single read
+therefore cannot say where the payload ends, which is why undecoded attributes
+are logged one byte at a time rather than eight.
+
+Reading the same attribute three times settles it. The noise differs on every
+read; the payload does not. Whatever the reads agree on is the payload, and its
+length comes out with it:
+
+```
+payload = longest common prefix of three reads of the same attribute
+```
+
+The app implements this as *Settings → Diagnostics → Probe unknown attributes*.
+It reads 0x09, 0x0F, 0x11, 0x19, 0x1A, 0x1B, 0x1E (advertised but undecoded) and
+0x04, 0x05, 0x12, 0x24, 0x29, 0x2A (usage, logs, session control, pod — not
+advertised by this firmware, and silence is itself an answer), three times each,
+then logs the agreed bytes with plausible readings beside them: the value as a
+byte, as little-endian 16-bit words (and what those would be as °C × 10, the
+encoding every temperature on this bus uses), and as a little-endian 32-bit
+number — for Time (0x09), also what that would be as a Unix timestamp.
+
+Nothing is written. Every packet it sends is a StatusUpdate request, which is
+the same read the app already does every three seconds.
+
 ## Open Uncertainties
 
-1. **Maximum packet length**: All tested packets are 16 bytes plaintext (32 bytes encrypted). Whether longer payloads are supported is not confirmed.
+1. **Maximum packet length**: ColorTheme proves plaintext longer than one block
+   works in both directions — 34 bytes out, 64-byte reads in — so the earlier
+   "all packets are 16 bytes" note was an artefact of only ever having looked at
+   short attributes.
 
 2. **ChargeStatus (0x07)**: The exact byte encoding is not publicly documented. The app ignores this value.
 
-3. **HeaterRanges (0x11)**: Format unknown. Possibly encodes min/max allowed temperature bounds.
+3. **HeaterRanges (0x11)**: Format unknown. Possibly encodes min/max allowed
+   temperature bounds — if so, the probe will report an even byte count whose
+   16-bit words land near 1800 and 2150 (180.0 °C and 215.0 °C), and this is
+   the attribute that would say whether that ceiling can be raised.
 
 4. **DynamicMode (0x13)**: Known PAX 3 values are Standard (`0x00`), Boost (`0x01`),
    Efficiency (`0x02`), Stealth (`0x03`), and Flavor (`0x04`). Their exact heating
    algorithms remain device-controlled and are not fully documented.
 
-5. **SupportedAttributes (0x18)**: Should be queried first to know which attributes a device supports, but has been omitted from the initial implementation for simplicity.
+5. **HapticMode (0x17)**: Byte 0 is amplitude on the same 0…128 scale as
+   Brightness (this PAX reports `0x2F`). The app writes that one byte, which is
+   what the official app sends; the bytes after it have never been decoded and
+   are deliberately **not** echoed back, since a read cannot tell them apart
+   from the uninitialised buffer behind them.
 
 6. **Pax Era / Era Pro compatibility**: Most message types are documented as "All devices" but this app has only been designed around PAX 3. Era-specific messages (PodInserted, etc.) are parsed but not displayed.
 

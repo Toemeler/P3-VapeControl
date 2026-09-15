@@ -392,8 +392,22 @@ struct DeviceSheet: View {
             NavigationLink("Diagnostics") {
                 DebugConsoleView().environmentObject(viewModel)
             }
+            if viewModel.connectionState.isConnected {
+                Button {
+                    viewModel.probeUndecodedAttributes()
+                } label: {
+                    HStack {
+                        Text("Probe unknown attributes")
+                        if viewModel.probeInProgress {
+                            Spacer()
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+                }
+                .disabled(viewModel.probeInProgress)
+            }
         } footer: {
-            Text("Connection state, PAX service characteristics and the raw packet log.")
+            Text("Connection state, PAX service characteristics and the raw packet log. The probe reads the attributes this firmware answers but nobody has decoded, three times each, and writes what the reads agree on to the log — it only reads, never writes.")
         }
     }
 

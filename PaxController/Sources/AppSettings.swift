@@ -60,7 +60,11 @@ final class AppSettings: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        ledColorHex         = defaults.string(forKey: Key.ledColor) ?? LedColor.orange.hex
+        // Held locally as well: Swift forbids reading a property back through
+        // `self` until every stored property has a value, and the per-mode
+        // colours below fall back to this one.
+        let hex = defaults.string(forKey: Key.ledColor) ?? LedColor.orange.hex
+        ledColorHex         = hex
         pushColorToDevice   = defaults.object(forKey: Key.pushColor) as? Bool ?? true
         autoConnectEnabled  = defaults.object(forKey: Key.autoConnect) as? Bool ?? true
         liveActivityEnabled = defaults.object(forKey: Key.liveActivity) as? Bool ?? true
@@ -73,7 +77,7 @@ final class AppSettings: ObservableObject {
         let valid = stored.count == Self.modeSlotCount
             && stored.allSatisfy { LedColor.fromHex($0) != nil }
         modeLedHexes = valid ? stored
-            : Array(repeating: ledColorHex, count: Self.modeSlotCount)
+            : Array(repeating: hex, count: Self.modeSlotCount)
     }
 
     /// Four modes, two colours each.

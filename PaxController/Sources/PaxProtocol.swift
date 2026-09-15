@@ -277,7 +277,7 @@ struct PaxPacket {
             throw PaxError.decryptionFailed("Decrypted to empty plaintext")
         }
         guard let type = PaxMessageType(rawValue: plaintext[0]) else {
-            throw PaxError.unknownMessageType(plaintext[0])
+            throw PaxError.unknownMessageType(plaintext[0], plaintext: plaintext)
         }
         let packet = PaxPacket(type: type, payload: Data(plaintext.dropFirst()))
         return (packet, plaintext)
@@ -288,9 +288,16 @@ struct PaxPacket {
 
 extension PaxPacket {
     static func statusRequest(attributes: [PaxMessageType]) -> PaxPacket {
+        statusRequest(rawAttributes: attributes.map(\.rawValue))
+    }
+
+    /// The same request by attribute number, so an attribute this app has no
+    /// name for — 0x1A, which is not named even in the official app — can
+    /// still be asked for.
+    static func statusRequest(rawAttributes: [UInt8]) -> PaxPacket {
         var bitfield: UInt64 = 0
-        for attr in attributes {
-            let bit = UInt64(attr.rawValue)
+        for attr in rawAttributes {
+            let bit = UInt64(attr)
             guard bit < 64 else { continue }
             bitfield |= (1 << bit)
         }
@@ -388,7 +395,9 @@ enum PaxError: Error, LocalizedError {
     case keyDerivationFailed(String)
     case encryptionFailed(String)
     case decryptionFailed(String)
-    case unknownMessageType(UInt8)
+    /// Carries the plaintext as well as the type byte: an attribute this app
+    /// has no name for is exactly the one worth looking at.
+    case unknownMessageType(UInt8, plaintext: Data)
     case notConnected
     case missingCharacteristic(String)
 
@@ -397,7 +406,7 @@ enum PaxError: Error, LocalizedError {
         case .keyDerivationFailed(let s):   return "Key derivation failed: \(s)"
         case .encryptionFailed(let s):      return "Encryption failed: \(s)"
         case .decryptionFailed(let s):      return "Decryption failed: \(s)"
-        case .unknownMessageType(let t):    return "Unknown message type: 0x\(String(t, radix: 16))"
+        case .unknownMessageType(let t, _): return "Unknown message type: 0x\(String(t, radix: 16))"
         case .notConnected:                 return "Not connected to device"
         case .missingCharacteristic(let s): return "Missing characteristic: \(s)"
         }

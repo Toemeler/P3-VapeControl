@@ -105,6 +105,8 @@ final class PaxDeviceViewModel: ObservableObject {
 
     // MARK: Debug log
     @Published var debugLog: [DebugEntry] = []
+    /// True while `probeUndecodedAttributes` is collecting samples.
+    @Published private(set) var probeInProgress = false
 
     // MARK: Remembered device (auto-connect)
     @Published private(set) var rememberedDeviceName: String?
@@ -142,6 +144,9 @@ final class PaxDeviceViewModel: ObservableObject {
     private var pendingHapticWrite: UInt8?
     /// The name we are waiting to see reported back.
     private var pendingNameWrite: String?
+    /// Raw payloads collected during an attribute probe, keyed by attribute.
+    private var probeSamples: [UInt8: [Data]] = [:]
+    private var probeTask: Task<Void, Never>?
     /// Deadline for the capability query, so a silent device still gets a colour.
     private var capabilityTimeout: Task<Void, Never>?
     /// The device never answered the capability query, so any write is a guess.
@@ -578,6 +583,120 @@ final class PaxDeviceViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Attribute probe
+
+    /// Reads the attributes nobody has decoded, several times each, and reports
+    /// what the reads agree on.
+    ///
+    /// The plaintext past an attribute's real payload is uninitialised buffer
+    /// that differs on every read, so a single sample cannot say where the
+    /// payload ends — which is why those attributes are logged one byte at a
+    /// time today. Three reads of the same attribute differ only in that noise,
+    /// so the bytes they share are the payload. Nothing is written to the
+    /// device: every one of these is a read.
+    func probeUndecodedAttributes() {
+        guard connectionState.isConnected, !probeInProgress else { return }
+        probeInProgress = true
+        probeSamples = [:]
+        log("Probing \(Self.probeAttributeIDs.count) attributes — reading each three times so the payload separates from the padding",
+            level: .info)
+        probeTask?.cancel()
+        probeTask = Task { [weak self] in
+            for _ in 0..<3 {
+                guard let self, !Task.isCancelled else { return }
+                self.enqueue {
+                    try self.sendPacket(PaxPacket.statusRequest(rawAttributes: Self.probeAttributeIDs))
+                }
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+            self?.finishProbe()
+        }
+    }
+
+    /// Everything this firmware answers but the app cannot read, plus the
+    /// log and pod attributes it does not advertise — asking costs nothing and
+    /// silence is itself an answer.
+    static let probeAttributeIDs: [UInt8] = [
+        0x09, 0x0F, 0x11, 0x19, 0x1A, 0x1B, 0x1E,   // advertised, undecoded
+        0x04, 0x05, 0x12, 0x24, 0x29, 0x2A,         // usage, logs, session, pod
+    ]
+
+    private func recordProbeSample(type: UInt8, payload: Data) {
+        guard Self.probeAttributeIDs.contains(type) else { return }
+        probeSamples[type, default: []].append(payload)
+    }
+
+    private func finishProbe() {
+        probeInProgress = false
+        probeTask = nil
+        let answered = probeSamples.keys.sorted()
+        guard !answered.isEmpty else {
+            log("Probe: the device answered none of them", level: .warn)
+            return
+        }
+        let silent = Self.probeAttributeIDs.filter { probeSamples[$0] == nil }
+        for id in answered {
+            let samples = probeSamples[id] ?? []
+            let name = PaxMessageType(rawValue: id).map { " \($0)" } ?? " (unnamed)"
+            let stable = Self.commonPrefix(of: samples)
+            let label = String(format: "0x%02X", id) + name
+            if stable.isEmpty {
+                log("Probe \(label): \(samples.count) reads agreed on nothing — the payload may be empty",
+                    level: .rx)
+            } else {
+                log("Probe \(label): \(stable.count)-byte payload \(stable.hexString)\(Self.interpretation(of: stable, id: id)) (\(samples.count) reads agreed)",
+                    level: .info)
+            }
+        }
+        if !silent.isEmpty {
+            let list = silent.map { String(format: "0x%02X", $0) }.joined(separator: " ")
+            log("Probe: no answer for \(list) — this firmware does not implement them", level: .info)
+        }
+    }
+
+    /// The longest prefix every sample shares. With three reads of a stable
+    /// value, that is the payload and nothing else.
+    private static func commonPrefix(of samples: [Data]) -> Data {
+        guard var shortest = samples.first else { return Data() }
+        for sample in samples.dropFirst() {
+            var length = 0
+            while length < min(shortest.count, sample.count),
+                  shortest[shortest.startIndex + length] == sample[sample.startIndex + length] {
+                length += 1
+            }
+            shortest = Data(shortest.prefix(length))
+        }
+        return shortest
+    }
+
+    /// Plausible readings of a payload whose meaning is still open, so the log
+    /// carries the numbers rather than leaving them to be worked out by hand.
+    /// These are suggestions, not decodings.
+    private static func interpretation(of payload: Data, id: UInt8) -> String {
+        var notes: [String] = []
+        if payload.count == 1 {
+            notes.append("\(payload[0]) as a byte")
+        }
+        if payload.count >= 2, payload.count % 2 == 0 {
+            let words = stride(from: 0, to: payload.count, by: 2).map { i -> String in
+                let value = UInt16(payload[payload.startIndex + i])
+                    | (UInt16(payload[payload.startIndex + i + 1]) << 8)
+                // Temperatures ride the wire as °C × 10 everywhere else.
+                return String(format: "%d (%.1f°C?)", value, Double(value) / 10)
+            }
+            notes.append("LE 16-bit: " + words.joined(separator: ", "))
+        }
+        if payload.count == 4 {
+            let epoch = UInt32(payload[payload.startIndex])
+                | (UInt32(payload[payload.startIndex + 1]) << 8)
+                | (UInt32(payload[payload.startIndex + 2]) << 16)
+                | (UInt32(payload[payload.startIndex + 3]) << 24)
+            let date = Date(timeIntervalSince1970: TimeInterval(epoch))
+            notes.append("LE 32-bit: \(epoch)" + (id == 0x09 ? " (\(date) as a Unix time)" : ""))
+        }
+        return notes.isEmpty ? "" : " — " + notes.joined(separator: "; ")
+    }
+
     // MARK: - Live Activity
 
     /// Headline shown on the Lock Screen card and in the in-app banner.
@@ -755,12 +874,18 @@ final class PaxDeviceViewModel: ObservableObject {
             let (packet, plaintext) = try PaxPacket.decode(data: chunk, key: key)
             let typeHex = String(packet.type.rawValue, radix: 16, uppercase: true)
             log("RX 0x\(typeHex) [\(packet.type)] plain=\(plaintext.hexString)", level: .rx)
+            if probeInProgress { recordProbeSample(type: packet.type.rawValue, payload: packet.payload) }
             applyPacket(packet)
         } catch PaxError.decryptionFailed(let msg) {
             log("RX decrypt failed: \(msg) raw=\(chunk.hexString)", level: .error)
-        } catch PaxError.unknownMessageType(let t) {
+        } catch PaxError.unknownMessageType(let t, let plaintext) {
             let tHex = String(t, radix: 16, uppercase: true)
-            log("RX 0x\(tHex) unknown type (ignored)", level: .rx)
+            if probeInProgress {
+                recordProbeSample(type: t, payload: Data(plaintext.dropFirst()))
+                log("RX 0x\(tHex) unnamed — probe sample \(plaintext.hexString)", level: .rx)
+            } else {
+                log("RX 0x\(tHex) unknown type (ignored)", level: .rx)
+            }
         } catch {
             log("RX error: \(error.localizedDescription)", level: .error)
         }
@@ -1112,6 +1237,10 @@ final class PaxDeviceViewModel: ObservableObject {
         hapticDebounce = nil
         pendingHapticWrite = nil
         pendingNameWrite = nil
+        probeTask?.cancel()
+        probeTask = nil
+        probeInProgress = false
+        probeSamples.removeAll()
         pendingLedWrite = nil
         pushColorOnceDiscovered = false
         capabilitiesKnown = false
