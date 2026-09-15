@@ -85,6 +85,26 @@ struct PaxActivityAttributes: ActivityAttributes {
             return Swift.min(1, Swift.max(0, (actual - PaxDialRange.coldFloor) / span))
         }
 
+        /// The one number the card leads with, which is the one the state is
+        /// about: the temperature while the oven is doing something, the charge
+        /// while it is on the charger, and nothing worth printing when the PAX
+        /// is not there.
+        ///
+        /// Here rather than beside the views because it is a fact about the
+        /// state, not a presentation choice — and because the widget extension
+        /// is not the only thing that needs to agree about it.
+        var leadNumber: String {
+            switch phase {
+            case .waiting:  return "--"
+            case .charging: return batteryText
+            default:        return actualTempText
+            }
+        }
+
+        /// The compact Dynamic Island slot is a few characters wide. Same
+        /// choice, and for now the same answer.
+        var compactNumber: String { leadNumber }
+
         var isOvenActive: Bool {
             switch phase {
             case .heating, .ready, .drawing, .cooling: return true

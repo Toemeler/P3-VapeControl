@@ -223,24 +223,6 @@ private extension PaxActivityAttributes.ContentState {
         }
     }
 
-    /// Short enough for the compact island, and still the number that matters.
-    var compactNumber: String {
-        switch phase {
-        case .waiting:  return "--"
-        case .charging: return batteryText
-        default:        return actualTempText
-        }
-    }
-
-    /// The one number the card leads with, which is the one the state is about.
-    var leadNumber: String {
-        switch phase {
-        case .waiting:  return "--"
-        case .charging: return batteryText
-        default:        return actualTempText
-        }
-    }
-
     var statusIcon: String {
         switch phase {
         case .waiting:  return "antenna.radiowaves.left.and.right"
