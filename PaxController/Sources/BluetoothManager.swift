@@ -40,6 +40,18 @@ protocol BluetoothManagerDelegate: AnyObject {
     /// iOS relaunched the app with a peripheral that is not connected. The
     /// connect has been re-issued; nothing will happen until the PAX shows up.
     func bluetoothRestoredPendingConnect(name: String)
+    #if PAX_LAB
+    /// Everything the device exposes, not only the handful this app uses.
+    func bluetoothLabFoundCharacteristic(service: CBUUID, characteristic: CBUUID,
+                                         properties: CBCharacteristicProperties)
+    /// A characteristic's value, whether or not this app knows what it means.
+    func bluetoothLabReadValue(service: CBUUID, characteristic: CBUUID, data: Data)
+    /// A descriptor — 0x2901 is a human-readable name the vendor left behind.
+    func bluetoothLabReadDescriptor(characteristic: CBUUID, descriptor: CBUUID, value: String)
+    /// The whole advertisement, which carries state the device broadcasts
+    /// without anyone having to connect to it.
+    func bluetoothLabSawAdvertisement(_ description: String)
+    #endif
 }
 
 // MARK: - BluetoothManager (pure BLE transport)
@@ -159,15 +171,26 @@ final class BluetoothManager: NSObject {
     func discoverServices() {
         guard let p = connectedPeripheral else { return }
         p.delegate = self
+        #if PAX_LAB
+        // nil: everything the device has, including whatever it uses for
+        // firmware updates, which this app has never once asked about.
+        p.discoverServices(nil)
+        #else
         p.discoverServices([PaxUUIDs.serviceUUID,
                             PaxUUIDs.deviceInfoService,
                             PaxUUIDs.genericAccessService])
+        #endif
     }
 
     // MARK: - discoverCharacteristics()
 
     func discoverCharacteristics(for service: CBService) {
         guard let p = connectedPeripheral else { return }
+        #if PAX_LAB
+        // Every characteristic of every service. The switch in the discovery
+        // callback still picks out the ones the app uses.
+        p.discoverCharacteristics(nil, for: service)
+        #else
         if service.uuid == PaxUUIDs.serviceUUID {
             p.discoverCharacteristics(
                 [PaxUUIDs.readCharUUID, PaxUUIDs.writeCharUUID, PaxUUIDs.notifyCharUUID],
@@ -180,6 +203,7 @@ final class BluetoothManager: NSObject {
         } else if service.uuid == PaxUUIDs.genericAccessService {
             p.discoverCharacteristics([PaxUUIDs.deviceNameChar], for: service)
         }
+        #endif
     }
 
     /// Writes Generic Access' Device Name, if this device allows it. Returns
@@ -294,8 +318,29 @@ extension BluetoothManager: CBCentralManagerDelegate {
             ?? "Unknown"
         let device = ScannedDevice(id: peripheral.identifier, peripheral: peripheral,
                                    name: name, rssi: RSSI.intValue)
+        #if PAX_LAB
+        let advertisement = advertisementData
+            .sorted { $0.key < $1.key }
+            .map { key, value -> String in
+                if let data = value as? Data {
+                    return "\(key) = \(data.hexString)"
+                }
+                if let list = value as? [CBUUID] {
+                    return "\(key) = \(list.map(\.uuidString).joined(separator: ", "))"
+                }
+                if let map = value as? [CBUUID: Data] {
+                    return "\(key) = " + map.map { "\($0.key.uuidString): \($0.value.hexString)" }
+                        .joined(separator: ", ")
+                }
+                return "\(key) = \(value)"
+            }
+            .joined(separator: "\n")
+        #endif
         Task { @MainActor in
             delegate?.bluetoothDidDiscover(device: device)
+            #if PAX_LAB
+            delegate?.bluetoothLabSawAdvertisement(advertisement)
+            #endif
         }
     }
 
@@ -367,6 +412,21 @@ extension BluetoothManager: CBPeripheralDelegate {
             for info in charInfo {
                 delegate?.bluetoothDiscoveredCharacteristic(info.uuid, properties: info.props)
                 guard let char = liveChars.first(where: { $0.uuid == info.uuid }) else { continue }
+                #if PAX_LAB
+                delegate?.bluetoothLabFoundCharacteristic(service: svcUUID,
+                                                          characteristic: info.uuid,
+                                                          properties: info.props)
+                // 0x2901 is a user description: a name the vendor left in the
+                // firmware for whoever came looking.
+                p.discoverDescriptors(for: char)
+                if info.props.contains(.read) { p.readValue(for: char) }
+                // Subscribing is how a stream announces itself; the known
+                // notify characteristic is handled by the switch below.
+                if info.uuid != PaxUUIDs.notifyCharUUID,
+                   info.props.contains(.notify) || info.props.contains(.indicate) {
+                    p.setNotifyValue(true, for: char)
+                }
+                #endif
                 switch info.uuid {
                 case PaxUUIDs.readCharUUID:
                     readChar = char
@@ -396,12 +456,17 @@ extension BluetoothManager: CBPeripheralDelegate {
         let errMsg = error?.localizedDescription
         let uuid   = characteristic.uuid
         let value  = characteristic.value
+        let serviceUUID = characteristic.service?.uuid
         Task { @MainActor in
             if let e = errMsg {
                 delegate?.bluetoothDidError(e, characteristic: uuid)
                 return
             }
             guard let data = value else { return }
+            #if PAX_LAB
+            delegate?.bluetoothLabReadValue(service: serviceUUID ?? CBUUID(string: "0000"),
+                                            characteristic: uuid, data: data)
+            #endif
             if uuid == PaxUUIDs.notifyCharUUID {
                 // The notify value is just a "data ready" indicator (commonly 1 byte
                 // that mirrors the first byte of the queued read). Never parse it —
@@ -443,6 +508,41 @@ extension BluetoothManager: CBPeripheralDelegate {
     }
 
     nonisolated func peripheralDidUpdateName(_ peripheral: CBPeripheral) {}
+
+    #if PAX_LAB
+    nonisolated func peripheral(_ peripheral: CBPeripheral,
+                                didDiscoverDescriptorsFor characteristic: CBCharacteristic,
+                                error: Error?) {
+        guard error == nil else { return }
+        let descriptors = characteristic.descriptors ?? []
+        Task { @MainActor in
+            guard let p = connectedPeripheral else { return }
+            for descriptor in descriptors { p.readValue(for: descriptor) }
+        }
+    }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral,
+                                didUpdateValueFor descriptor: CBDescriptor,
+                                error: Error?) {
+        guard error == nil else { return }
+        let charUUID = descriptor.characteristic?.uuid
+        let uuid = descriptor.uuid
+        let text: String
+        switch descriptor.value {
+        case let string as String:   text = string
+        case let number as NSNumber: text = number.stringValue
+        case let data as Data:       text = data.hexString
+        case let value?:             text = "\(value)"
+        case nil:                    text = "—"
+        }
+        Task { @MainActor in
+            guard let charUUID else { return }
+            delegate?.bluetoothLabReadDescriptor(characteristic: charUUID,
+                                                 descriptor: uuid,
+                                                 value: text)
+        }
+    }
+    #endif
 }
 
 // MARK: - Helpers

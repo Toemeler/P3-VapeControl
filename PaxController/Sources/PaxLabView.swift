@@ -22,6 +22,7 @@ struct PaxLabView: View {
     var body: some View {
         List {
             safetySection
+            deviceSection
             sweepSection
             attributesSection
             snapshotSection
@@ -73,6 +74,32 @@ struct PaxLabView: View {
     }
 
     // MARK: - What answered
+
+    @ViewBuilder
+    private var deviceSection: some View {
+        if !lab.gatt.isEmpty || lab.advertisement != nil {
+            Section {
+                if let advertisement = lab.advertisement {
+                    DisclosureGroup("Advertisement") {
+                        Text(advertisement)
+                            .font(.system(.caption2, design: .monospaced))
+                    }
+                }
+                if !lab.gatt.isEmpty {
+                    DisclosureGroup("Services and characteristics (\(lab.gatt.count))") {
+                        ForEach(lab.gattLines, id: \.self) { line in
+                            Text(line)
+                                .font(.system(.caption2, design: .monospaced))
+                        }
+                    }
+                }
+            } header: {
+                Text("The whole device")
+            } footer: {
+                Text("Every service the PAX exposes, every characteristic in them with what it allows, the descriptors behind those — 0x2901 is a name the vendor left in the firmware — and whatever it broadcasts in its advertisement. Gathered on connect, without being asked.")
+            }
+        }
+    }
 
     @ViewBuilder
     private var attributesSection: some View {

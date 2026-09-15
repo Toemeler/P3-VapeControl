@@ -66,6 +66,11 @@ final class PaxLab: ObservableObject {
     /// State descriptions already captured, kept across launches so a state is
     /// swept once and then left alone.
     @Published private(set) var capturedStates: Set<String> = []
+    /// Every service, characteristic, descriptor and characteristic value the
+    /// device exposes — not only the ones this app was written to use.
+    @Published private(set) var gatt: [String: String] = [:]
+    /// The device's advertisement, which it broadcasts to anyone listening.
+    @Published private(set) var advertisement: String?
 
     private let defaults = UserDefaults.standard
     private let writesKey = "labWriteLog"
@@ -82,6 +87,21 @@ final class PaxLab: ObservableObject {
     }
 
     func hasCaptured(_ state: String) -> Bool { capturedStates.contains(state) }
+
+    // MARK: - The whole device
+
+    /// Keyed so a value that is read again replaces its line rather than
+    /// adding another.
+    func recordGatt(key: String, line: String) {
+        gatt[key] = line
+    }
+
+    func recordAdvertisement(_ description: String) {
+        guard advertisement != description else { return }
+        advertisement = description
+    }
+
+    var gattLines: [String] { gatt.keys.sorted().compactMap { gatt[$0] } }
 
     private func noteCaptured(_ state: String) {
         capturedStates.insert(state)
@@ -281,6 +301,18 @@ final class PaxLab: ObservableObject {
             let notes = PaxDeviceViewModel.interpretation(of: payload, id: attribute)
             out.append(String(format: "0x%02X %@: %d bytes %@%@",
                               attribute, name, payload.count, Self.hex(payload), notes))
+        }
+
+        if let advertisement {
+            out.append("")
+            out.append("## Advertisement")
+            out.append(advertisement)
+        }
+
+        if !gatt.isEmpty {
+            out.append("")
+            out.append("## Everything the device exposes (\(gatt.count) entries)")
+            out.append(contentsOf: gattLines)
         }
 
         let silent = answeredAttributes.isEmpty ? []

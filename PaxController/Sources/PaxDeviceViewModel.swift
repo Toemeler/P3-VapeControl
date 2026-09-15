@@ -1735,6 +1735,37 @@ extension PaxDeviceViewModel: BluetoothManagerDelegate {
 
     /// iOS relaunched the app in the background for a device that is not
     /// connected. `BluetoothManager` has already re-issued the request.
+    #if PAX_LAB
+    func bluetoothLabFoundCharacteristic(service: CBUUID, characteristic: CBUUID,
+                                         properties: CBCharacteristicProperties) {
+        let key = "1 \(service.uuidString) \(characteristic.uuidString) a"
+        PaxLab.shared.recordGatt(
+            key: key,
+            line: "\(service.uuidString) / \(characteristic.uuidString) [\(formatProperties(properties))]")
+    }
+
+    func bluetoothLabReadValue(service: CBUUID, characteristic: CBUUID, data: Data) {
+        // The PAX data characteristic carries encrypted packets that the
+        // attribute sweep already decodes; its raw ciphertext says nothing.
+        guard characteristic != PaxUUIDs.readCharUUID else { return }
+        let text = String(data: data, encoding: .utf8)
+            .flatMap { $0.allSatisfy { !$0.isNewline && $0.asciiValue ?? 0 >= 32 } ? " \"\($0)\"" : nil } ?? ""
+        PaxLab.shared.recordGatt(
+            key: "1 \(service.uuidString) \(characteristic.uuidString) b",
+            line: "    value \(data.hexString)\(text)")
+    }
+
+    func bluetoothLabReadDescriptor(characteristic: CBUUID, descriptor: CBUUID, value: String) {
+        PaxLab.shared.recordGatt(
+            key: "2 \(characteristic.uuidString) \(descriptor.uuidString)",
+            line: "    \(characteristic.uuidString) descriptor \(descriptor.uuidString) = \(value)")
+    }
+
+    func bluetoothLabSawAdvertisement(_ description: String) {
+        PaxLab.shared.recordAdvertisement(description)
+    }
+    #endif
+
     func bluetoothRestoredPendingConnect(name: String) {
         log("iOS restored the session for \(name) — reconnect re-armed", level: .ble)
         guard !connectionState.isConnected else { return }
