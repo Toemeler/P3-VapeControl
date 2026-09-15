@@ -116,14 +116,9 @@ struct DeviceSheet: View {
             Toggle("Also set the PAX's own LEDs", isOn: $settings.pushColorToDevice)
             if settings.pushColorToDevice {
                 if viewModel.connectionState.isConnected {
-                    Label(
-                        viewModel.deviceLedColorSupported
-                            ? "This PAX reports an LED attribute the app can write."
-                            : "This PAX does not expose its LEDs over Bluetooth, so only the app is themed.",
-                        systemImage: viewModel.deviceLedColorSupported ? "checkmark.circle" : "info.circle"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(viewModel.deviceLedColorSupported ? Color.secondary : Color.orange)
+                    Label(deviceLedStatus, systemImage: viewModel.deviceLedColorSupported ? "checkmark.circle" : "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(viewModel.deviceLedColorSupported ? Color.secondary : Color.orange)
                 }
                 Button("Send color to device now") {
                     viewModel.applyLedColor(settings.ledColor)
@@ -135,6 +130,18 @@ struct DeviceSheet: View {
         } footer: {
             Text("Colors the dial, chips and buttons. Setting the PAX's own LEDs depends on the device: on connect the app asks which attributes the firmware supports and what its current LED value looks like, then writes a matching payload and reads it back to check it took. Diagnostics shows the whole exchange.")
         }
+    }
+
+    /// A one-byte LED value is an index into the device's own themes, so a
+    /// custom colour can only ever pick the nearest preset slot.
+    private var deviceLedStatus: String {
+        guard viewModel.deviceLedColorSupported else {
+            return "This PAX does not expose its LEDs over Bluetooth, so only the app is themed."
+        }
+        if viewModel.ledValueByteCount == 1 {
+            return "This PAX takes a preset theme rather than a colour, so the swatches map to its themes and a custom colour uses the nearest one."
+        }
+        return "This PAX reports an LED attribute the app can write."
     }
 
     private func swatch(_ preset: LedColor) -> some View {

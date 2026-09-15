@@ -127,6 +127,12 @@ final class PaxDeviceViewModel: ObservableObject {
     /// Whether the connected device reported an LED attribute we can write.
     var deviceLedColorSupported: Bool { ledAttribute != nil }
 
+    /// How many bytes the device's LED value carries, once it has reported one.
+    /// A single byte is a theme index, so arbitrary colours cannot reach it.
+    var ledValueByteCount: Int? {
+        ledAttribute.flatMap { ledAttributeShapes[$0.rawValue]?.count }
+    }
+
     private var ledAttribute: PaxMessageType? {
         for candidate in [PaxMessageType.colorTheme, .shellColor]
         where ledAttributeShapes[candidate.rawValue] != nil || supportedAttributes.contains(candidate.rawValue) {
@@ -218,6 +224,15 @@ final class PaxDeviceViewModel: ObservableObject {
 
     func connect(to device: ScannedDevice) {
         stopScan()
+        // An auto-connect for this same device may already be pending or even
+        // just completed; issuing a second connect gives one session two
+        // discovery passes and duplicate traffic.
+        if bluetooth.connectedPeripheral?.identifier == device.id,
+           connectionState.isConnected || connectionState == .connecting
+            || connectionState == .discoveringServices || connectionState == .awaitingSerial {
+            log("Already connecting to \(device.name) — ignoring the duplicate request", level: .info)
+            return
+        }
         connectionState = .connecting
         bluetooth.connect(to: device)
         log("Connecting to \(device.name) [\(device.id)]", level: .info)
@@ -518,18 +533,16 @@ final class PaxDeviceViewModel: ObservableObject {
             log("RX [no key yet] \(data.hexString)", level: .warn)
             return
         }
-        // A single BLE read may contain multiple concatenated 32-byte packets.
-        // Split into 32-byte chunks and decrypt each separately.
-        guard data.count >= 32, data.count % 32 == 0 else {
-            log("RX ignoring \(data.count)B (not a multiple of 32) raw=\(data.hexString)", level: .warn)
+        // One read is one packet, however long: the trailing 16 bytes are the
+        // IV for the whole ciphertext. Treating a 64-byte read as two 32-byte
+        // packets decrypted the second half against the wrong IV, which is why
+        // every long read used to log as an unknown type — they were really
+        // ColorTheme reports being thrown away.
+        guard data.count >= 32, data.count % 16 == 0 else {
+            log("RX ignoring \(data.count)B (not a 16-byte multiple of at least 32) raw=\(data.hexString)", level: .warn)
             return
         }
-        var offset = 0
-        while offset + 32 <= data.count {
-            let chunk = data.subdata(in: offset..<(offset + 32))
-            decodeChunk(chunk, key: key)
-            offset += 32
-        }
+        decodeChunk(data, key: key)
     }
 
     private func decodeChunk(_ chunk: Data, key: SymmetricKey) {
@@ -623,7 +636,13 @@ final class PaxDeviceViewModel: ObservableObject {
     /// The device reporting its current LED value is the only reliable source
     /// for the payload's length and encoding, so record it verbatim.
     private func applyLedAttributeReport(_ packet: PaxPacket) {
-        let trimmed = Data(packet.payload.prefix(8))
+        // The value lives in the first 16-byte plaintext block; a longer read
+        // decrypts to that plus uninitialised firmware buffer, so look only at
+        // the first block and drop its zero padding. ColorTheme comes back as a
+        // single byte — a theme index, not a colour.
+        var meaningful = Data(packet.payload.prefix(15))
+        while meaningful.count > 1, meaningful.last == 0 { meaningful.removeLast() }
+        let trimmed = meaningful
         let previous = ledAttributeShapes[packet.type.rawValue]
         ledAttributeShapes[packet.type.rawValue] = trimmed
 
@@ -652,6 +671,10 @@ final class PaxDeviceViewModel: ObservableObject {
 
     private func checkReady() {
         guard paxServiceConfirmed, serialReady else { return }
+        // Service discovery can complete more than once for a single session —
+        // a pending auto-connect and a manual tap both landing, say — and
+        // running the ready sequence again re-sends every capability request.
+        guard connectionState != .ready else { return }
         log("PAX service confirmed + serial ready — entering ready state", level: .info)
         connectionState = .ready
         userInitiatedDisconnect = false

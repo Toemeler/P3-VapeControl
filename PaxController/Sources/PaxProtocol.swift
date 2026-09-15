@@ -166,11 +166,15 @@ struct PaxCrypto {
     }
 
     static func decrypt(packet: Data, key: SymmetricKey) throws -> (plaintext: Data, iv: Data, ciphertext: Data) {
-        guard packet.count == 32 else {
-            throw PaxError.decryptionFailed("Expected 32-byte packet, got \(packet.count)")
+        guard packet.count >= 32, packet.count % 16 == 0 else {
+            throw PaxError.decryptionFailed("Expected a 16-byte multiple of at least 32, got \(packet.count)")
         }
-        // PAX packet layout: [ciphertext 16 bytes][IV 16 bytes]
-        let ciphertext = Data(packet.prefix(16))
+        // PAX packet layout: [ciphertext: n × 16 bytes][IV: 16 bytes]. A longer
+        // read is one packet with a longer plaintext, NOT several 32-byte
+        // packets concatenated — splitting it that way decrypts the second half
+        // against the wrong IV and yields garbage. Confirmed by decoding real
+        // 64-byte reads, which carry ColorTheme and only decode cleanly this way.
+        let ciphertext = Data(packet.dropLast(16))
         let iv         = Data(packet.suffix(16))
         // Compute keystream = AES_ECB(key, iv) for logging
         let keystream  = (try? aesECBEncrypt(data: iv, key: key).prefix(16)) ?? Data()
