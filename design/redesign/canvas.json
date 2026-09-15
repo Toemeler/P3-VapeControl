@@ -1,55 +1,127 @@
 {
+  "pages": [
+    { "id": "page-1", "name": "Structural directions" },
+    { "id": "page-2", "name": "First pass · surface themes" }
+  ],
   "artboards": [
-    { "file": "Current.dc.html",    "title": "Today, at the same reading", "x": 0,    "y": 0,    "w": 390, "h": 844 },
-    { "file": "Main.dc.html",       "title": "A · Werkstatt",         "x": 490,  "y": 0,    "w": 390, "h": 844 },
-    { "file": "Editorial.dc.html",  "title": "B · Editorial",         "x": 980,  "y": 0,    "w": 390, "h": 844 },
-    { "file": "Native.dc.html",     "title": "C · Native",            "x": 0,    "y": 1240, "w": 390, "h": 844 },
-    { "file": "Thermal.dc.html",    "title": "D · Thermal",           "x": 490,  "y": 1240, "w": 390, "h": 844 },
-    { "file": "Instrument.dc.html", "title": "E · Instrument",        "x": 980,  "y": 1240, "w": 390, "h": 844 }
+    { "file": "Current.dc.html",    "title": "Today, at the same reading", "page": "page-1", "x": 0,    "y": 0,    "w": 390, "h": 844 },
+    { "file": "Main.dc.html",       "title": "F · Chart",             "page": "page-1", "x": 490,  "y": 0,    "w": 390, "h": 844 },
+    { "file": "Surface.dc.html",    "title": "G · Surface",           "page": "page-1", "x": 980,  "y": 0,    "w": 390, "h": 844 },
+    { "file": "Sentence.dc.html",   "title": "H · Sentence",          "page": "page-1", "x": 0,    "y": 1240, "w": 390, "h": 844 },
+    { "file": "Object.dc.html",     "title": "I · Object",            "page": "page-1", "x": 490,  "y": 1240, "w": 390, "h": 844 },
+    { "file": "Clock.dc.html",      "title": "J · Clock (warming up)", "page": "page-1", "x": 980, "y": 1240, "w": 390, "h": 844 },
+
+    { "file": "Werkstatt.dc.html",  "title": "A · Werkstatt",         "page": "page-2", "x": 0,    "y": 0,    "w": 390, "h": 844 },
+    { "file": "Editorial.dc.html",  "title": "B · Editorial",         "page": "page-2", "x": 490,  "y": 0,    "w": 390, "h": 844 },
+    { "file": "Native.dc.html",     "title": "C · Native",            "page": "page-2", "x": 980,  "y": 0,    "w": 390, "h": 844 },
+    { "file": "Thermal.dc.html",    "title": "D · Thermal",           "page": "page-2", "x": 0,    "y": 1240, "w": 390, "h": 844 },
+    { "file": "Instrument.dc.html", "title": "E · Instrument",        "page": "page-2", "x": 490,  "y": 1240, "w": 390, "h": 844 }
   ],
   "annotations": [
     {
       "id": "brief",
+      "page": "page-1",
       "x": 0,
-      "y": -340,
+      "y": -430,
       "w": 1370,
-      "text": "Five design languages for the control screen, not five coats of paint on the current one.\n\nAll six frames show the same moment so they can be compared honestly: connected, 78% battery, oven at 193.4 °C, target 193, Standard mode, 193° preset live. Real values, real range (180–225, marked past 215), real mode names.\n\nWhat makes today's screen read as sci-fi is not the dial — it is four things at once: saturated orange on near-black, a glowing 26 pt arc, tracked-out caps (READY) and a neon green status dot. Each direction below drops all four and replaces them with a different idea of what an instrument looks like. Pick one and we take it the rest of the way — states, light and dark, charging, the Lock Screen card."
+      "text": "SECOND PASS — changing the screen, not the paint.\n\nThe first five directions were a fair criticism: every one of them kept the same skeleton — big readout, target stepper, preset row, mode row — and only changed the surface. Five themes, one screen. They are still on the second page if you want them.\n\nThese five change the structure. The starting point is that the current screen spends every pixel on controls you touch maybe twice a session, and gives the thing you actually do — wait for it to heat, take a draw, watch it recover — a number that ticks. So each of these picks a different answer to \"what is this screen actually FOR\", and the layout follows from that:\n\nF gives the screen to the session's history. G deletes the controls and makes the display itself the control. H throws away components entirely and writes the state as a sentence. I makes the device the hero and the data the furniture. J decides the hierarchy should change with the state, and shows the warm-up, where the current screen has the least to say.\n\nSame reading as before (193.4 °C, target 193, Standard, 78%) except J, which is deliberately shown mid warm-up. Two of them propose data the app does not compute yet — flagged below."
+    },
+    {
+      "id": "note-current",
+      "page": "page-1",
+      "x": 0,
+      "y": 890,
+      "w": 390,
+      "text": "TODAY, for comparison.\n\nOne readout, one stepper, one preset row, one mode row, stacked. Every frame on the other page is this same stack in a different costume — which is exactly the objection. Note how much of the screen is spent on the four presets and five mode tiles, and how little on the fact that the oven is climbing, has just been drawn from, or has been sitting at temperature for four minutes."
+    },
+    {
+      "id": "note-f",
+      "page": "page-1",
+      "x": 490,
+      "y": 890,
+      "w": 390,
+      "text": "F · CHART — the session, not the moment\n\nThe hero is a live trace of the last four minutes on graph paper. You can see the warm-up curve, the target line the oven settled onto, and three draws as notches with the recovery after each. Underneath, what the trace adds up to. Then one control instead of two: the four presets are detents ON the target scale, so jumping to 193 and dragging to 197 are the same gesture, not two separate rows.\n\nWhy: the only direction where the main graphic tells you something the big number cannot — whether the oven is recovering from a draw, whether you drew too soon, how it behaves in each mode. Dense, precise, unmistakably an instrument and not a toy. My recommendation.\nTradeoff: needs the app to keep a session buffer and detect draws from the temperature stream — real work in PaxDeviceViewModel, and the draw detection needs tuning. Busiest of the five; the chart must stay legible at a glance, not reward study."
+    },
+    {
+      "id": "note-g",
+      "page": "page-1",
+      "x": 980,
+      "y": 890,
+      "w": 390,
+      "text": "G · SURFACE — the display is the control\n\nSeven elements on the whole screen. The field's height IS the target: drag anywhere to move it, and the number rides the boundary as its handle. The pale line just above is what the oven actually reads, chasing the line you set. Presets become four detents on the right edge you flick to. Battery is a hairline down the left edge. Mode is one word you swipe. No dial, no stepper, no chips, no tiles.\n\nWhy: the boldest and most modern-looking of the five, and the only one that is genuinely one-handed and almost eyes-free — you can set it in your pocket. Poster-like; will photograph well.\nTradeoff: nothing is labelled as a control, so it has to be taught once (a first-run hint). Fine-setting a single degree by dragging a 600 pt field is imprecise — it needs the detents to actually snap, plus a slow-drag mode. And with only 45° of range mapped to the full height, the field is mostly empty at low targets."
+    },
+    {
+      "id": "note-h",
+      "page": "page-1",
+      "x": 0,
+      "y": 2130,
+      "w": 390,
+      "text": "H · SENTENCE — the state is prose\n\nNo components at all. The screen is one short paragraph; the words you can change are the controls, and tapping one opens a picker in place. The accent colour is the state — green holding, amber climbing, blue cooling, grey offline — so the sentence tells you where you are without a dot, a badge or a tracked-out caps label. The one graphic is a rule under the paragraph, filled from cold to now: the typography carries the instrument.\n\nWhy: the most creative of the five and the furthest from anything that looks like a gadget app. It also scales the best — every future feature is one more clause, not one more row of tiles.\nTradeoff: the least glanceable. Reading a sentence is slower than reading a number, and this is a screen people check for one second with one eye. Also the most opinionated: if the voice is even slightly off it reads as twee, and it has to be rewritten for every state rather than re-bound."
+    },
+    {
+      "id": "note-i",
+      "page": "page-1",
+      "x": 490,
+      "y": 2130,
+      "w": 390,
+      "text": "I · OBJECT — the app shows you the thing\n\nThe hero is the device, and the data is furniture underneath. The vessel fills with heat from the bottom as the oven climbs, your target is a machined index on its edge, and the battery is built into its flank rather than being a percentage in a chip. Drag the object to set; swipe it sideways for mode.\n\nWhy: the most premium-feeling and the most product-like — this is how Dyson, Nothing and AirPods apps open, and it makes the app feel like part of the hardware. Charging, locked and offline all have obvious expressions on a physical object.\nTradeoff: the vessel here is deliberately generic — a plain capsule, not a likeness of any product — because this app ships with no PAX branding or proprietary assets and should keep it that way. That limits how recognisable it can get. And a rendered object is the most expensive thing here to draw well and animate; done at 80% it looks like a stock illustration."
+    },
+    {
+      "id": "note-j",
+      "page": "page-1",
+      "x": 980,
+      "y": 2130,
+      "w": 390,
+      "text": "J · CLOCK — the hierarchy changes with the state\n\nOne layout that re-ranks itself. Whatever the state makes urgent takes the top third: climbing, that is the countdown; holding, it is how long it has been at temperature; cooling, how long until you can pocket it. Temperature drops to a table, because while you are waiting the exact number is not the question — \"how much longer\" is. Shown mid warm-up on purpose: that is when the app is actually opened, and the one state today's screen has nothing to say about.\n\nWhy: the only direction driven by when people open the app rather than by what data exists. The bar shows the whole climb in one shape, and the departure-board table is fast to read.\nTradeoff: \"ready in 14s\" is an estimate the app would have to derive from the rate of climb, and a countdown that jumps around is worse than no countdown — it needs smoothing before it can be shown. Also the least visually distinctive of the five; its idea is structural, so it lives or dies on the motion between states, which a still frame cannot show."
+    },
+    {
+      "id": "brief-themes",
+      "page": "page-2",
+      "x": 0,
+      "y": -300,
+      "w": 1370,
+      "text": "FIRST PASS — five surface treatments, kept for reference.\n\nAll five hold the layout the app ships today and change only the design language: palette, type, chrome, corner radius, the shape of the temperature scale. Useful as a palette and typography library once a structure is chosen — A's matte plates and one-accent discipline, or E's printed gauge face, can be applied to any of the structures on page one.\n\nThe frame showing the screen as it ships today is on page one, beside the new directions."
     },
     {
       "id": "note-a",
-      "x": 490,
+      "page": "page-2",
+      "x": 0,
       "y": 890,
       "w": 390,
-      "text": "A · WERKSTATT — Braun functionalism\n\nWarm grey chassis, matte plates, 4 pt corners everywhere, lowercase labels, one accent (vermilion) reserved for the one thing you set: the target. The dial becomes a printed linear scale — a solid bar for what the oven is, a vermilion index for what you asked for, a hatched band past 215 instead of a brown glow. Modes become a five-position switch.\n\nWhy: reads as a tool you'd buy, not an app you downloaded. Ages well.\nTradeoff: the big circular dial is gone, and with it drag-the-ring scrubbing — a linear scale needs a different gesture. Also a light-first design, so dark mode is real work rather than a token swap."
+      "text": "A · WERKSTATT — Braun functionalism\n\nWarm grey chassis, matte plates, 4 pt corners everywhere, lowercase labels, one accent (vermilion) reserved for the one thing you set: the target. The dial becomes a printed linear scale — a solid bar for what the oven is, a vermilion index for what you asked for, a hatched band past 215 instead of a brown glow. Modes become a five-position switch.\n\nWhy: reads as a tool you'd buy, not an app you downloaded. Ages well.\nTradeoff: the big circular dial is gone, and with it drag-the-ring scrubbing. Also a light-first design, so dark mode is real work rather than a token swap."
     },
     {
       "id": "note-b",
-      "x": 980,
+      "page": "page-2",
+      "x": 490,
       "y": 890,
       "w": 390,
-      "text": "B · EDITORIAL — Swiss page, no chrome\n\nNo cards, no fills, no corners. Hairline rules and typography do all the work: the reading is set at 122 px in a display serif, and modes become a contents list. One ink-red accent, used four times on the whole screen.\n\nWhy: the most distinctive of the five, and the furthest from anything that looks like a gadget app. Very hard to make look cheap.\nTradeoff: the least conventional — tap targets are implied by rules rather than drawn, which asks more of the user. A serif in a hardware app is a taste call, so say early if it is not yours."
+      "text": "B · EDITORIAL — Swiss page, no chrome\n\nNo cards, no fills, no corners. Hairline rules and typography do all the work: the reading is set at 122 px in a display serif, and modes become a contents list. One ink-red accent, used four times on the whole screen.\n\nWhy: hard to make look cheap, and far from anything that looks like a gadget app.\nTradeoff: tap targets are implied by rules rather than drawn, which asks more of the user. A serif in a hardware app is a taste call."
     },
     {
       "id": "note-c",
-      "x": 0,
-      "y": 2130,
+      "page": "page-2",
+      "x": 980,
+      "y": 890,
       "w": 390,
-      "text": "C · NATIVE — look like the phone, not like an app\n\nStock iOS: large title, inset grouped cards, a system slider for the target, a segmented control for presets, a checkmark list for modes. System colors, system type, system metrics. The accent only appears on controls.\n\nWhy: professional by disappearing. Fastest to build, free accessibility, Dynamic Type and light/dark, and it will still look right after the next iOS redesign.\nTradeoff: no character at all — nothing here says PAX, or says heat. And the temperature stops being the screen; it becomes a row in a card."
+      "text": "C · NATIVE — look like the phone, not like an app\n\nStock iOS: large title, inset grouped cards, a system slider for the target, a segmented control for presets, a checkmark list for modes. System colors, system type, system metrics.\n\nWhy: professional by disappearing. Fastest to build, free accessibility, Dynamic Type and light/dark.\nTradeoff: no character at all, and the temperature stops being the screen — it becomes a row in a card."
     },
     {
       "id": "note-d",
-      "x": 490,
+      "page": "page-2",
+      "x": 0,
       "y": 2130,
       "w": 390,
-      "text": "D · THERMAL — the oven as a column of heat\n\nStays dark, but warm graphite rather than black, and drops the ring entirely. The oven is a vertical vessel filled from cold (30 °C) to now, so a glance tells you how far through the warm-up you are — something the current arc cannot show, since it only starts at 180. Ember gradient in the column, nowhere else. Flat keys, 3 pt corners, the live mode lit along one edge.\n\nWhy: the only direction where the main graphic carries information the number doesn't. Keeps the dark screen you already have.\nTradeoff: closest to today, so it is the smallest change of the five — if the goal is \"not that\", this may not go far enough. Condensed type needs care at small sizes."
+      "text": "D · THERMAL — the oven as a column of heat\n\nStays dark, but warm graphite rather than black, and drops the ring. The oven is a vertical vessel filled from cold (30 °C) to now, so a glance tells you how far through the warm-up you are — something the current arc cannot show, since it only starts at 180.\n\nWhy: keeps the dark screen you already have, and the main graphic carries information the number doesn't.\nTradeoff: closest to today, so the smallest change of the five. Its column idea is taken much further by G on page one."
     },
     {
       "id": "note-e",
-      "x": 980,
+      "page": "page-2",
+      "x": 490,
       "y": 2130,
       "w": 390,
-      "text": "E · INSTRUMENT — a printed gauge, not a glowing one\n\nKeeps the circle, throws away the neon: an ivory face with every degree printed, a brushed steel bezel, a slender red needle for the oven and a red bezel index for your target — exactly how a real gauge separates \"is\" from \"set\". The digital reading sits in a window below the hub. Presets are printed chips; modes are a selector with the live position raised.\n\nWhy: keeps the dial you clearly like as the identity of the app, while looking machined rather than animated. Charging and battery have obvious homes as sub-dials.\nTradeoff: the most decorative of the five, and skeuomorphic — done badly this goes kitsch fast. Also the most work to build and animate well."
+      "text": "E · INSTRUMENT — a printed gauge, not a glowing one\n\nKeeps the circle, throws away the neon: an ivory face with every degree printed, a brushed steel bezel, a slender red needle for the oven and a red bezel index for your target — how a real gauge separates \"is\" from \"set\".\n\nWhy: keeps the dial as the identity of the app while looking machined rather than animated.\nTradeoff: the most decorative and the most skeuomorphic — done badly this goes kitsch fast, and it is the most work to animate well."
     }
   ],
-  "launch": { "view": "canvas" }
+  "launch": { "view": "canvas", "page": "page-1" }
 }

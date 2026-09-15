@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;700;900&display=swap">
+  <style>
+    body { margin: 0; font-family: Chivo, "Helvetica Neue", system-ui, sans-serif; }
+    a { color: #A85A18; } a:hover { color: #85450F; }
+    .tag { font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(28,26,22,0.45); }
+    .cell { padding: 11px 0 12px; }
+    .cval { font-size: 19px; font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; padding-top: 2px; }
+  </style>
+</helmet>
+
+<!-- One layout that re-ranks itself. Whatever the state makes urgent takes the
+     top third: warming up it is the countdown, once ready it is how long it has
+     been held, cooling down it is how long until it is safe to pocket.
+     Shown here mid warm-up, the state the app is most often opened in. -->
+<div style="width: 390px; height: 844px; background: #F8F6F1; color: #1C1A16; display: flex; flex-direction: column;">
+
+  <div style="height: 44px;"></div>
+
+  <div style="height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 24px;">
+    <div class="tag" style="color: #1C1A16;">pax 3</div>
+    <div style="width: 1px; height: 9px; background: rgba(28,26,22,0.2);"></div>
+    <div class="tag" style="color: #A85A18;">warming</div>
+    <div style="flex-grow: 1;"></div>
+    <div class="tag">78%</div>
+  </div>
+
+  <!-- the hero is time, not temperature -->
+  <div style="padding: 26px 24px 0;">
+    <div class="tag">ready in</div>
+    <div style="display: flex; align-items: baseline; gap: 8px; padding-top: 2px;">
+      <div style="font-size: 132px; font-weight: 900; letter-spacing: -0.06em; line-height: 0.84; font-variant-numeric: tabular-nums;">14</div>
+      <div style="font-size: 30px; font-weight: 500; color: rgba(28,26,22,0.45); letter-spacing: -0.02em;">sec</div>
+    </div>
+  </div>
+
+  <!-- the climb, as one bar: where it started, where it is, where it stops -->
+  <div style="padding: 30px 24px 0;">
+    <div style="position: relative; height: 12px; background: rgba(28,26,22,0.10);">
+      <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 81.4%; background: #A85A18;"></div>
+      <div style="position: absolute; left: 81.4%; top: -5px; bottom: -5px; width: 2px; background: #1C1A16;"></div>
+    </div>
+    <div style="display: flex; justify-content: space-between; padding-top: 9px;">
+      <div class="tag">cold &#183; 0:24 elapsed</div>
+      <div class="tag">ready at 193&#176;</div>
+    </div>
+  </div>
+
+  <!-- temperature demoted to a table, where it belongs while you are waiting -->
+  <div style="margin: 34px 24px 0; border-top: 1px solid rgba(28,26,22,0.18);">
+    <div style="display: flex;">
+      <div class="cell" style="flex-grow: 1;">
+        <div class="tag">oven now</div>
+        <div class="cval">162.7 &#176;C</div>
+      </div>
+      <div style="width: 1px; background: rgba(28,26,22,0.18);"></div>
+      <div class="cell" style="flex-grow: 1; padding-left: 16px;">
+        <div class="tag">target</div>
+        <div class="cval">193 &#176;C</div>
+      </div>
+    </div>
+    <div style="height: 1px; background: rgba(28,26,22,0.18);"></div>
+    <div style="display: flex;">
+      <div class="cell" style="flex-grow: 1;">
+        <div class="tag">mode</div>
+        <div class="cval">Standard</div>
+      </div>
+      <div style="width: 1px; background: rgba(28,26,22,0.18);"></div>
+      <div class="cell" style="flex-grow: 1; padding-left: 16px;">
+        <div class="tag">last session</div>
+        <div class="cval">4:12</div>
+      </div>
+    </div>
+    <div style="height: 1px; background: rgba(28,26,22,0.18);"></div>
+  </div>
+
+  <div style="flex-grow: 1;"></div>
+
+  <!-- setting things is secondary while the oven is climbing -->
+  <div style="padding: 0 24px 22px;">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div style="width: 46px; height: 46px; border: 1px solid rgba(28,26,22,0.2); display: flex; align-items: center; justify-content: center;">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#1C1A16" stroke-width="1.7" stroke-linecap="round"><path d="M3 8h10"/></svg>
+      </div>
+      <div style="flex-grow: 1; display: flex; gap: 7px;">
+        <div style="flex-grow: 1; height: 46px; border: 1px solid rgba(28,26,22,0.2); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums;">180&#176;</div>
+        <div style="flex-grow: 1; height: 46px; background: #1C1A16; color: #F8F6F1; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;">193&#176;</div>
+        <div style="flex-grow: 1; height: 46px; border: 1px solid rgba(28,26,22,0.2); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums;">204&#176;</div>
+        <div style="flex-grow: 1; height: 46px; border: 1px solid rgba(28,26,22,0.2); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums;">215&#176;</div>
+      </div>
+      <div style="width: 46px; height: 46px; border: 1px solid rgba(28,26,22,0.2); display: flex; align-items: center; justify-content: center;">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#1C1A16" stroke-width="1.7" stroke-linecap="round"><path d="M3 8h10M8 3v10"/></svg>
+      </div>
+    </div>
+    <div style="display: flex; gap: 4px; padding-top: 10px;">
+      <div style="flex-grow: 1; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 700; border-bottom: 2px solid #1C1A16;">standard</div>
+      <div style="flex-grow: 1; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 400; color: rgba(28,26,22,0.5);">boost</div>
+      <div style="flex-grow: 1; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 400; color: rgba(28,26,22,0.5);">effic.</div>
+      <div style="flex-grow: 1; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 400; color: rgba(28,26,22,0.5);">stealth</div>
+      <div style="flex-grow: 1; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 400; color: rgba(28,26,22,0.5);">flavour</div>
+    </div>
+  </div>
+
+  <div style="height: 34px;"></div>
+</div>
+</x-dc>
+</body>
+</html>
