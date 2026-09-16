@@ -175,8 +175,13 @@ Bluetooth packet sent and received.
 
 ## Safety
 
-This app only reads device telemetry and sets the heater temperature within the
-PAX's own 180–215 °C range — the same range available in the official app. It does **not** touch firmware, disable thermal limits, or override any safety cutoffs.
+This app only reads device telemetry and sets the heater temperature. It does
+**not** touch firmware, disable thermal limits, or override any safety cutoffs.
+
+The dial runs from 180 °C to 225 °C and marks everything past 215 °C — where the
+official app stops — because plant material scorches somewhere around there and
+you should be able to see where you are. The device's own `HeaterRanges` table
+reports a ceiling of 245 °C; the app deliberately does not offer it.
 
 No data leaves your device. No network requests are made.
 
@@ -189,20 +194,45 @@ PaxController/
 ├── Sources/
 │   ├── PaxControllerApp.swift          Entry point (@main)
 │   ├── PaxProtocol.swift               UUIDs, message types, AES crypto, packet codec
-│   ├── BluetoothManager.swift          CoreBluetooth central manager + state machine
+│   ├── BluetoothManager.swift          CoreBluetooth central + link statistics
+│   ├── PaxDeviceViewModel.swift        Device state, the polling loop, every command
 │   ├── ContentView.swift               Root view + sheet presentation
 │   ├── ControlView.swift               The one screen: dial, presets, modes
 │   ├── TemperatureDial.swift           Draggable thermostat dial
+│   ├── DialMotion.swift                The dial's animation state and colours
 │   ├── DesignSystem.swift              Layout tokens + temperature formatting
+│   ├── LedColor.swift                  Device LED colours and the app's own palette
+│   ├── AppSettings.swift               Everything persisted in UserDefaults
 │   ├── DeviceSheet.swift               Status, units, device info, diagnostics
-│   ├── ScanSheet.swift                 Device picker
+│   ├── SessionHistoryView.swift        Recorded sessions and charges
+│   ├── SessionCharts.swift             The charts behind that screen
+│   ├── PaxSession.swift / PaxCharge.swift   What the app records itself
+│   ├── PaxProfile.swift / ProfilesView.swift  Saved temperature + mode presets
+│   ├── PaxIntents.swift                App Intents, Shortcuts and Siri
+│   ├── LiveActivityController.swift    The Lock Screen card's lifecycle
+│   ├── PaxSharedState.swift            The App Group snapshot the widget reads
+│   ├── PhoneLink.swift                 WatchConnectivity, phone side
+│   ├── LinkStats.swift / LinkBenchmark.swift  How fast the link actually runs
+│   ├── LinkSpeed.swift                 That measurement, on screen
 │   ├── DebugConsoleView.swift          In-app BLE log viewer
 │   └── PaxController-Bridging-Header.h CommonCrypto bridge
+├── LiveActivity/                       Lock Screen card + Home Screen widget
+├── Tests/                              Protocol and activity-state unit tests
 └── Resources/
     └── Info.plist                      Bluetooth permission strings
+
+PaxWatch/                               watchOS companion
 ```
 
-- **`BluetoothManager`** — single `@MainActor` `ObservableObject` driving all CoreBluetooth calls
+- **`BluetoothManager`** — CoreBluetooth runs on a dedicated serial queue, not the
+  main one, so a notify-to-read turnaround never waits behind SwiftUI animating
+  the dial. Only the parsed result hops to the main actor.
 - **`PaxProtocol.swift`** — fully isolated: all crypto, UUIDs, message types, packet encode/decode
 - **Encryption** — AES-128 ECB (key derivation) + AES-128 OFB (packet encryption) via CommonCrypto bridging header
+- **Polling** — a closed loop rather than a timer: the reply to one request is
+  what sends the next, so it runs at exactly the rate the link sustains. Two
+  requests stay in the air while the oven is working, one while it is idle.
+- **Colour** — one orange accent fixed in `LedColor.swift`'s `Brand`, shared by
+  the app, the widget, the Live Activity and the watch. The LED colour you pick
+  for the device no longer re-themes the interface.
 - **No SPM/CocoaPods dependencies**
