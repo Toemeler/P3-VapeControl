@@ -351,6 +351,11 @@ jobs:
           EXT_PLIST=PaxController/LiveActivity/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$EXT_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$EXT_PLIST"
+          # And the embedded watch app, for the same reason: a watch bundle
+          # whose version disagrees with its companion's is refused at install.
+          WATCH_PLIST=PaxWatch/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$WATCH_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$WATCH_PLIST"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building version $VERSION"
 
