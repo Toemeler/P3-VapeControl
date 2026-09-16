@@ -80,7 +80,7 @@ struct PaxWidgetView: View {
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
-                .foregroundStyle(stale ? .secondary : .primary)
+                .foregroundStyle(stale ? Color.secondary : Color.primary)
             Text(statusLine)
                 .font(.caption)
                 .foregroundStyle(.secondary)

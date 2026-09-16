@@ -73,7 +73,7 @@ struct WatchRootView: View {
     private var status: some View {
         Text(statusText)
             .font(.caption)
-            .foregroundStyle(link.reachable ? .secondary : .orange)
+            .foregroundStyle(link.reachable ? Color.secondary : Color.orange)
             .multilineTextAlignment(.center)
             .lineLimit(2)
     }
