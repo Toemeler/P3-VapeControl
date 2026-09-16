@@ -115,7 +115,7 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 | `0x13` | `DynamicMode` | Both | 1 byte mode ID (PAX 3) |
 | `0x14` | `ColorTheme` | Both | **33 bytes: mode count + 4 modes × 8** (see below) |
 | `0x15` | `Brightness` | Both | **1 byte, 0…128** (not 0–100). PAX 3 reported `0x80` = full |
-| `0x17` | `HapticMode` | Both | Byte 0 is amplitude, 0…128. PAX 3 reports **6 bytes** (`2F 04 02 04 01 00`); the rest are undecoded |
+| `0x17` | `HapticMode` | Both | Byte 0 is amplitude, 0…128. PAX 3 reports **6 bytes** (`2F 04 02 04 01 00`, `80 04 02 04 01 00` at full); bytes 1–5 undecoded. **Write all six**, amplitude swapped into byte 0 — see below |
 | `0x18` | `SupportedAttributes` | Device → Host | 8 bytes LE `uint64` bitfield; bit N set = attribute N supported |
 | `0x19` | `HeatingParams` | Both | **22 bytes: 11 LE `uint16` words**, options last. Field order confirmed on PAX 3; the option *bit names* are not PAX 3's — bit 0, not bit 2, is its heater enable (see below) |
 | `0x1B` | `UiMode` | Both | 1 byte; PAX 3 reports `0x01` |
@@ -567,6 +567,27 @@ or a byte between roughly 30 and 42 (tenths). It is neither.
 
 So the 25% steps are the firmware's, not the app's, and there is nowhere finer
 to read from. Anything claiming better resolution on a PAX 3 is interpolating.
+
+### Never write part of a block
+
+Two attributes on this device are multi-byte blocks where the app only
+understands some of the bytes:
+
+- `0x19` **HeatingParams** — 22 bytes, 11 words. Documented at length above: the
+  app composes the whole block from the stock preset and never writes a partial
+  one.
+- `0x17` **HapticMode** — 6 bytes, of which only byte 0 (amplitude) is decoded.
+
+The app used to write HapticMode as a **one-byte payload**. That asks the
+firmware to interpret a short write, and the two plausible readings are "update
+byte 0" and "this is the whole block, zero the rest" — the second of which
+silently wipes five settings nobody has decoded. Which one this firmware does
+was never established, because the amplitude readback confirms only byte 0.
+
+It now sends all six, with the amplitude swapped into byte 0 and bytes 1–5
+echoed back from the last read, falling back to the single byte only if no read
+has landed yet. The rule generalises: **read the block, change your field, send
+the block back.**
 
 ## Open Uncertainties
 

@@ -2287,8 +2287,25 @@ final class PaxDeviceViewModel: ObservableObject {
             self?.enqueue {
                 guard let self else { return }
                 self.pendingHapticWrite = raw
-                try self.sendPacket(PaxPacket(type: .hapticMode, payload: Data([raw])))
-                self.log("Set haptics → \(Int(clamped * 100))% (\(raw)/128)", level: .tx)
+                // The whole six bytes, with the amplitude swapped in — not one
+                // byte on its own.
+                //
+                // The device reports six (80 04 02 04 01 00) and only the first
+                // is known to be the amplitude. A one-byte write asks the
+                // firmware to interpret a short payload, and the two ways it
+                // could do that are "change byte 0" and "take this as the whole
+                // block and zero the rest", which would silently wipe five
+                // settings nobody has decoded. The same trap HeatingParams is
+                // already documented against: never write part of a block
+                // without sending back what was read.
+                let payload: Data
+                if let known = self.hapticRawPayload, known.count >= 6 {
+                    payload = Data([raw]) + known.dropFirst()
+                } else {
+                    payload = Data([raw])
+                }
+                try self.sendPacket(PaxPacket(type: .hapticMode, payload: payload))
+                self.log("Set haptics → \(Int(clamped * 100))% (\(raw)/128) payload=\(payload.hexString)", level: .tx)
                 try self.sendPacket(PaxPacket.statusRequest(attributes: [.hapticMode]))
             }
         }
