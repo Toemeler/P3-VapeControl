@@ -11,7 +11,7 @@ struct WatchRootView: View {
     private var snapshot: PaxSnapshot? { link.snapshot }
 
     private var accent: Color {
-        snapshot.flatMap { LedColor.fromHex($0.ledColorHex)?.color } ?? LedColor.orange.color
+        Brand.accent
     }
 
     var body: some View {
@@ -66,14 +66,14 @@ struct WatchRootView: View {
 
     private var batteryColor: Color {
         guard let level = snapshot?.batteryLevel else { return .secondary }
-        if snapshot?.isCharging == true { return .green }
-        return level <= 15 ? .red : .secondary
+        if snapshot?.isCharging == true { return Brand.info }
+        return level <= 15 ? Brand.critical : .secondary
     }
 
     private var status: some View {
         Text(statusText)
             .font(.caption)
-            .foregroundStyle(link.reachable ? Color.secondary : Color.orange)
+            .foregroundStyle(link.reachable ? Color.secondary : Brand.caution)
             .multilineTextAlignment(.center)
             .lineLimit(2)
     }
@@ -105,7 +105,7 @@ struct WatchRootView: View {
                 Label("Stop the oven", systemImage: "power")
                     .frame(maxWidth: .infinity)
             }
-            .tint(.red)
+            .tint(Brand.critical)
             .disabled(!link.reachable)
         }
     }

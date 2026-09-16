@@ -168,8 +168,8 @@ private struct StatusRing: View {
     }
 
     private var batteryColor: Color {
-        if state.phase == .charging { return .green }
-        if batteryFraction <= 0.15 { return .red }
+        if state.phase == .charging { return Brand.info }
+        if batteryFraction <= 0.15 { return Brand.critical }
         return .secondary
     }
 
@@ -207,18 +207,21 @@ private struct StatusRing: View {
 private extension PaxActivityAttributes.ContentState {
     var accent: Color {
         guard isConnected else { return .secondary }
-        if phase == .charging { return .green }
-        return LedColor.fromHex(ledColorHex)?.color ?? LedColor.orange.color
+        // Light blue for charging, orange for everything else. The app's
+        // accent, not the device's LED: choosing a green LED should not turn
+        // the Lock Screen card green.
+        if phase == .charging { return Brand.info }
+        return Brand.accent
     }
 
-    /// While the oven is climbing the ring follows the same green-through-orange
-    /// gradient the PAX's own LEDs show, so the card and the device in your hand
-    /// are saying the same thing. Once it is there, it is the accent.
+    /// While the oven is climbing the ring warms towards the accent, so the
+    /// card shows progress without leaving the palette. Once it is there, it is
+    /// the accent.
     var ringColor: Color {
         switch phase {
-        case .charging: return .green
+        case .charging: return Brand.info
         case .waiting:  return .secondary
-        case .heating:  return LedColor.warmUp(progress: warmUpFraction).color
+        case .heating:  return Brand.warmUp(progress: warmUpFraction)
         default:        return accent
         }
     }

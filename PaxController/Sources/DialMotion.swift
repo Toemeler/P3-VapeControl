@@ -180,11 +180,13 @@ struct DialPalette {
         self.accent = accent
         self.track = DialPalette.flatten(DS.Palette.track, scheme)
         self.trackSoft = DialPalette.flatten(DS.Palette.track, scheme).opacity(0.5)
-        self.beyondMax = Color.orange.opacity(0.22)
+        // Past the vendor ceiling is scorching, not merely warm, so the band
+        // reads as a warning rather than as more accent.
+        self.beyondMax = Brand.critical.opacity(0.22)
         self.batteryCalm = scheme == .dark
             ? Color(red: 0.56, green: 0.56, blue: 0.60)
             : Color(red: 0.47, green: 0.47, blue: 0.50)
-        self.batteryWarn = Color(red: 1, green: 0.68, blue: 0.12)
+        self.batteryWarn = Brand.caution
         self.batteryLow = DS.Palette.low
         self.charge = DS.Palette.charge
         self.marker = .white

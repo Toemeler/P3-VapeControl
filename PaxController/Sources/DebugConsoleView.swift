@@ -153,7 +153,7 @@ struct FilterChip: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(isActive ? DS.Palette.accent : Color(.tertiarySystemBackground))
-                .foregroundColor(isActive ? .white : .primary)
+                .foregroundColor(isActive ? DS.Palette.onAccent : .primary)
                 .cornerRadius(8)
         }
         .buttonStyle(.plain)

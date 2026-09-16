@@ -387,7 +387,7 @@ struct ControlView: View {
                         .background(isActive ? DS.Palette.accent : DS.Palette.fill,
                                     in: RoundedRectangle(cornerRadius: DS.Metric.modeRadius,
                                                          style: .continuous))
-                        .foregroundStyle(isActive ? Color.white : Color.secondary)
+                        .foregroundStyle(isActive ? DS.Palette.onAccent : Color.secondary)
                     }
                     .buttonStyle(PressableButtonStyle(scale: 0.95))
                     .disabled(!controlsActive)
@@ -521,7 +521,7 @@ struct ControlView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .background(DS.Palette.accent, in: Capsule())
-                .foregroundStyle(Color.white)
+                .foregroundStyle(DS.Palette.onAccent)
         }
         .buttonStyle(.plain)
         .padding(.horizontal, DS.Metric.gutter)

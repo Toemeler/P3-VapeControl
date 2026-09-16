@@ -134,15 +134,28 @@ enum DS {
         static let fill = dynamic(dark: 0x2A2A2F, light: 0xE6E4E1)
         /// The unfilled part of a ring.
         static let track = dynamic(dark: 0x2F2F35, light: 0xDCDAD6)
-        /// The LED color chosen in settings, orange until changed. Computed so
-        /// every existing call site re-themes without being rewired; views
-        /// re-render on change because they observe AppSettings.
-        static var accent: Color { LedColor.current.color }
+        /// The app's accent: orange, always.
+        ///
+        /// This used to be `LedColor.current.color`, which meant picking a green
+        /// LED for the vaporizer turned the entire interface green. The LED
+        /// belongs to the device; the accent belongs to the app. Changing the
+        /// LED now changes the LED.
+        static let accent = Brand.accent
         static var accentTint: Color { accent.opacity(0.15) }
+        /// The label on a filled accent shape — ink, because white on this
+        /// orange measures 2.6:1. See `Brand.onAccent`.
+        static let onAccent = Brand.onAccent
+        /// Approaching a limit, worth noticing but not yet wrong.
+        static let caution = Brand.caution
+        /// Neither good nor bad: charging, connected, a measured number.
+        static let info = Brand.info
+        /// Actually wrong.
+        static let critical = Brand.critical
         /// A battery with almost nothing left.
-        static let low = Color(red: 1, green: 0.27, blue: 0.23)
-        /// A battery filling.
-        static let charge = Color(red: 0.19, green: 0.82, blue: 0.35)
+        static let low = Brand.critical
+        /// A battery filling. Light blue rather than green: charging is
+        /// information, not success, and green is not in this app's palette.
+        static let charge = Brand.info
 
         private static func dynamic(dark: UInt32, light: UInt32) -> Color {
             Color(UIColor { traits in

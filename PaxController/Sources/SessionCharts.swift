@@ -8,11 +8,11 @@ import SwiftUI
 /// legend anywhere here — the title says what is plotted — and the marks wear
 /// the app's accent while every piece of text stays in a text colour.
 ///
-/// That accent is whatever the user picked for the LEDs, so its contrast
-/// against the surface cannot be guaranteed. Every chart below is therefore
-/// backed by something readable without colour: axis values, a label on the
-/// one bar worth naming, and the session list underneath, which is the same
-/// data as a table.
+/// The accent is a fixed orange measured against both canvases — 6.9:1 in dark,
+/// 5.4:1 in light — so contrast is no longer left to whatever the user picked
+/// for the LEDs. Every chart is still backed by something readable without
+/// colour: axis values, a label on the one bar worth naming, and the session
+/// list underneath, which is the same data as a table.
 enum SessionChartMeasure: String, CaseIterable, Identifiable {
     case sessions, draws, minutes
     var id: String { rawValue }

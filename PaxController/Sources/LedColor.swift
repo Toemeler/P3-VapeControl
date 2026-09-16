@@ -121,3 +121,94 @@ struct LedColor: Identifiable, Equatable {
         return luma > 0.6
     }
 }
+
+/// The app's own colours, as opposed to the device's.
+///
+/// These two were the same thing until now, and that was the bug: the app's
+/// accent was `LedColor.current`, so choosing a green LED turned the whole
+/// interface green. The LED is a property of the vaporizer sitting on the
+/// table; the accent is the identity of the app. They are separate ideas and
+/// are now separate values.
+///
+/// **Orange leads, always.** White is the second voice, yellow marks caution
+/// and light blue carries calm information — charging, connection, facts that
+/// are neither good nor bad.
+///
+/// Every pair below is measured against the canvas it sits on rather than
+/// picked by eye: the light variants are darker than they look like they should
+/// be because orange on near-white is the hard case, and each clears 4.5:1 for
+/// body text.
+///
+/// Lives here rather than in the design system because this file is in every
+/// target — app, widget, Live Activity and watch — and the accent has to be one
+/// colour across all four.
+enum Brand {
+    /// The one accent. Everything else is a supporting role.
+    static let accent = adaptive(dark: 0xFF7A1A, light: 0xA84600)
+
+    /// What goes *on top of* a filled accent shape.
+    ///
+    /// Ink, not white. White on this orange measures 2.6:1, which is below any
+    /// standard and unreadable in sunlight; the same ink measures 6.9:1. White
+    /// is the second colour of this app everywhere it sits on the canvas — in
+    /// text, in the dial's marker — just never on top of the orange.
+    static let onAccent = Color(hexValue: 0x17171A)
+
+    /// Approaching a limit: the last stretch of the temperature dial, a battery
+    /// getting low enough to mention but not low enough to worry about.
+    static let caution = adaptive(dark: 0xFFC53D, light: 0x8A5E00)
+
+    /// Neither good nor bad, just true: charging, connected, a measured figure.
+    static let info = adaptive(dark: 0x7FD6FF, light: 0x0B5E8F)
+
+    /// Something actually wrong. Kept in the warm family so it belongs to the
+    /// same palette rather than arriving from a different app.
+    static let critical = adaptive(dark: 0xFF6B52, light: 0xB03024)
+
+    /// The warm-up ramp for the app's own rings: cold light blue, through
+    /// yellow, arriving at the accent. Three colours of this palette and no
+    /// others, so a heating ring never leaves the app's identity on its way up.
+    ///
+    /// The device has a ramp of its own in `LedColor.warmUp`, which starts from
+    /// green. That one is about the object on the table rather than the
+    /// interface, and it stays as it is.
+    static func warmUp(progress: Double) -> Color {
+        let p = min(1, max(0, progress))
+        let cold = (127.0, 214.0, 255.0)
+        let mid  = (255.0, 197.0,  61.0)
+        let hot  = (255.0, 122.0,  26.0)
+        let (from, to, t) = p < 0.5 ? (cold, mid, p / 0.5) : (mid, hot, (p - 0.5) / 0.5)
+        func mix(_ x: Double, _ y: Double) -> Double { (x + (y - x) * t) / 255 }
+        return Color(red: mix(from.0, to.0),
+                     green: mix(from.1, to.1),
+                     blue: mix(from.2, to.2))
+    }
+
+    private static func adaptive(dark: UInt32, light: UInt32) -> Color {
+        #if os(watchOS)
+        // The watch is always dark, and UIColor has no dynamic provider there.
+        return Color(hexValue: dark)
+        #else
+        return Color(UIColor { traits in
+            UIColor(hexValue: traits.userInterfaceStyle == .dark ? dark : light)
+        })
+        #endif
+    }
+}
+
+extension Color {
+    init(hexValue: UInt32) {
+        self.init(red: Double((hexValue >> 16) & 0xFF) / 255,
+                  green: Double((hexValue >> 8) & 0xFF) / 255,
+                  blue: Double(hexValue & 0xFF) / 255)
+    }
+}
+
+extension UIColor {
+    convenience init(hexValue: UInt32) {
+        self.init(red: CGFloat((hexValue >> 16) & 0xFF) / 255,
+                  green: CGFloat((hexValue >> 8) & 0xFF) / 255,
+                  blue: CGFloat(hexValue & 0xFF) / 255,
+                  alpha: 1)
+    }
+}

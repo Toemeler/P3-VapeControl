@@ -21,7 +21,7 @@
 		AA000132 /* LinkStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000132 /* LinkStats.swift */; };
 		AA000140 /* DialMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000140 /* DialMotion.swift */; };
 		AA000141 /* PaxCharge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000141 /* PaxCharge.swift */; };
-		AA000131 /* BatteryDecode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000131 /* BatteryDecode.swift */; };
+		AA000131 /* LinkSpeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000131 /* LinkSpeed.swift */; };
 		AA000130 /* SessionCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000130 /* SessionCharts.swift */; };
 		AA000104 /* SessionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000104 /* SessionHistoryView.swift */; };
 		AA000105 /* ProfilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000105 /* ProfilesView.swift */; };
@@ -120,7 +120,7 @@
 		AB000132 /* LinkStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkStats.swift; sourceTree = "<group>"; };
 		AB000140 /* DialMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DialMotion.swift; sourceTree = "<group>"; };
 		AB000141 /* PaxCharge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxCharge.swift; sourceTree = "<group>"; };
-		AB000131 /* BatteryDecode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryDecode.swift; sourceTree = "<group>"; };
+		AB000131 /* LinkSpeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkSpeed.swift; sourceTree = "<group>"; };
 		AB000130 /* SessionCharts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionCharts.swift; sourceTree = "<group>"; };
 		AB000104 /* SessionHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionHistoryView.swift; sourceTree = "<group>"; };
 		AB000105 /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
@@ -255,7 +255,7 @@
 				AB000103 /* PaxProfile.swift */,
 				AB000104 /* SessionHistoryView.swift */,
 				AB000130 /* SessionCharts.swift */,
-				AB000131 /* BatteryDecode.swift */,
+				AB000131 /* LinkSpeed.swift */,
 				AB000132 /* LinkStats.swift */,
 				AB000133 /* LinkBenchmark.swift */,
 				AB000140 /* DialMotion.swift */,
@@ -465,7 +465,7 @@
 				AA000103 /* PaxProfile.swift in Sources */,
 				AA000104 /* SessionHistoryView.swift in Sources */,
 				AA000130 /* SessionCharts.swift in Sources */,
-				AA000131 /* BatteryDecode.swift in Sources */,
+				AA000131 /* LinkSpeed.swift in Sources */,
 				AA000132 /* LinkStats.swift in Sources */,
 				AA000133 /* LinkBenchmark.swift in Sources */,
 				AA000140 /* DialMotion.swift in Sources */,

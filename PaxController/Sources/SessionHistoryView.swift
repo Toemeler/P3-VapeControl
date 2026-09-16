@@ -87,7 +87,7 @@ struct SessionHistoryView: View {
                         Text(session.startedAt, format: .dateTime.weekday().hour().minute())
                         if session.isRunning {
                             Text("· running")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(DS.Palette.accent)
                         }
                     }
                 }

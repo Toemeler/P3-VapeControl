@@ -57,7 +57,7 @@ struct PaxWidgetView: View {
     let snapshot: PaxSnapshot?
 
     private var accent: Color {
-        snapshot.flatMap { LedColor.fromHex($0.ledColorHex)?.color } ?? LedColor.orange.color
+        Brand.accent
     }
 
     var body: some View {

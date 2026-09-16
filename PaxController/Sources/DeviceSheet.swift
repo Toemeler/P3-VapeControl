@@ -225,7 +225,7 @@ struct DeviceSheet: View {
                 Label("The oven went off right after that write. Restore the factory settings above, and switch the PAX off and on again.",
                       systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DS.Palette.critical)
             }
         } header: {
             Text("Lip detection")
@@ -384,7 +384,7 @@ struct DeviceSheet: View {
                 if viewModel.connectionState.isConnected {
                     Label(deviceLedStatus, systemImage: viewModel.deviceLedColorSupported ? "checkmark.circle" : "info.circle")
                         .font(.caption)
-                        .foregroundStyle(viewModel.deviceLedColorSupported ? Color.secondary : Color.orange)
+                        .foregroundStyle(viewModel.deviceLedColorSupported ? Color.secondary : DS.Palette.caution)
                 }
                 Button("Send colours to device now") {
                     viewModel.resendLedColors()
@@ -521,7 +521,7 @@ struct DeviceSheet: View {
                 Label("Live Activities are turned off for this app in iOS Settings.",
                       systemImage: "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DS.Palette.caution)
             }
         } header: {
             Text("Lock Screen")
@@ -597,8 +597,8 @@ struct DeviceSheet: View {
             NavigationLink("Diagnostics") {
                 DebugConsoleView().environmentObject(viewModel)
             }
-            NavigationLink("Battery decode") {
-                BatteryDecodeView().environmentObject(viewModel)
+            NavigationLink("Link speed") {
+                LinkSpeedView().environmentObject(viewModel)
             }
             #if PAX_LAB
             NavigationLink {
@@ -607,22 +607,8 @@ struct DeviceSheet: View {
                 Label("Lab", systemImage: "flask")
             }
             #endif
-            if viewModel.connectionState.isConnected {
-                Button {
-                    viewModel.probeUndecodedAttributes()
-                } label: {
-                    HStack {
-                        Text("Probe unknown attributes")
-                        if viewModel.probeInProgress {
-                            Spacer()
-                            ProgressView().controlSize(.small)
-                        }
-                    }
-                }
-                .disabled(viewModel.probeInProgress)
-            }
         } footer: {
-            Text("Connection state, PAX service characteristics and the raw packet log. The probe reads the attributes this firmware answers but nobody has decoded, three times each, and writes what the reads agree on to the log — it only reads, never writes.")
+            Text("Connection state, PAX service characteristics and the raw packet log, plus how fast the link is running. Nothing here writes to the PAX.")
         }
     }
 
@@ -640,8 +626,8 @@ struct DeviceSheet: View {
     }
 
     private func batteryColor(_ level: Int) -> Color {
-        if level > 30 { return .green }
-        if level > 15 { return .yellow }
-        return .red
+        if level > 30 { return DS.Palette.accent }
+        if level > 15 { return DS.Palette.caution }
+        return DS.Palette.critical
     }
 }
