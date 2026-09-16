@@ -95,6 +95,13 @@ struct DeviceSheet: View {
                     // only, so there is nothing to write back.
                     row("Lock", value: locked ? "Locked" : "Unlocked")
                 }
+            } footer: {
+                // Said once, here, rather than by rounding the number on the
+                // main screen: 25% is genuinely what the device reports, and
+                // hiding that would be a different kind of dishonesty.
+                if let step = viewModel.batteryStepSize {
+                    Text("The PAX reports its battery in steps of \(step)% — the petals it lights, not a percentage. The number above is exactly what it said; there is no finer reading being rounded.")
+                }
             }
         }
     }

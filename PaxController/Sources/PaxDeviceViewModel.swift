@@ -128,11 +128,17 @@ final class PaxDeviceViewModel: ObservableObject {
     @Published private(set) var heatingParamsStoppedOven = false
     /// When the last 0x19 write went out, so the stop above can be tied to it.
     private var lastHeatingParamsWrite: Date?
-    /// Recent readings, for working out how fast the oven is climbing and how
-    /// fast the battery is filling. Short on purpose: an average over the last
-    /// few seconds tracks a real change, while a longer one smooths it away.
+    /// Recent temperature readings, for working out how fast the oven is
+    /// climbing. Short on purpose: an average over the last few seconds tracks
+    /// a real change, while a longer one smooths it away.
     private var tempTrail: [(at: Date, value: Double)] = []
-    private var batteryTrail: [(at: Date, value: Double)] = []
+    /// Every time the battery reading changed, and to what.
+    ///
+    /// The battery gets a step log rather than a trail because a trail was the
+    /// wrong shape for it: the reading moves in quarters and can sit on one
+    /// value for the best part of an hour, so any window short enough to follow
+    /// a change usually contains no change at all.
+    private var batterySteps: [(at: Date, level: Int)] = []
     /// Seconds until the oven reaches its set point, when it is climbing fast
     /// enough for the estimate to mean anything.
     @Published private(set) var secondsToReady: Int?
@@ -1517,11 +1523,34 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     private func trackBattery(_ percent: Double) {
-        batteryTrail.append((Date(), percent))
-        // A battery moves a percent every minute or two, so the window has to
-        // be long enough to contain a change at all.
-        trim(&batteryTrail, seconds: 900)
+        let level = Int(percent.rounded())
+        if batterySteps.last?.level != level {
+            batterySteps.append((at: Date(), level: level))
+            if batterySteps.count > 40 { batterySteps.removeFirst() }
+        }
         updateChargeEstimate()
+    }
+
+    /// The finest step the battery reading has been seen to take.
+    ///
+    /// The device reports a percentage, but on this firmware it does not move
+    /// by ones — it moves by the four petals it lights. Rather than assert
+    /// that, this measures it: the common divisor of every change seen since
+    /// the app connected. Nil until enough changes have happened to say.
+    var batteryStepSize: Int? {
+        guard batterySteps.count >= 3 else { return nil }
+        var divisor = 0
+        for index in 1..<batterySteps.count {
+            divisor = Self.greatestCommonDivisor(
+                divisor, abs(batterySteps[index].level - batterySteps[index - 1].level))
+        }
+        return divisor > 1 ? divisor : nil
+    }
+
+    private static func greatestCommonDivisor(_ a: Int, _ b: Int) -> Int {
+        var (x, y) = (abs(a), abs(b))
+        while y != 0 { (x, y) = (y, x % y) }
+        return x
     }
 
     private func updateReadyEstimate() {
@@ -1543,14 +1572,47 @@ final class PaxDeviceViewModel: ObservableObject {
         if secondsToReady != clamped { secondsToReady = clamped }
     }
 
+    /// How long until it is full, measured from how long the last steps took.
+    ///
+    /// The battery attribute is one byte, but it does not move by ones: on this
+    /// firmware it moves in quarters, so the readings are a staircase. Fitting
+    /// a slope through a staircase gives one of two wrong answers — zero on the
+    /// tread, so the estimate disappears for forty minutes at a time, or
+    /// something enormous on the riser, so it collapses to a couple of minutes.
+    /// That is what the previous version did, and why the number jumped about.
+    ///
+    /// Timing the steps instead gives one honest estimate per step. It is
+    /// coarse, and it says nothing at all until the level has moved twice since
+    /// the cable went in, which is the truthful answer to "how long left" when
+    /// the device has said one number the whole time.
     private func updateChargeEstimate() {
-        guard isCharging == true, let level = batteryLevel, level < 100,
-              let rate = slope(of: batteryTrail), rate > 0.0001
+        guard isCharging == true, let level = batteryLevel, level < 100 else {
+            if secondsToFull != nil { secondsToFull = nil }
+            return
+        }
+        // Only the run of rising readings at the end: a step down from before
+        // the cable went in says nothing about how fast it fills.
+        var rising: [(at: Date, level: Int)] = []
+        for step in batterySteps.reversed() {
+            if let oldestKept = rising.first, step.level >= oldestKept.level { break }
+            rising.insert(step, at: 0)
+            if rising.count >= 6 { break }
+        }
+        guard let first = rising.first, let last = rising.last,
+              last.level > first.level
         else {
             if secondsToFull != nil { secondsToFull = nil }
             return
         }
-        let estimate = Int((Double(100 - level) / rate).rounded())
+        let seconds = last.at.timeIntervalSince(first.at)
+        let gained = Double(last.level - first.level)
+        // A step that arrived within a minute of the previous one is the device
+        // settling on a reading, not the battery filling that fast.
+        guard seconds > 60 else {
+            if secondsToFull != nil { secondsToFull = nil }
+            return
+        }
+        let estimate = Int((Double(100 - level) * (seconds / gained)).rounded())
         let clamped = min(6 * 3600, max(60, estimate))
         if secondsToFull != clamped { secondsToFull = clamped }
     }
@@ -1988,7 +2050,7 @@ final class PaxDeviceViewModel: ObservableObject {
             let typeHex = String(packet.type.rawValue, radix: 16, uppercase: true)
             log("RX 0x\(typeHex) [\(packet.type)] plain=\(plaintext.hexString)", level: .rx)
             if probeInProgress { recordProbeSample(type: packet.type.rawValue, payload: packet.payload) }
-            BatteryDecoder.shared.note(attribute: packet.type.rawValue, payload: packet.payload)
+            BatteryDecoder.shared.record(attribute: packet.type.rawValue, payload: packet.payload)
             LinkBenchmark.shared.note(attribute: packet.type.rawValue)
             #if PAX_LAB
             PaxLab.shared.record(type: packet.type.rawValue, payload: packet.payload)
@@ -2003,7 +2065,7 @@ final class PaxDeviceViewModel: ObservableObject {
             #endif
             // An attribute with no name is exactly where an undocumented
             // voltage would be, so the decoder sees these too.
-            BatteryDecoder.shared.note(attribute: t, payload: Data(plaintext.dropFirst()))
+            BatteryDecoder.shared.record(attribute: t, payload: Data(plaintext.dropFirst()))
             if probeInProgress {
                 recordProbeSample(type: t, payload: Data(plaintext.dropFirst()))
                 log("RX 0x\(tHex) unnamed — probe sample \(plaintext.hexString)", level: .rx)
@@ -2432,6 +2494,21 @@ final class PaxDeviceViewModel: ObservableObject {
         }
     }
 
+    /// What the fast lane is doing right now, in words, for the Link screen.
+    ///
+    /// The rate the link reports is only meaningful next to the shape it was
+    /// measured in: a window of one is a round trip per reading by design, and
+    /// reading "4.5 a second" off a benchmark that deliberately asks one at a
+    /// time says nothing about whether pipelining works. This puts the window
+    /// and the state that chose it on screen, so the number can be read
+    /// honestly.
+    var fastLaneDescription: String {
+        let state = heatingState.map { "\($0)" } ?? "not reported"
+        let window = fastLaneWindow
+        let shape = window > 1 ? "\(window) in the air" : "one at a time"
+        return "\(shape) · \(state)"
+    }
+
     /// Fills the window, or waits out the cadence when there is nothing worth
     /// hurrying for.
     private func scheduleNextTemperatureRequest() {
@@ -2588,9 +2665,9 @@ final class PaxDeviceViewModel: ObservableObject {
         drawStartedAt = nil
         ovenPoweredOffByApp = false
         tempTrail.removeAll()
-        batteryTrail.removeAll()
         secondsToReady = nil
         secondsToFull = nil
+        batterySteps.removeAll()
         shellColorIndex = nil
         ledBrightness = nil
         hapticAmplitude = nil

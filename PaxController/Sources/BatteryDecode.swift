@@ -95,23 +95,40 @@ final class BatteryDecoder: ObservableObject {
         return Array(supported.union(extras)).sorted()
     }
 
-    /// Slow on purpose. The app is still polling the temperature twice a second
-    /// on the same link, and a voltage does not need watching faster than this.
-    private static let roundInterval: TimeInterval = 30
-    /// Three reads back to back, far enough apart to arrive as separate
+    /// How often a round starts. A voltage does not need watching faster than
+    /// this, and the app is still polling the temperature on the same link.
+    private static let roundInterval: TimeInterval = 20
+    /// Three reads of every attribute, far enough apart to arrive as separate
     /// replies. Whatever all three agree on is payload; the rest is buffer.
     private static let readsPerRound = 3
-    private static let readSpacing: TimeInterval = 1.2
-    /// How long the replies have to stop arriving before a round is considered
-    /// finished.
-    private static let quietPeriod: TimeInterval = 3.0
+    /// How long the replies to one pass have to stop arriving before the next
+    /// pass is sent.
+    private static let quietPeriod: TimeInterval = 2.0
+    /// An absolute ceiling on that wait, because the interesting case is a
+    /// device that answers only *some* of what it was asked: without a ceiling,
+    /// a pass waits forever for a reply that is never coming.
+    ///
+    /// The ceiling, and counting only the replies a round asked for, are
+    /// between them why this now finishes at all. The previous version waited
+    /// for the whole link to go quiet — but the app's own temperature poll
+    /// never stops, so the link was never quiet, the wait never ended, and not
+    /// one round ever closed. Seven minutes of running reported nothing
+    /// because nothing had been counted, not because the device had nothing
+    /// to say.
+    private static let maxPassWait: TimeInterval = 12
 
     private var history: [UInt8: [Round]] = [:]
     private var inFlight: [UInt8: [Data]] = [:]
-    /// Counted so a round can tell when the device has stopped answering — and
-    /// so a run that collects nothing says so instead of looking like a device
-    /// with nothing to say.
+    /// What this round asked for, so an answer can be told apart from the
+    /// app's own polling crossing the same link.
+    private var wanted: Set<UInt8> = []
+    /// Everything that arrived, which is what the screen shows: a round that
+    /// collects nothing should say so rather than looking like a device with
+    /// nothing to say.
     private var repliesThisRound = 0
+    /// Replies to attributes this round is still collecting. Quiet is judged on
+    /// this, not on everything that crosses the link.
+    private var usefulReplies = 0
     private var task: Task<Void, Never>?
 
     var elapsed: TimeInterval {
@@ -128,7 +145,12 @@ final class BatteryDecoder: ObservableObject {
         guard !running else { return }
         history = [:]
         inFlight = [:]
+        wanted = []
         rounds = 0
+        repliesThisRound = 0
+        usefulReplies = 0
+        lastRoundReplies = 0
+        lastRoundAttributes = 0
         batterySeen = []
         candidates = []
         summaries = []
@@ -156,66 +178,94 @@ final class BatteryDecoder: ObservableObject {
     private func runRound() async {
         let viewModel = PaxDeviceViewModel.shared
         guard viewModel.canSendCommands else { return }
-        inFlight = [:]
-        repliesThisRound = 0
         let list = watched
+        guard !list.isEmpty else { return }
+        inFlight = [:]
+        wanted = Set(list)
+        repliesThisRound = 0
+        usefulReplies = 0
 
         for _ in 0..<Self.readsPerRound {
-            guard running, !Task.isCancelled else { return }
+            guard running, !Task.isCancelled else { break }
             // In batches, because the device answers each attribute separately
             // and a request naming eight produces eight replies.
             for batch in stride(from: 0, to: list.count, by: 8) {
-                let slice = Array(list[batch..<min(list.count, batch + 8)])
-                viewModel.requestRawAttributes(slice)
+                viewModel.requestRawAttributes(Array(list[batch..<min(list.count, batch + 8)]))
             }
-            try? await Task.sleep(nanoseconds: UInt64(Self.readSpacing * 1_000_000_000))
-        }
-
-        // Then wait for the answers, rather than closing the round on the
-        // schedule that sent the questions. Asking for N attributes three times
-        // is 3N replies arriving at whatever rate the link manages, which is
-        // far longer than it took to ask — the first version closed the round
-        // immediately and discarded almost everything it had requested.
-        var quietFor = 0.0
-        var lastCount = -1
-        while running, !Task.isCancelled, quietFor < Self.quietPeriod {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            if repliesThisRound == lastCount {
-                quietFor += 0.3
-            } else {
-                lastCount = repliesThisRound
-                quietFor = 0
-            }
-            // A ceiling, so a device that answers nothing does not hang here.
-            if quietFor >= Self.quietPeriod { break }
+            // Then wait for this pass to be answered before asking again,
+            // rather than sending all three on a timer and hoping. Asking for N
+            // attributes produces N replies at whatever rate the link manages,
+            // which takes far longer than it took to ask.
+            await drain()
         }
         closeRound()
     }
 
+    /// Wait until the replies this round asked for stop arriving, or until the
+    /// ceiling, whichever comes first.
+    private func drain() async {
+        let deadline = Date().addingTimeInterval(Self.maxPassWait)
+        var quietFor = 0.0
+        var lastUseful = usefulReplies
+        while running, !Task.isCancelled, Date() < deadline, quietFor < Self.quietPeriod {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if usefulReplies == lastUseful {
+                quietFor += 0.25
+            } else {
+                lastUseful = usefulReplies
+                quietFor = 0
+            }
+        }
+    }
+
     /// Called for every decoded reply while a run is going, named or not.
-    func note(attribute: UInt8, payload: Data) {
+    ///
+    /// Most of what crosses this link is the app's own temperature poll rather
+    /// than an answer to anything asked here, so only the first few reads of
+    /// each attribute are kept: a round wants three reads to compare, and three
+    /// dozen temperatures would agree on nothing.
+    func record(attribute: UInt8, payload: Data) {
         guard running else { return }
-        inFlight[attribute, default: []].append(payload)
         repliesThisRound += 1
+        var reads = inFlight[attribute] ?? []
+        guard reads.count < Self.readsPerRound else { return }
+        reads.append(payload)
+        inFlight[attribute] = reads
+        if wanted.contains(attribute) { usefulReplies += 1 }
     }
 
     private func closeRound() {
-        let viewModel = PaxDeviceViewModel.shared
-        guard let battery = viewModel.batteryLevel else { return }
-        let charging = viewModel.isCharging == true
-        let now = Date()
-
-        for (attribute, reads) in inFlight where reads.count >= 2 {
-            let agreed = Self.agreedPrefix(of: reads)
-            guard !agreed.isEmpty else { continue }
-            history[attribute, default: []].append(
-                Round(at: now, battery: battery, charging: charging, agreed: agreed))
-        }
+        // Counted first and unconditionally. A round that collected nothing is
+        // a result — it is how a broken tool is told from a silent device — and
+        // the previous version's early return meant the screen said "0 rounds"
+        // either way.
         lastRoundReplies = repliesThisRound
         lastRoundAttributes = inFlight.count
-        inFlight = [:]
         rounds += 1
-        if !batterySeen.contains(battery) { batterySeen.append(battery) }
+
+        let viewModel = PaxDeviceViewModel.shared
+        if let battery = viewModel.batteryLevel {
+            let charging = viewModel.isCharging == true
+            let now = Date()
+            for (attribute, reads) in inFlight where reads.count >= 2 {
+                let agreed = Self.agreedPrefix(of: reads)
+                guard !agreed.isEmpty else { continue }
+                history[attribute, default: []].append(
+                    Round(at: now, battery: battery, charging: charging, agreed: agreed))
+            }
+            if !batterySeen.contains(battery) { batterySeen.append(battery) }
+            note = inFlight.isEmpty
+                ? "The device answered nothing this round — it may have gone to sleep."
+                : nil
+        } else {
+            // Counted, but not kept: a payload with no battery level beside it
+            // cannot be judged against the battery afterwards.
+            note = "No battery reading yet, so this round was not kept."
+        }
+        viewModel.log("Battery decode round \(rounds): \(repliesThisRound) replies, \(lastRoundAttributes) attributes",
+                      level: .info)
+        inFlight = [:]
+        wanted = []
         recompute()
     }
 
@@ -479,6 +529,7 @@ struct BatteryDecodeView: View {
                                    value: String(format: "%.0f ms", link.fastestGapMs))
                     LabeledContent("Notify to bytes",
                                    value: String(format: "%.0f ms", link.medianTurnaroundMs))
+                    LabeledContent("Asking", value: viewModel.fastLaneDescription)
                 } else {
                     Text("Not enough traffic yet.")
                         .font(.footnote)
@@ -487,7 +538,7 @@ struct BatteryDecodeView: View {
             } header: {
                 Text("Link speed")
             } footer: {
-                Text("Measured, not assumed. Every attribute costs a notification and then a read, so the gap between replies is what decides how fast the dial can move — and the poll now runs at whatever this turns out to be rather than at a rate written into the app.")
+                Text("Measured, not assumed. Every attribute costs a notification and then a read, so the gap between replies is what decides how fast the dial can move — and the poll now runs at whatever this turns out to be rather than at a rate written into the app. Read the rate next to what it says under Asking: while the oven is working there are two requests in the air at once, and while it is idle there is deliberately one, so a round-trip-shaped number here is the loop behaving, not failing. A benchmark run also fills this window with its own one-at-a-time traffic for two minutes afterwards.")
             }
 
             if decoder.rounds > 0 {
@@ -517,6 +568,12 @@ struct BatteryDecodeView: View {
     private var runNote: String {
         guard viewModel.canSendCommands || decoder.running else {
             return "Connect to the PAX to run this."
+        }
+        if let note = decoder.note {
+            return note
+        }
+        if decoder.running && decoder.rounds == 0 {
+            return "Collecting the first round. It takes up to half a minute — if it is still on zero after two, the device has stopped answering."
         }
         if decoder.running && !decoder.hasBatterySpan {
             return "Reading every addressable attribute, three times each, every 30 seconds. Nothing is written. Leave it running while you use the PAX — until the battery has moved at least one step, nothing here can tell a voltage from a number that happens to sit in the right range."
