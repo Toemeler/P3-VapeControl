@@ -96,6 +96,11 @@ struct ControlView: View {
                 .padding(.horizontal, 13)
                 .frame(height: DS.Metric.capsuleHeight)
                 .background(DS.Palette.fill, in: Capsule())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Battery")
+                .accessibilityValue(viewModel.isCharging == true
+                                    ? "\(battery) percent, charging"
+                                    : "\(battery) percent")
             }
 
             Spacer(minLength: 0)

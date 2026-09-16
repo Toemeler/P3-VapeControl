@@ -36,6 +36,8 @@ struct TemperatureDial<Center: View>: View {
     /// The running session and the running charge, for the time ring.
     let session: DialTiming
     private let center: Center
+    /// Only for reading the temperature aloud in the right unit.
+    @EnvironmentObject private var settings: AppSettings
 
     init(current: Double?,
          target: Double,
@@ -132,7 +134,7 @@ struct TemperatureDial<Center: View>: View {
         .gesture(scrub)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Target temperature")
-        .accessibilityValue(String(format: "%.0f degrees Celsius", target))
+        .accessibilityValue(settings.temperatureUnit.spoken(target))
         .accessibilityAdjustableAction { direction in
             let next = direction == .increment ? target + 1 : target - 1
             let clamped = min(DS.Range.max, max(DS.Range.min, next))

@@ -240,6 +240,18 @@ enum TemperatureUnit: String {
         }
     }
 
+    /// How VoiceOver should read a temperature. The degree symbol is not a
+    /// word, and the dial used to say "degrees Celsius" whatever unit the user
+    /// had chosen — so with Fahrenheit selected it read the right number and
+    /// named the wrong scale.
+    func spoken(_ celsius: Double) -> String {
+        let value = Int(convert(celsius: celsius).rounded())
+        switch self {
+        case .celsius:    return "\(value) degrees Celsius"
+        case .fahrenheit: return "\(value) degrees Fahrenheit"
+        }
+    }
+
     func format(_ celsius: Double, decimals: Int = 0, includeSymbol: Bool = true) -> String {
         let value = String(format: "%.\(decimals)f", convert(celsius: celsius))
         return includeSymbol ? value + symbol : value
