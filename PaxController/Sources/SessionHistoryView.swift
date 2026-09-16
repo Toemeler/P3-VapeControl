@@ -9,9 +9,11 @@ import SwiftUI
 /// gap in the connection.
 struct SessionHistoryView: View {
     @ObservedObject private var store = PaxSessionStore.shared
+    @ObservedObject private var chargeStore = PaxChargeStore.shared
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingClear = false
+    @State private var confirmingChargeClear = false
     @State private var measure: SessionChartMeasure = .sessions
 
     private var accent: Color { DS.Palette.accent }
@@ -71,6 +73,8 @@ struct SessionHistoryView: View {
                 }
             }
 
+            chargingSection
+
             ForEach(store.sessions) { session in
                 Section {
                     NavigationLink {
@@ -112,6 +116,50 @@ struct SessionHistoryView: View {
         } message: {
             Text("This cannot be undone. Nothing is stored anywhere but on this phone, so there is no copy to fall back on.")
         }
+        .confirmationDialog("Delete every recorded charge?",
+                            isPresented: $confirmingChargeClear, titleVisibility: .visible) {
+            Button("Delete all", role: .destructive) { chargeStore.deleteAll() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This cannot be undone.")
+        }
+    }
+
+    /// What the charger has been doing. The device never says how long it has
+    /// been filling or how fast, so this is the app's own record of it — the
+    /// same bargain as the sessions above, and the only way to know whether a
+    /// charge is taking longer than it used to.
+    @ViewBuilder
+    private var chargingSection: some View {
+        let finished = chargeStore.finished
+        if !finished.isEmpty {
+            Section {
+                HStack(spacing: 12) {
+                    SessionStatTile(value: "\(finished.count)", label: "charges")
+                    SessionStatTile(value: averageTo(100), label: "to full")
+                    SessionStatTile(value: averageTo(80), label: "to 80%")
+                    SessionStatTile(value: lastCharge, label: "last")
+                }
+                .padding(.vertical, 4)
+                ChargeCurveChart(charges: chargeStore.recentCurves())
+                    .padding(.top, 4)
+                Button("Delete all charges", role: .destructive) { confirmingChargeClear = true }
+            } header: {
+                Text("Charging")
+            } footer: {
+                Text("The newest charge is drawn in front. An average only counts charges that actually reached the level, since one unplugged early says nothing about how long it would have taken.")
+            }
+        }
+    }
+
+    private func averageTo(_ level: Int) -> String {
+        guard let seconds = chargeStore.averageSeconds(to: level) else { return "—" }
+        return PaxCharge.text(for: seconds)
+    }
+
+    private var lastCharge: String {
+        guard let latest = chargeStore.finished.first else { return "—" }
+        return latest.durationText
     }
 }
 

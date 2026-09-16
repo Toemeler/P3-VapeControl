@@ -31,17 +31,26 @@ struct ControlView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            if viewModel.connectionState.isConnected {
-                connected
-                    .transition(.opacity)
-            } else {
-                disconnected
-                    .transition(.opacity)
+        // The dial is authored at 380 points across, which is wider than an
+        // iPhone SE and taller than what is left on one once the presets and
+        // the mode tiles have had their share. One factor scales the whole
+        // dial rather than any ring being clipped or any row being pushed off
+        // the bottom: the screen keeps its proportions on every phone.
+        GeometryReader { geometry in
+            let scale = DS.Dial.scale(in: geometry.size)
+            VStack(spacing: 0) {
+                topBar
+                if viewModel.connectionState.isConnected {
+                    connected(scale: scale)
+                        .transition(.opacity)
+                } else {
+                    disconnected
+                        .transition(.opacity)
+                }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            .animation(.easeInOut(duration: 0.4), value: viewModel.connectionState.isConnected)
         }
-        .animation(.easeInOut(duration: 0.4), value: viewModel.connectionState.isConnected)
         .background(DS.Palette.canvas)
     }
 
@@ -156,9 +165,9 @@ struct ControlView: View {
 
     // MARK: - Connected
 
-    private var connected: some View {
+    private func connected(scale: CGFloat) -> some View {
         VStack(spacing: 0) {
-            dial
+            dial(scale: scale)
             targetRow
             presetRow
             Spacer(minLength: 0)
@@ -166,16 +175,16 @@ struct ControlView: View {
         }
     }
 
-    private var dial: some View {
+    private func dial(scale: CGFloat) -> some View {
         TemperatureDial(
             current: viewModel.actualTempC,
             target: viewModel.customTargetTempC,
             accent: DS.Palette.accent,
-            cadence: viewModel.temperatureCadence,
             batteryLevel: viewModel.batteryLevel,
             isCharging: viewModel.isCharging == true,
             heatingState: viewModel.heatingState,
             drawStartedAt: viewModel.drawStartedAt,
+            session: viewModel.dialTiming,
             onScrub: { viewModel.customTargetTempC = $0 },
             onCommit: { celsius in
                 guard canSendCommands else { return }
@@ -191,6 +200,10 @@ struct ControlView: View {
         .overlay(alignment: .bottomTrailing) {
             rangeLabel(DS.Range.max).padding(.trailing, 46).padding(.bottom, 30)
         }
+        // Scaled as one piece, so the rings, the ticks and the readout keep
+        // their relationship to each other whatever the phone.
+        .scaleEffect(scale)
+        .frame(width: DS.Dial.canvas * scale, height: DS.Dial.canvas * scale)
     }
 
     private func rangeLabel(_ celsius: Double) -> some View {
@@ -226,6 +239,12 @@ struct ControlView: View {
                     .font(.system(size: 21, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
+            // The time ring's inner edge is at 108 points. A readout wide
+            // enough to reach it would be the one thing on this dial that can
+            // still collide, so it is capped and shrinks instead.
+            .frame(maxWidth: DS.Dial.centreWidth)
+            .lineLimit(1)
+            .minimumScaleFactor(0.62)
 
             // The one thing a person watching a warm-up actually wants, and the
             // app has had the data for it all along: readings twice a second,

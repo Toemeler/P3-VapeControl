@@ -205,7 +205,7 @@ final class AppSettings: ObservableObject {
         // own, and nobody should discover them by having the device behave
         // differently than it did yesterday.
         autoOffEnabled      = defaults.object(forKey: Key.autoOff) as? Bool ?? false
-        autoOffMinutes      = defaults.object(forKey: Key.autoOffMinutes) as? Int ?? 10
+        autoOffMinutes      = defaults.object(forKey: Key.autoOffMinutes) as? Int ?? 8
         doseLimitEnabled    = defaults.object(forKey: Key.doseLimit) as? Bool ?? false
         doseLimitDraws      = defaults.object(forKey: Key.doseDraws) as? Int ?? 6
         scheduleEnabled     = defaults.object(forKey: Key.scheduleOn) as? Bool ?? false

@@ -4,6 +4,14 @@ import UIKit
 /// The thermostat dial: the filled arc is the oven's current temperature, the
 /// white marker is where the target sits, and the four dots are the PAX
 /// presets. Dragging anywhere on the ring moves the target.
+///
+/// Four rings, nested: the oven outermost, the warm-up climb just inside it,
+/// the battery inside that, and the time ring innermost — a session off the
+/// charger, a charge on it. All of them are drawn into one `Canvas` from one
+/// `DialEngine` pass per frame, rather than as a stack of shapes each running
+/// its own animation. That is what lets them move continuously instead of
+/// easing to a value and stopping, and it is the only way the thickness of a
+/// ring can stand for how long something has been going on.
 struct TemperatureDial<Center: View>: View {
 
     /// Live oven temperature. `nil` leaves the arc empty.
@@ -16,10 +24,6 @@ struct TemperatureDial<Center: View>: View {
     let onScrub: (Double) -> Void
     /// Called once when the finger lifts, so only one packet is written.
     let onCommit: (Double) -> Void
-    /// How far apart the readings behind `current` are. The arc interpolates
-    /// over slightly longer than this, so it is still travelling towards one
-    /// reading when the next arrives.
-    let cadence: Double
     /// 0…100. The battery ring's thickness is the reading: a full battery is a
     /// hairline, an empty one is heavy.
     let batteryLevel: Int?
@@ -29,46 +33,39 @@ struct TemperatureDial<Center: View>: View {
     /// When the current draw began, so the ring's growth is measured against
     /// the draw itself rather than against an animation's own duration.
     let drawStartedAt: Date?
+    /// The running session and the running charge, for the time ring.
+    let session: DialTiming
     private let center: Center
-    @State private var isScrubbing = false
 
     init(current: Double?,
          target: Double,
          accent: Color,
-         cadence: Double = 1,
          batteryLevel: Int? = nil,
          isCharging: Bool = false,
          heatingState: PaxHeatingState? = nil,
          drawStartedAt: Date? = nil,
+         session: DialTiming = DialTiming(),
          onScrub: @escaping (Double) -> Void,
          onCommit: @escaping (Double) -> Void,
          @ViewBuilder center: () -> Center) {
         self.current = current
         self.target = target
         self.accent = accent
-        self.cadence = cadence
         self.batteryLevel = batteryLevel
         self.isCharging = isCharging
         self.heatingState = heatingState
         self.drawStartedAt = drawStartedAt
+        self.session = session
         self.onScrub = onScrub
         self.onCommit = onCommit
         self.center = center()
     }
 
-    /// Long enough to carry the arc into the next reading, short enough that it
-    /// is never chasing one that has already been replaced.
-    private var travel: Double { min(1.4, cadence * 1.15) }
-
-    /// Drives the highlight that travels around the battery ring while it
-    /// charges. Started on appear so the rotation is already running whenever
-    /// the ring becomes visible.
-    @State private var chargeSpin = false
-    /// 0 while the rings are absent, 1 once they have drawn themselves on.
-    /// Every trim is multiplied by it, so one value stages the whole arrival.
-    @State private var reveal: Double = 0
-    /// Drives the slow pulse of a nearly flat battery.
-    @State private var lowBreath = false
+    @Environment(\.colorScheme) private var colorScheme
+    /// The dial's motion, kept between frames. Deliberately not observable:
+    /// advancing it must not invalidate the view that is drawing it.
+    @State private var engine = DialEngine()
+    @State private var isScrubbing = false
     /// The last whole degree the finger crossed, so a detent fires per degree
     /// rather than per touch event.
     @State private var lastDetent: Int?
@@ -79,31 +76,48 @@ struct TemperatureDial<Center: View>: View {
 
     private var side: CGFloat { DS.Dial.canvas }
     private var mid: CGFloat { side / 2 }
-    /// The trimmed fraction of a full circle that the 270-degree arc covers.
-    private var sweepFraction: Double { DS.Dial.sweep / 360 }
+
+    private var input: DialInput {
+        DialInput(current: current,
+                  target: target,
+                  batteryLevel: batteryLevel,
+                  isCharging: isCharging,
+                  heatingState: heatingState,
+                  drawStartedAt: drawStartedAt,
+                  isScrubbing: isScrubbing,
+                  sessionStartedAt: session.sessionStartedAt,
+                  sessionDraws: session.draws,
+                  drawMarks: session.drawMarks,
+                  lastDrawAt: session.lastDrawAt,
+                  autoOffEnabled: session.autoOffEnabled,
+                  autoOffMinutes: session.autoOffMinutes,
+                  chargeStartedAt: session.chargeStartedAt,
+                  chargeMarks: session.chargeMarks)
+    }
+
+    /// Full rate while anything is moving, a slow idle otherwise. Never paused:
+    /// a paused timeline holds its date, so a reading that arrived during the
+    /// pause would be drawn as a jump rather than a movement.
+    private var interval: Double {
+        input.isLively || !engine.isResting ? 1.0 / 60 : 1.0 / 8
+    }
 
     var body: some View {
+        let input = self.input
+        let palette = DialPalette(scheme: colorScheme, accent: accent)
         ZStack {
-            track
-            aboveVendorMax
-            batteryRing
-            warmUp
-            progress
-            presetTicks
-            targetMarker
+            TimelineView(.animation(minimumInterval: interval, paused: false)) { timeline in
+                let frame = engine.frame(at: timeline.date, input: input, palette: palette)
+                Canvas { context, size in
+                    render(frame, palette: palette, into: &context, size: size)
+                }
+            }
             center
         }
         .onAppear {
-            chargeSpin = true
             detent.prepare()
             landed.prepare()
-            // The rings draw themselves on rather than appearing complete. It
-            // happens every time the device is picked up, which makes it the
-            // moment in this app most worth spending on.
-            withAnimation(.easeOut(duration: 0.75)) { reveal = 1 }
-            if isLowBattery { lowBreath = true }
         }
-        .onChange(of: isLowBattery) { low in lowBreath = low }
         .onChange(of: heatingState) { state in
             guard state == .ready else { return }
             // The haptic stays: reaching temperature, and finishing a draw, are
@@ -127,214 +141,204 @@ struct TemperatureDial<Center: View>: View {
         }
     }
 
-    // MARK: - Ring
+    // MARK: - Drawing
 
-    private var track: some View {
-        Circle()
-            .trim(from: 0, to: CGFloat(sweepFraction) * reveal)
-            .stroke(DS.Palette.track,
-                    style: StrokeStyle(lineWidth: DS.Dial.stroke, lineCap: .round))
-            .rotationEffect(.degrees(DS.Dial.startAngle))
-            .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
+    private func render(_ frame: DialFrame, palette: DialPalette,
+                        into context: inout GraphicsContext, size: CGSize) {
+        let centre = CGPoint(x: size.width / 2, y: size.height / 2)
+
+        track(frame, palette, &context, centre)
+        battery(frame, palette, &context, centre)
+        timeRing(frame, palette, &context, centre)
+        warmUp(frame, palette, &context, centre)
+        oven(frame, palette, &context, centre)
+        ticks(frame, palette, &context, centre)
+        marker(frame, palette, &context, centre)
     }
 
-    // MARK: - Battery
+    private func track(_ f: DialFrame, _ palette: DialPalette,
+                       _ context: inout GraphicsContext, _ centre: CGPoint) {
+        context.stroke(arc(centre, DS.Dial.radius, 0, f.revealTrack),
+                       with: .color(palette.track),
+                       style: stroked(DS.Dial.stroke))
 
-    /// How thick the battery's ring is drawn. The reading is the thickness
-    /// rather than a number: nearly full is a hairline you stop noticing,
-    /// nearly empty is heavy and red, and charging is always substantial.
-    private var batteryStroke: CGFloat {
-        guard let level = batteryLevel else { return 0 }
-        let emptiness = 1 - min(1, max(0, CGFloat(level) / 100))
-        let resting = DS.Dial.batteryStrokeFull
-            + (DS.Dial.batteryStrokeEmpty - DS.Dial.batteryStrokeFull) * emptiness
-        return isCharging ? max(resting, DS.Dial.batteryStrokeCharging) : resting
-    }
-
-    private var batteryColour: Color {
-        if isCharging { return DS.Palette.charge }
-        guard let level = batteryLevel, level <= 15 else {
-            return Color.secondary.opacity(0.45)
-        }
-        return DS.Palette.low
-    }
-
-    @ViewBuilder
-    private var batteryRing: some View {
-        if let level = batteryLevel {
-            let diameter = (DS.Dial.radius - DS.Dial.batteryInset) * 2
-            let filled = CGFloat(min(100, max(0, level))) / 100
-            ZStack {
-                Circle()
-                    .trim(from: 0, to: CGFloat(sweepFraction) * reveal)
-                    .stroke(DS.Palette.track.opacity(0.5),
-                            style: StrokeStyle(lineWidth: batteryStroke, lineCap: .round))
-                Circle()
-                    .trim(from: 0, to: CGFloat(sweepFraction) * filled * reveal)
-                    .stroke(batteryColour,
-                            style: StrokeStyle(lineWidth: batteryStroke, lineCap: .round))
-                if isCharging {
-                    // A highlight travelling the ring: charging is current
-                    // moving, not a level rising, so nothing here changes length.
-                    Circle()
-                        .trim(from: 0, to: 0.06)
-                        .stroke(Color.white.opacity(0.35),
-                                style: StrokeStyle(lineWidth: batteryStroke, lineCap: .round))
-                        .rotationEffect(.degrees(chargeSpin ? 360 : 0))
-                        .animation(.linear(duration: 2.6).repeatForever(autoreverses: false),
-                                   value: chargeSpin)
-                        .mask(
-                            Circle()
-                                .trim(from: 0, to: CGFloat(sweepFraction) * filled)
-                                .stroke(Color.black,
-                                        style: StrokeStyle(lineWidth: batteryStroke, lineCap: .round))
-                                .rotationEffect(.degrees(DS.Dial.startAngle))
-                                .frame(width: diameter, height: diameter)
-                        )
-                }
-            }
-            .rotationEffect(.degrees(DS.Dial.startAngle))
-            .frame(width: diameter, height: diameter)
-            .animation(.easeOut(duration: 0.75).delay(0.24), value: reveal)
-            .animation(.easeInOut(duration: 0.9), value: batteryStroke)
-            .animation(.easeInOut(duration: 0.9), value: filled)
-            .opacity(lowBreath ? 0.62 : 1)
-            .animation(lowBreath
-                       ? .easeInOut(duration: 2.4).repeatForever(autoreverses: true)
-                       : .easeOut(duration: 0.3),
-                       value: lowBreath)
+        // Past where PAX's own app stopped. Drawn on the track so the end of
+        // the dial reads differently from the rest of it.
+        let beyond = DS.Range.fraction(of: DS.Range.vendorMax)
+        if f.revealTrack > beyond {
+            context.stroke(arc(centre, DS.Dial.radius, beyond, f.revealTrack),
+                           with: .color(palette.beyondMax),
+                           style: StrokeStyle(lineWidth: DS.Dial.stroke, lineCap: .butt))
         }
     }
 
-    private var isLowBattery: Bool {
-        guard let level = batteryLevel, !isCharging else { return false }
-        return level <= 15
+    private func battery(_ f: DialFrame, _ palette: DialPalette,
+                         _ context: inout GraphicsContext, _ centre: CGPoint) {
+        guard f.batteryVisible, f.batteryStroke > 0.2 else { return }
+        let radius = DS.Dial.radius - DS.Dial.batteryInset
+        let width = f.batteryStroke
+
+        context.stroke(arc(centre, radius, 0, f.revealBattery),
+                       with: .color(palette.trackSoft),
+                       style: stroked(width))
+        let filled = f.batteryTrim * f.revealBattery
+        context.stroke(arc(centre, radius, 0, filled),
+                       with: .color(f.batteryColor),
+                       style: stroked(width))
+
+        guard f.chargeHighlight > 0.01, filled > 0.02 else { return }
+        // The highlight travels the filled part rather than the whole ring:
+        // charging is current moving, and the length of the arc is the level,
+        // which the highlight must not appear to change.
+        let lap = (f.chargeSpinDegrees / 360).truncatingRemainder(dividingBy: 1)
+        let head = lap * filled
+        context.stroke(arc(centre, radius, max(0, head - 0.06), head),
+                       with: .color(.white.opacity(0.35 * f.chargeHighlight)),
+                       style: stroked(width))
     }
 
-    // MARK: - Oven
+    private func timeRing(_ f: DialFrame, _ palette: DialPalette,
+                          _ context: inout GraphicsContext, _ centre: CGPoint) {
+        guard f.timeOpacity > 0.01 else { return }
+        let radius = DS.Dial.timeRadius
+        let width = max(DS.Dial.timeStrokeBase, f.timeStroke)
 
-    /// How thick the oven's ring is at this instant.
-    ///
-    /// It grows for as long as the draw lasts and never settles at a width:
-    /// an ease that finishes leaves the ring sitting still halfway through a
-    /// long pull, which reads as the app having lost interest. The curve is
-    /// logarithmic, so it is always climbing and never runs away — quick at
-    /// first, then slower, the way a long breath feels.
-    ///
-    /// The release is not animated. It ends the moment the draw does.
-    private func liveStroke(at now: Date) -> CGFloat {
-        guard heatingState == .boosting, let started = drawStartedAt else { return DS.Dial.stroke }
-        let elapsed = max(0, now.timeIntervalSince(started))
-        let growth = log1p(elapsed / DS.Dial.inhaleTimeConstant)
-        return DS.Dial.stroke + DS.Dial.inhaleGrowth * CGFloat(growth)
-    }
+        context.stroke(arc(centre, radius, 0, f.revealTime),
+                       with: .color(palette.trackSoft.opacity(0.55 * f.timeOpacity)),
+                       style: stroked(1.5))
+        context.stroke(arc(centre, radius, 0, f.timeTrim * f.revealTime),
+                       with: .color(f.timeColor.opacity(f.timeOpacity)),
+                       style: stroked(width))
 
-    private var progress: some View {
-        // A clock rather than an animation: the width is recomputed each frame
-        // from how long the draw has actually been going, and the schedule
-        // stops running the moment it ends.
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: heatingState != .boosting)) { timeline in
-            Circle()
-                .trim(from: 0, to: CGFloat(sweepFraction * DS.Range.fraction(of: current ?? DS.Range.min)) * reveal)
-                .stroke(accent,
-                        style: StrokeStyle(lineWidth: liveStroke(at: timeline.date), lineCap: .round))
-                .rotationEffect(.degrees(DS.Dial.startAngle))
-                .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
-                // Linear, and just longer than the gap between readings, so the arc
-                // is still travelling towards one temperature when the next
-                // arrives: it moves continuously rather than stepping and settling.
-                .animation(.linear(duration: travel), value: current)
-                .animation(.easeOut(duration: 0.75), value: reveal)
-                // Brightens under the finger, so the ring reads as grabbed rather
-                // than as a picture being pointed at.
-                .shadow(color: accent.opacity(isScrubbing ? 0.55 : 0), radius: 10)
-                .animation(.easeOut(duration: 0.2), value: isScrubbing)
+        // The fuse: what is left of the auto-off window, sitting at the leading
+        // edge where the eye already is. Every draw refills it.
+        if f.fuseOpacity > 0.01, f.fuseEnd > f.fuseStart {
+            context.stroke(arc(centre, radius,
+                               f.fuseStart * f.revealTime, f.fuseEnd * f.revealTime),
+                           with: .color(palette.brighten(f.timeColor, 0.7).opacity(f.fuseOpacity)),
+                           style: stroked(width + 2.5))
+        }
+
+        // One bead per draw — or per ten percent of a charge — standing where
+        // it happened. The arc is a timeline, so the events belong on it.
+        guard f.revealTime > 0.4 else { return }
+        let size = max(1.4, min(DS.Dial.timeBead, width * 0.42))
+        let colour = palette.brighten(f.timeColor, 0.85).opacity(0.9 * f.timeOpacity)
+        for bead in f.beads where bead <= f.timeTrim + 0.001 {
+            let at = point(centre, radius, bead * f.revealTime)
+            context.fill(Path(ellipseIn: CGRect(x: at.x - size, y: at.y - size,
+                                                width: size * 2, height: size * 2)),
+                         with: .color(colour))
         }
     }
 
-    /// The climb from cold to the bottom of the scale, on a ring of its own
-    /// just inside the main one. Most of a warm-up happens below 180 °C, where
-    /// the main arc has nothing to draw.
-    private var warmUp: some View {
-        let celsius = current ?? DS.WarmUp.floor
-        let filled = DS.WarmUp.fraction(of: celsius)
-        let diameter = (DS.Dial.radius - DS.Dial.warmUpInset) * 2
-        return Circle()
-            .trim(from: 0, to: CGFloat(sweepFraction * filled) * reveal)
-            .stroke(accent.opacity(heatingState == .heating ? 0.75 : 0.4),
-                    style: StrokeStyle(lineWidth: DS.Dial.warmUpStroke, lineCap: .round))
-            .rotationEffect(.degrees(DS.Dial.startAngle))
-            .frame(width: diameter, height: diameter)
-            .animation(.easeOut(duration: 0.75).delay(0.12), value: reveal)
-            // Fades out as the main arc takes over, rather than vanishing the
-            // moment the oven crosses 180.
-            .opacity(celsius >= DS.Range.min ? 0 : 1)
-            .animation(.linear(duration: travel), value: current)
+    private func warmUp(_ f: DialFrame, _ palette: DialPalette,
+                        _ context: inout GraphicsContext, _ centre: CGPoint) {
+        guard f.warmOpacity > 0.01 else { return }
+        // The climb from cold to the bottom of the scale, on a ring of its own.
+        // Most of a warm-up happens below 180 °C, where the main arc has
+        // nothing to draw. It fades out as the main arc takes over rather than
+        // vanishing the moment the oven crosses 180.
+        let radius = DS.Dial.radius - DS.Dial.warmUpInset
+        let weight = heatingState == .heating ? 0.75 : 0.4
+        context.stroke(arc(centre, radius, 0, f.warmTrim * f.revealWarm),
+                       with: .color(palette.accent.opacity(weight * f.warmOpacity)),
+                       style: stroked(DS.Dial.warmUpStroke))
     }
 
-    /// Past where PAX's own app stopped. Drawn on the track so the end of the
-    /// dial reads differently from the rest of it.
-    private var aboveVendorMax: some View {
-        let start = DS.Range.fraction(of: DS.Range.vendorMax)
-        return Circle()
-            .trim(from: CGFloat(sweepFraction * start), to: CGFloat(sweepFraction))
-            .stroke(Color.orange.opacity(0.22),
-                    style: StrokeStyle(lineWidth: DS.Dial.stroke, lineCap: .butt))
-            .rotationEffect(.degrees(DS.Dial.startAngle))
-            .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
+    private func oven(_ f: DialFrame, _ palette: DialPalette,
+                      _ context: inout GraphicsContext, _ centre: CGPoint) {
+        let filled = f.heatTrim * f.revealTrack
+        guard filled > 0.0005 else { return }
+
+        // The bloom is what carries a long pull. The ring's width is bounded so
+        // it can never reach the presets; the bloom is not bounded by the same
+        // problem, because it is light rather than an edge — it keeps growing
+        // long after the width has all but settled, and it is drawn around the
+        // ring's fixed outer edge so it always fades well inside the canvas.
+        if f.bloom > 0.01 {
+            let edge = arc(centre, DS.Dial.outerEdge, 0, filled)
+            context.stroke(edge,
+                           with: .color(f.heatColor.opacity(0.07 * f.bloom)),
+                           style: stroked(18 * CGFloat(f.bloom)))
+            context.stroke(edge,
+                           with: .color(f.heatColor.opacity(0.16 * f.bloom)),
+                           style: stroked(10 * CGFloat(f.bloom)))
+        }
+
+        let path = arc(centre, f.heatRadius, 0, filled)
+        // Brightens under the finger, so the ring reads as grabbed rather than
+        // as a picture being pointed at.
+        if f.scrubGlow > 0.01 {
+            context.stroke(path,
+                           with: .color(f.heatColor.opacity(0.3 * f.scrubGlow)),
+                           style: stroked(f.heatStroke + 12 * CGFloat(f.scrubGlow)))
+        }
+        context.stroke(path, with: .color(f.heatColor), style: stroked(f.heatStroke))
     }
 
-    private var presetTicks: some View {
-        ForEach(PaxPresetTemp.allCases) { preset in
-            let anchor = ringPoint(for: Double(preset.rawValue), radius: DS.Dial.tickRadius)
-            Circle()
-                .fill(Color.secondary.opacity(0.55))
-                .frame(width: DS.Dial.tickDot * 2, height: DS.Dial.tickDot * 2)
-                .position(x: anchor.x, y: anchor.y)
-                .opacity(reveal)
-                .animation(.easeOut(duration: 0.4).delay(0.3), value: reveal)
+    private func ticks(_ f: DialFrame, _ palette: DialPalette,
+                       _ context: inout GraphicsContext, _ centre: CGPoint) {
+        guard f.revealTicks > 0.01 else { return }
+        let size = DS.Dial.tickDot
+        for preset in PaxPresetTemp.allCases {
+            let at = point(centre, DS.Dial.tickRadius,
+                           DS.Range.fraction(of: Double(preset.rawValue)))
+            context.fill(Path(ellipseIn: CGRect(x: at.x - size, y: at.y - size,
+                                                width: size * 2, height: size * 2)),
+                         with: .color(palette.tick.opacity(0.55 * f.revealTicks)))
         }
     }
 
-    private var targetMarker: some View {
-        let reach = DS.Dial.markerReach * 2
-        return ZStack {
-            Capsule()
-                .fill(Color.black.opacity(0.22))
-                .frame(width: reach, height: DS.Dial.markerShadowWidth)
-            Capsule()
-                .fill(Color.white)
-                .frame(width: reach, height: DS.Dial.markerWidth)
-        }
-        // Pushed out to the ring and then rotated about the dial's centre, so
-        // the only animatable quantity is the angle and the marker travels
-        // along the arc. Animating a .position instead interpolates the point
-        // in a straight line, which swings the marker across the dial's middle.
-        .offset(x: DS.Dial.radius)
-        .rotationEffect(.degrees(degrees(for: target)))
-        .scaleEffect(isScrubbing ? 1.3 : 1)
-        // A drag should track the finger exactly; easing it lags behind. When
-        // the finger is gone the marker springs, because the movement then
-        // stands for something physical arriving rather than data updating.
-        .animation(isScrubbing ? nil : .spring(response: 0.34, dampingFraction: 0.66),
-                   value: target)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isScrubbing)
-        .opacity(reveal)
-        .animation(.easeOut(duration: 0.5).delay(0.25), value: reveal)
+    private func marker(_ f: DialFrame, _ palette: DialPalette,
+                        _ context: inout GraphicsContext, _ centre: CGPoint) {
+        guard f.revealMarker > 0.01 else { return }
+        var marker = context
+        marker.opacity = f.revealMarker
+        marker.translateBy(x: centre.x, y: centre.y)
+        // Rotated about the dial's centre, so the marker travels along the arc.
+        // Interpolating its position instead would swing it across the middle.
+        marker.rotate(by: .degrees(f.markerAngle))
+
+        let scale = CGFloat(f.markerScale)
+        let reach = DS.Dial.markerReach * scale
+        let shadow = DS.Dial.markerShadowWidth * scale
+        let width = DS.Dial.markerWidth * scale
+        let x = DS.Dial.radius - reach
+        marker.fill(Path(roundedRect: CGRect(x: x, y: -shadow / 2,
+                                             width: reach * 2, height: shadow),
+                         cornerRadius: shadow / 2),
+                    with: .color(palette.markerShadow))
+        marker.fill(Path(roundedRect: CGRect(x: x, y: -width / 2,
+                                             width: reach * 2, height: width),
+                         cornerRadius: width / 2),
+                    with: .color(palette.marker))
     }
 
     // MARK: - Geometry
 
-    /// Screen-space angle of a temperature: 0 degrees is 3 o'clock and the
-    /// sweep runs clockwise, matching SwiftUI's rotation direction.
-    private func degrees(for celsius: Double) -> Double {
-        DS.Dial.startAngle + DS.Range.fraction(of: celsius) * DS.Dial.sweep
+    private func stroked(_ width: CGFloat) -> StrokeStyle {
+        StrokeStyle(lineWidth: max(0, width), lineCap: .round)
     }
 
-    private func ringPoint(for celsius: Double, radius: CGFloat) -> CGPoint {
-        let radians = degrees(for: celsius) * .pi / 180
-        return CGPoint(x: mid + radius * CGFloat(cos(radians)),
-                       y: mid + radius * CGFloat(sin(radians)))
+    /// An arc of the dial's 270-degree sweep, `from` and `to` in 0…1 of it.
+    private func arc(_ centre: CGPoint, _ radius: CGFloat,
+                     _ from: Double, _ to: Double) -> Path {
+        var path = Path()
+        let start = min(max(0, from), 1)
+        let end = min(max(0, to), 1)
+        guard radius > 0, end > start else { return path }
+        path.addArc(center: centre, radius: radius,
+                    startAngle: .degrees(DS.Dial.startAngle + start * DS.Dial.sweep),
+                    endAngle: .degrees(DS.Dial.startAngle + end * DS.Dial.sweep),
+                    clockwise: false)
+        return path
+    }
+
+    private func point(_ centre: CGPoint, _ radius: CGFloat, _ fraction: Double) -> CGPoint {
+        let radians = (DS.Dial.startAngle + min(max(0, fraction), 1) * DS.Dial.sweep) * .pi / 180
+        return CGPoint(x: centre.x + radius * CGFloat(cos(radians)),
+                       y: centre.y + radius * CGFloat(sin(radians)))
     }
 
     // MARK: - Dragging
@@ -386,4 +390,22 @@ struct TemperatureDial<Center: View>: View {
         }
         return (DS.Range.celsius(atFraction: travelled / DS.Dial.sweep)).rounded()
     }
+}
+
+/// What the time ring is timing: a session off the charger, a charge on it.
+///
+/// Passed as one value so the dial's signature does not grow a parameter every
+/// time the ring learns to read something else.
+struct DialTiming: Equatable {
+    var sessionStartedAt: Date?
+    var draws: Int = 0
+    /// When each draw happened, in seconds from the session's start.
+    var drawMarks: [TimeInterval] = []
+    var lastDrawAt: Date?
+    var autoOffEnabled: Bool = false
+    var autoOffMinutes: Int = 8
+
+    var chargeStartedAt: Date?
+    /// When each ten-percent step was crossed, in seconds from the start.
+    var chargeMarks: [TimeInterval] = []
 }

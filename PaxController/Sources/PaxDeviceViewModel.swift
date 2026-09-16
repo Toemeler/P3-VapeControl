@@ -306,6 +306,19 @@ final class PaxDeviceViewModel: ObservableObject {
         paxCharNotifyFound  = true
         paxCharNotifying    = true
 
+        // A session in progress. The time ring is one of the things worth
+        // seeing in a screenshot and it has nothing to draw without one: a
+        // quarter of an hour in, six draws deep, the last of them just now.
+        let started = Date().addingTimeInterval(-14 * 60)
+        // The fuse at the ring's leading edge is the auto-off countdown, and it
+        // has nothing to count without the timer on. The simulator this runs in
+        // has its own defaults, so nothing a real install chose is touched.
+        settings.autoOffEnabled = true
+        sessionStartedAt = started
+        sessionDraws     = 6
+        drawMarks        = [70, 205, 360, 520, 690, 815]
+        lastDrawAt       = started.addingTimeInterval(815)
+
         log("Demo fixture loaded", level: .info)
     }
 
@@ -1521,8 +1534,23 @@ final class PaxDeviceViewModel: ObservableObject {
     // MARK: - Sessions
 
     private let sessions = PaxSessionStore.shared
+    private let charges = PaxChargeStore.shared
     /// When the last draw ended, which is what the idle timer counts from.
-    private var lastDrawAt: Date?
+    /// Published because the dial counts from it too: the bright segment at the
+    /// leading edge of the time ring is what is left of the auto-off window,
+    /// and every draw refills it.
+    @Published private(set) var lastDrawAt: Date?
+    /// The running session, flattened to the handful of values a ring is drawn
+    /// from. The store owns the history; these are published so the screen
+    /// follows a session without reaching into it on every frame.
+    @Published private(set) var sessionStartedAt: Date?
+    @Published private(set) var sessionDraws: Int = 0
+    /// When each draw happened, in seconds from the session's start.
+    @Published private(set) var drawMarks: [TimeInterval] = []
+    /// The charge in progress, the same way: when it started, and when each
+    /// ten-percent step was crossed.
+    @Published private(set) var chargeStartedAt: Date?
+    @Published private(set) var chargeMarks: [TimeInterval] = []
     /// The last sample written to the running session's curve, so samples land
     /// a few seconds apart rather than twice a second.
     private var lastSampleAt: Date?
@@ -1536,6 +1564,19 @@ final class PaxDeviceViewModel: ObservableObject {
     /// The session on screen, if one is running.
     var runningSession: PaxSession? { sessions.running }
 
+    /// What the dial's time ring is timing. One lane, two meanings: a session
+    /// off the charger, a charge on it. The PAX is never both.
+    var dialTiming: DialTiming {
+        DialTiming(sessionStartedAt: sessionStartedAt,
+                   draws: sessionDraws,
+                   drawMarks: drawMarks,
+                   lastDrawAt: lastDrawAt,
+                   autoOffEnabled: settings.autoOffEnabled,
+                   autoOffMinutes: settings.autoOffMinutes,
+                   chargeStartedAt: chargeStartedAt,
+                   chargeMarks: chargeMarks)
+    }
+
     private func beginSession() {
         guard settings.sessionHistoryEnabled || settings.doseLimitEnabled
                 || settings.autoOffEnabled || settings.scheduleEnabled else { return }
@@ -1544,6 +1585,9 @@ final class PaxDeviceViewModel: ObservableObject {
         lastSampleAt = nil
         lastScheduledTemperature = nil
         sessions.begin(PaxSession(setPointC: targetTempC, modeRaw: dynamicMode?.rawValue))
+        sessionStartedAt = sessions.running?.startedAt
+        sessionDraws = 0
+        drawMarks = []
         log("Session started", level: .info)
         // A schedule's first step is the one that applies before any draw, and
         // it has to be written now rather than waiting for one.
@@ -1554,6 +1598,11 @@ final class PaxDeviceViewModel: ObservableObject {
         guard sessions.running != nil else { return }
         sessions.finishRunning(ending)
         log("Session ended: \(ending.label)", level: .info)
+        // The dial fades the ring out from whatever shape it had ended on, so
+        // these are cleared rather than wound back.
+        sessionStartedAt = nil
+        sessionDraws = 0
+        drawMarks = []
         lastDrawAt = nil
         lastSampleAt = nil
         lastScheduledTemperature = nil
@@ -1565,9 +1614,14 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     private func recordDraw() {
-        lastDrawAt = Date()
+        let now = Date()
+        lastDrawAt = now
         sessions.updateRunning { $0.draws += 1 }
         let draws = sessions.running?.draws ?? 0
+        if let start = sessionStartedAt {
+            drawMarks.append(now.timeIntervalSince(start))
+        }
+        sessionDraws = draws
         log("Draw \(draws)", level: .info)
         applyScheduleIfDue(draws: draws)
         enforceDoseLimit(draws: draws)
@@ -1590,6 +1644,51 @@ final class PaxDeviceViewModel: ObservableObject {
             $0.samples.append(PaxSession.Sample(at: offset, celsius: celsius))
             if celsius > ($0.peakTempC ?? -.infinity) { $0.peakTempC = celsius }
         }
+    }
+
+    // MARK: - Charges
+
+    /// A charge is the stretch on the dock, tracked for the same reason a
+    /// session is: the device reports a level and a flag, never how long it has
+    /// been filling or how fast. The dial's time ring reads this while the PAX
+    /// is charging, and the history turns it into a curve.
+    private func beginCharge() {
+        guard charges.running == nil, let level = batteryLevel else { return }
+        let charge = PaxCharge(startLevel: level)
+        charges.begin(charge)
+        chargeStartedAt = charge.startedAt
+        chargeMarks = []
+        log("Charge started at \(level)%", level: .info)
+    }
+
+    private func finishCharge() {
+        guard let running = charges.running else { return }
+        charges.finishRunning()
+        chargeStartedAt = nil
+        chargeMarks = []
+        log("Charge ended at \(running.endLevel)% after \(running.durationText)", level: .info)
+    }
+
+    /// One mark per ten percent. The step is what stops a wobbling reading
+    /// scattering beads around the ring, and it is what makes the spacing
+    /// between them mean something: bunched together is a battery drinking,
+    /// spread apart is one tapering off near the top.
+    private func recordChargeLevel(_ level: Int) {
+        guard isCharging == true else { return }
+        if charges.running == nil { beginCharge() }
+        guard let charge = charges.running else { return }
+        let at = Date().timeIntervalSince(charge.startedAt)
+        let step = PaxChargeStore.markStep
+        let crossed = (level / step) * step
+        let already = charge.marks.last?.level ?? ((charge.startLevel / step) * step)
+        charges.updateRunning {
+            $0.endLevel = max($0.endLevel, level)
+            if level >= 100 { $0.reachedFull = true }
+            if crossed > already, crossed > $0.startLevel {
+                $0.marks.append(PaxCharge.Mark(at: at, level: crossed))
+            }
+        }
+        chargeMarks = charges.running?.marks.map { $0.at } ?? []
     }
 
     // MARK: - The oven's own rules, on the app's terms
@@ -2008,7 +2107,10 @@ final class PaxDeviceViewModel: ObservableObject {
             }
         case .battery:
             batteryLevel = packet.batteryLevel
-            if let level = packet.batteryLevel { trackBattery(Double(level)) }
+            if let level = packet.batteryLevel {
+                trackBattery(Double(level))
+                recordChargeLevel(level)
+            }
             log("Battery: \(packet.batteryLevel.map { "\($0)%" } ?? "nil")", level: .info)
         case .chargeStatus:
             // Logged raw as well as interpreted: the byte carries two flags and
@@ -2023,6 +2125,11 @@ final class PaxDeviceViewModel: ObservableObject {
             let charging = (packet.payload.count >= 1 && packet.payload[packet.payload.startIndex] != 0)
             if charging != isCharging {
                 isCharging = charging
+                if charging {
+                    beginCharge()
+                } else {
+                    finishCharge()
+                }
                 #if PAX_LAB
                 labAutoCaptureIfNeeded()
                 #endif
@@ -2499,8 +2606,11 @@ final class PaxDeviceViewModel: ObservableObject {
         lastHeatingParamsWrite = nil
         // A session cannot be watched through a dropped link, so it ends here
         // and says why, rather than being left open and later reporting a
-        // duration that includes however long the phone was away.
+        // duration that includes however long the phone was away. A charge goes
+        // the same way, and for the same reason: what happened on the dock
+        // while the phone was gone is not something this app saw.
         finishSession(.disconnected)
+        finishCharge()
         pendingEnding = nil
         drawStartedAt = nil
         ovenPoweredOffByApp = false

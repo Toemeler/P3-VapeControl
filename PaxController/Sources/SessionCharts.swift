@@ -300,3 +300,81 @@ struct SessionStatTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+// MARK: - Charging
+
+/// How the last few charges actually went: level against how long it took to
+/// get there.
+///
+/// One line per charge, the most recent in front. The shape is the point — a
+/// lithium cell drinks fast and then tapers, and a battery that has started to
+/// go will show it here as a curve that leans over earlier than the ones
+/// behind it. The marks are the ten-percent crossings the app watched, not
+/// interpolation: where they bunch up the battery was filling quickly, where
+/// they spread out it was not.
+struct ChargeCurveChart: View {
+    let charges: [PaxCharge]
+    var height: CGFloat = 180
+
+    private struct Point {
+        let minute: Double
+        let level: Int
+    }
+
+    private func points(of charge: PaxCharge) -> [Point] {
+        var points = [Point(minute: 0, level: charge.startLevel)]
+        points.append(contentsOf: charge.marks.map { Point(minute: $0.at / 60, level: $0.level) })
+        return points
+    }
+
+    var body: some View {
+        Chart {
+            ForEach(Array(charges.enumerated()), id: \.element.id) { index, charge in
+                ForEach(Array(points(of: charge).enumerated()), id: \.offset) { _, point in
+                    LineMark(
+                        x: .value("Minute", point.minute),
+                        y: .value("Level", point.level),
+                        series: .value("Charge", charge.id.uuidString)
+                    )
+                    .interpolationMethod(.monotone)
+                    .lineStyle(StrokeStyle(lineWidth: index == 0 ? 2.2 : 1.2,
+                                           lineCap: .round, lineJoin: .round))
+                    // The most recent charge is the one being asked about; the
+                    // others are there to compare it against, so they recede.
+                    .foregroundStyle(index == 0
+                                     ? DS.Palette.charge
+                                     : Color.secondary.opacity(0.3))
+                }
+            }
+        }
+        .chartYScale(domain: 0...100)
+        .chartYAxis {
+            AxisMarks(position: .leading, values: [0, 50, 100]) { value in
+                AxisGridLine().foregroundStyle(.quaternary)
+                AxisValueLabel {
+                    if let level = value.as(Int.self) {
+                        Text("\(level)%").font(.caption2)
+                    }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks { value in
+                AxisGridLine().foregroundStyle(.quaternary)
+                AxisValueLabel {
+                    if let minutes = value.as(Double.self) {
+                        Text("\(Int(minutes))m").font(.caption2)
+                    }
+                }
+            }
+        }
+        .frame(height: height)
+        .accessibilityLabel("Charge curves")
+        .accessibilityValue(description)
+    }
+
+    private var description: String {
+        guard let latest = charges.first else { return "Nothing recorded" }
+        return "Last charge: \(latest.startLevel) to \(latest.endLevel) percent in \(latest.durationText)"
+    }
+}

@@ -26,20 +26,80 @@ enum DS {
         static let batteryStrokeEmpty: CGFloat = 13
         /// Charging always reads as substantial, whatever the level.
         static let batteryStrokeCharging: CGFloat = 11
-        /// How much thicker the oven's ring swells over a draw.
-        /// How far the oven's ring thickens over a draw. Not a target it
-        /// reaches and stops at — see `TemperatureDial.liveStroke`, which keeps
-        /// it climbing for as long as the draw lasts. This is the width of one
-        /// natural-log step, so the growth stays visible without running away:
-        /// about 7 pt after two seconds, 12 after five, 18 after fifteen.
-        static let inhaleGrowth: CGFloat = 7
-        /// The time constant of that climb. Smaller makes the first second
-        /// more dramatic.
-        static let inhaleTimeConstant: Double = 1.2
+        /// Where the oven's ring ends, and the one measurement on this dial
+        /// that never moves. A draw thickens the ring *inward* from here, so
+        /// no draw — however long — can push it into the preset dots or off
+        /// the canvas. The overflow is impossible by construction rather than
+        /// by choosing a swell that happens to fit.
+        static let outerEdge: CGFloat = radius + stroke / 2
+        /// How far the ring can thicken over a draw. It approaches this and
+        /// never reaches it (see `DialCurve.saturating`), so the width is
+        /// always still climbing while the draw lasts.
+        static let inhaleSwellMax: CGFloat = 9.5
+        /// Seconds to the half-way point of that climb. Smaller makes the
+        /// first second more dramatic.
+        static let inhaleHalfLife: Double = 2
+        /// The width keeps its bounds; the bloom around it is what carries a
+        /// long pull, and it grows on a much slower clock.
+        static let bloomHalfLife: Double = 6
+        /// Sub-point wobble at the top of a breath. A held lung is never still.
+        static let inhaleTremor: Double = 0.34
+        /// How far the battery ring's breath moves it, in points either way.
+        static let batteryBreathDepth: CGFloat = 1.6
+        /// The period of that breath: slow and shallow when there is charge to
+        /// spare, quick and deep when there is not.
+        static let batteryBreathSlow: Double = 3.4
+        static let batteryBreathFast: Double = 1.5
+        /// Seconds per revolution of the charging highlight, full and empty.
+        static let chargeSpinSlow: Double = 4.2
+        static let chargeSpinFast: Double = 2
+
+        /// The time ring, innermost. It times a session off the charger and a
+        /// charge on it — the PAX is never both, so the two share one lane and
+        /// the dial gains a reading without gaining a ring.
+        static let timeRadius: CGFloat = 114
+        static let timeStrokeBase: CGFloat = 2
+        static let timeStrokeMax: CGFloat = 12
+        /// How much of that width a long sitting adds, and how much a lot of
+        /// draws adds on top of it.
+        static let timeStrokeByTime: CGFloat = 5
+        static let timeStrokeByDraws: CGFloat = 3.5
+        /// The bump each draw lands as, before it decays back into the baseline.
+        static let timeStrokeDrawBump: CGFloat = 1.8
+        static let timeBead: CGFloat = 2.2
+        /// How long the arc takes to fill, as a time constant. It compresses,
+        /// so a session or a charge always has somewhere left to go.
+        static let sessionTau: Double = 14 * 60
+        static let sessionWeightTau: Double = 12 * 60
+        static let chargeTau: Double = 45 * 60
+        static let chargeWeightTau: Double = 25 * 60
+        /// The bright segment at the leading edge of a session's arc: what is
+        /// left of the auto-off window, refilled by every draw.
+        static let fuseSweep: Double = 26
+
+        /// How wide the readout in the middle is allowed to be. The innermost
+        /// ring's inner edge sits at 108 points; a box 184 wide and 110 tall
+        /// has its corners at 107, which is the largest readout that cannot
+        /// touch it.
+        static let centreWidth: CGFloat = 184
+
         /// Half the length of the radial target marker.
         static let markerReach: CGFloat = 13
         static let markerWidth: CGFloat = 4.5
         static let markerShadowWidth: CGFloat = 7
+
+        /// The dial is authored at `canvas` points across. On a narrower phone
+        /// — or a shorter one — everything is scaled by a single factor so the
+        /// layout keeps its proportions instead of being clipped.
+        static func scale(in size: CGSize) -> CGFloat {
+            let width = size.width - 2 * Metric.gutter
+            // What the rest of the connected screen needs below the dial: the
+            // target row, the presets, the mode tiles and their padding.
+            let reserved: CGFloat = Metric.topBarHeight + 262
+            let height = size.height - reserved
+            guard width > 0, height > 0 else { return 1 }
+            return Swift.min(1, Swift.min(width / canvas, height / canvas))
+        }
     }
 
     enum Metric {
