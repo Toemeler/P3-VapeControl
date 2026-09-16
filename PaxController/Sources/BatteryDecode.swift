@@ -111,15 +111,16 @@ final class BatteryDecoder: ObservableObject {
     /// Attributes per request. One StatusUpdate can name many, and each one
     /// named costs a reply.
     private static let batchWidth = 8
-    /// Three reads of every attribute, far enough apart to arrive as separate
-    /// replies. Whatever all three agree on is payload; the rest is buffer.
+    /// Three reads of every attribute, each pass sent only once the last one
+    /// has been answered. Whatever all three agree on is payload; the rest is
+    /// the uninitialised buffer behind it.
     private static let readsPerRound = 3
     /// How long the replies to one batch have to stop arriving before the next
     /// batch is sent.
     private static let quietPeriod: TimeInterval = 1.5
     /// An absolute ceiling on that wait, because the interesting case is a
     /// device that answers only *some* of what it was asked: without a ceiling,
-    /// a pass waits forever for a reply that is never coming.
+    /// a batch waits forever for a reply that is never coming.
     ///
     /// The ceiling, and counting only the replies a round asked for, are
     /// between them why this now finishes at all. The previous version waited
