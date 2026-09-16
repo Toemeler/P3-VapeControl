@@ -88,21 +88,23 @@ final class BatteryDecoder: ObservableObject {
     @Published private(set) var lastRoundReplies = 0
     @Published private(set) var lastRoundAttributes = 0
 
-    /// Attributes worth asking for: the ones the device said it implements,
-    /// plus a few it does not advertise but might still answer — `0x1A` above
-    /// all, which is unnamed even in PAX's own app and is the likeliest place
-    /// for something undocumented to be.
+    /// Every address the protocol can name: 1 through 63, the whole range the
+    /// 64-bit StatusUpdate bitfield can address.
     ///
-    /// Not all sixty-three. Asking for every address three times is 189 replies
-    /// against a link that carries a handful a second, which is more than a
-    /// round can collect — the first version did exactly that and threw away
-    /// nearly everything it asked for.
-    private var watched: [UInt8] {
-        let supported = PaxDeviceViewModel.shared.supportedAttributes
-        let extras: Set<UInt8> = [0x1A, 0x04, 0x05, 0x12, 0x24, 0x29, 0x2A]
-        guard !supported.isEmpty else { return Array(extras).sorted() }
-        return Array(supported.union(extras)).sorted()
-    }
+    /// Not just the ones the device advertises. Asking only those answers a
+    /// narrower question than the one worth asking — "is there anything the
+    /// firmware does not admit to" — and this protocol is known to have
+    /// attributes that are supported but undocumented, `0x1A` among them. A
+    /// sweep that trusts the device's own inventory cannot find what the
+    /// inventory leaves out.
+    ///
+    /// An earlier version did ask for all of them and collected almost nothing,
+    /// but that was not because the range was too wide: it fired every request
+    /// into a radio queue with no flow control and closed the round before the
+    /// answers arrived. One batch at a time, waiting for each, the width costs
+    /// only time — and most addresses answer nothing, so their batch ends on
+    /// the quiet period rather than on replies.
+    private var watched: [UInt8] { Array<UInt8>(1...63) }
 
     /// How often a round starts, on top of however long the round itself took.
     /// A voltage does not need watching faster than this, and the app is still
@@ -328,11 +330,14 @@ final class BatteryDecoder: ObservableObject {
     }
 
     /// Each distinct payload once, in the order it first appeared, with the
-    /// battery level and dock state it was first seen at. Long payloads are
-    /// skipped: a 22-byte HeatingParams in a list is noise, and the ones worth
-    /// reading by eye are the short flag bytes.
+    /// battery level and dock state it was first seen at.
+    ///
+    /// Sixteen bytes is the cutoff, not four: it was four, which meant the one
+    /// attribute with enough room to hide something interesting — HeaterRanges,
+    /// twelve bytes and undecoded — was the only one whose bytes never got
+    /// printed. A 33-byte ColorTheme in a list is still noise.
     private static func observedValues(of entries: [Round]) -> [String] {
-        guard let width = entries.map(\.agreed.count).max(), width <= 4 else { return [] }
+        guard let width = entries.map(\.agreed.count).max(), width <= 16 else { return [] }
         var seen: Set<Data> = []
         var out: [String] = []
         for entry in entries where !seen.contains(entry.agreed) {
@@ -531,7 +536,7 @@ struct BatteryDecodeView: View {
                 } header: {
                     Text("Everything that answered")
                 } footer: {
-                    Text("Bytes the reads agreed on, and how many distinct values each has taken. A tick means it has changed at least once — a constant cannot be a voltage. Short attributes list the values themselves next to the battery level they were seen at, which is what a flag byte has to be read against to mean anything.")
+                    Text("Every address from 1 to 63 is asked, not just the ones the device admits to supporting — this protocol has attributes that are supported and undocumented, so an inventory cannot rule out what it leaves out. Bytes the reads agreed on, and how many distinct values each has taken. A tick means it has changed at least once — a constant cannot be a voltage. Short attributes list the values themselves next to the battery level they were seen at, which is what a flag byte has to be read against to mean anything.")
                 }
             }
 
