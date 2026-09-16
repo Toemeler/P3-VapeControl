@@ -65,7 +65,8 @@ enum ThemeCatalog {
                    (.capsuleHeight, 38), (.headerHeight, 52), (.scaleStroke, 26),
                    (.sectionGap, 22)),
         accentFollowsLed: true,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "fills")
 
     // MARK: - Werkstatt
 
@@ -99,7 +100,8 @@ enum ThemeCatalog {
                    (.stepSize, 46), (.capsuleHeight, 34), (.headerHeight, 34),
                    (.scaleStroke, 8), (.sectionGap, 24)),
         accentFollowsLed: false,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "fills")
 
     // MARK: - Editorial
 
@@ -134,7 +136,8 @@ enum ThemeCatalog {
                    (.stepSize, 46), (.capsuleHeight, 30), (.headerHeight, 30),
                    (.scaleStroke, 3), (.sectionGap, 30)),
         accentFollowsLed: false,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "hairlines")
 
     // MARK: - Native
 
@@ -167,7 +170,8 @@ enum ThemeCatalog {
                    (.stepSize, 44), (.capsuleHeight, 34), (.headerHeight, 44),
                    (.scaleStroke, 4), (.sectionGap, 18)),
         accentFollowsLed: false,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "fills")
 
     // MARK: - Thermal
 
@@ -203,7 +207,8 @@ enum ThemeCatalog {
                    (.stepSize, 46), (.capsuleHeight, 34), (.headerHeight, 40),
                    (.scaleStroke, 50), (.sectionGap, 24)),
         accentFollowsLed: false,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "fills")
 
     // MARK: - Instrument
 
@@ -237,7 +242,8 @@ enum ThemeCatalog {
                    (.stepSize, 46), (.capsuleHeight, 34), (.headerHeight, 34),
                    (.scaleStroke, 11), (.sectionGap, 22)),
         accentFollowsLed: false,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "fills")
 
     // MARK: - Chart
 
@@ -271,7 +277,8 @@ enum ThemeCatalog {
                    (.stepSize, 44), (.capsuleHeight, 32), (.headerHeight, 34),
                    (.scaleStroke, 2), (.sectionGap, 16)),
         accentFollowsLed: false,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "hairlines")
 
     // MARK: - Surface
 
@@ -307,7 +314,8 @@ enum ThemeCatalog {
                    (.stepSize, 44), (.capsuleHeight, 34), (.headerHeight, 34),
                    (.scaleStroke, 2), (.sectionGap, 20)),
         accentFollowsLed: false,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "hairlines")
 
     // MARK: - Sentence
 
@@ -341,7 +349,8 @@ enum ThemeCatalog {
                    (.stepSize, 46), (.capsuleHeight, 34), (.headerHeight, 40),
                    (.scaleStroke, 4), (.sectionGap, 26)),
         accentFollowsLed: false,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "hairlines")
 
     // MARK: - Object
 
@@ -377,7 +386,8 @@ enum ThemeCatalog {
                    (.stepSize, 48), (.capsuleHeight, 30), (.headerHeight, 30),
                    (.scaleStroke, 9), (.sectionGap, 18)),
         accentFollowsLed: false,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "fills")
 
     // MARK: - Clock
 
@@ -411,5 +421,6 @@ enum ThemeCatalog {
                    (.stepSize, 46), (.capsuleHeight, 32), (.headerHeight, 34),
                    (.scaleStroke, 12), (.sectionGap, 30)),
         accentFollowsLed: false,
-        formatVersion: 1)
+        formatVersion: 1,
+        chrome: "hairlines")
 }

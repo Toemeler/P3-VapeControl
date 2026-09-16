@@ -134,6 +134,14 @@ enum ThemeLabelCase: String {
     case lower, sentence, upper
 }
 
+/// Whether a theme draws its containers as filled plates or as hairlines. Rows
+/// and lists read completely differently between the two, and it used to be
+/// inferred from the corner radius -- which held for the themes that ship here
+/// and would have quietly picked wrong for an imported one.
+enum ThemeChrome: String {
+    case fills, hairlines
+}
+
 // MARK: - Typography
 
 /// Every field is optional so a theme can name only what it cares about.
@@ -213,12 +221,21 @@ struct AppTheme: Codable, Equatable, Identifiable {
     /// treated as version 1.
     var formatVersion: Int?
 
+    /// "fills" or "hairlines". Absent falls back to the corner radius, which is
+    /// what this was inferred from before it could be stated.
+    var chrome: String?
+
     var shellKind: ThemeShell { ThemeShell(rawValue: shell ?? "") ?? .stacked }
     var heroKind: ThemeHero { ThemeHero(rawValue: hero ?? "") ?? .arc }
     var targetKind: ThemeTargetStyle { ThemeTargetStyle(rawValue: target ?? "") ?? .stepperRound }
     var presetKind: ThemePresetStyle { ThemePresetStyle(rawValue: presets ?? "") ?? .capsules }
     var modeKind: ThemeModeStyle { ThemeModeStyle(rawValue: modes ?? "") ?? .tiles }
     var followsLed: Bool { accentFollowsLed ?? false }
+
+    var chromeKind: ThemeChrome {
+        if let named = ThemeChrome(rawValue: chrome ?? "") { return named }
+        return (metrics?[MetricRole.radius.rawValue] ?? 18) > 4 ? .fills : .hairlines
+    }
 }
 
 // MARK: - Resolved tokens

@@ -206,7 +206,7 @@ struct ThemedHeader: View {
                     .background(inCircle ? t.plate : Color.clear, in: Circle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(off ? t.muted : t.color(.low))
+            .foregroundStyle(off ? t.muted : t.color(.heating))
             .accessibilityLabel(off ? "Switch the oven on" : "Switch the oven off")
         }
     }
@@ -817,11 +817,11 @@ struct ThemedModes: View {
                 if index > 0 {
                     Rectangle().fill(t.hairline)
                         .frame(height: t.hairlineWidth)
-                        .padding(.leading, t.radius > 4 ? 49 : 0)
+                        .padding(.leading, t.theme.chromeKind == .fills ? 49 : 0)
                 }
                 button(mode) {
                     HStack(spacing: 12) {
-                        if t.radius > 4 {
+                        if t.theme.chromeKind == .fills {
                             Image(systemName: mode.icon)
                                 .font(.system(size: 21))
                                 .foregroundStyle(isActive(mode) ? t.accent : t.muted)
@@ -832,23 +832,23 @@ struct ThemedModes: View {
                             Color.clear.frame(width: 14, height: 1)
                         }
                         Text(mode.label)
-                            .font(t.display(t.radius > 4 ? 17 : 19, .regular))
-                            .foregroundStyle(isActive(mode) ? (t.radius > 4 ? t.ink : t.accent) : t.muted)
+                            .font(t.display(t.theme.chromeKind == .fills ? 17 : 19, .regular))
+                            .foregroundStyle(isActive(mode) ? (t.theme.chromeKind == .fills ? t.ink : t.accent) : t.muted)
                         Spacer(minLength: 0)
-                        if isActive(mode) && t.radius > 4 {
+                        if isActive(mode) && t.theme.chromeKind == .fills {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(t.accent)
                         }
                     }
-                    .padding(.horizontal, t.radius > 4 ? 16 : 0)
+                    .padding(.horizontal, t.theme.chromeKind == .fills ? 16 : 0)
                     .frame(height: t.metric(.modeHeight))
                     .contentShape(Rectangle())
                 }
             }
         }
         .background(RoundedRectangle(cornerRadius: t.radius, style: .continuous)
-            .fill(t.radius > 4 ? t.plate : Color.clear))
+            .fill(t.theme.chromeKind == .fills ? t.plate : Color.clear))
         .padding(.horizontal, t.gutter)
     }
 
