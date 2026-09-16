@@ -175,6 +175,7 @@ struct ControlView: View {
             batteryLevel: viewModel.batteryLevel,
             isCharging: viewModel.isCharging == true,
             heatingState: viewModel.heatingState,
+            drawStartedAt: viewModel.drawStartedAt,
             onScrub: { viewModel.customTargetTempC = $0 },
             onCommit: { celsius in
                 guard canSendCommands else { return }
