@@ -110,7 +110,7 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 | `0x0A` | `DisplayName` | Both | 1 byte length + UTF-8 string |
 | `0x0D` | `Replay` | Both | Unknown |
 | `0x0F` | `GameMode` | Both | Unknown — supported by PAX 3 fw 2.0.4, which reports `0x00` |
-| `0x11` | `HeaterRanges` | Device → Host | Unknown format |
+| `0x11` | `HeaterRanges` | Device → Host | 12 bytes: 6 × LE `uint16`, °C × 10. Constant. See below |
 | `0x12` | `LogSyncRequest` | Both | Unknown |
 | `0x13` | `DynamicMode` | Both | 1 byte mode ID (PAX 3) |
 | `0x14` | `ColorTheme` | Both | **33 bytes: mode count + 4 modes × 8** (see below) |
@@ -486,14 +486,68 @@ The official app addresses 0x41, 0x4D, 0x50–0x53, 0x6D–0x70, 0x78, 0x88 and
 0x8C. StatusUpdate is a 64-bit bitfield, so no status request can ever ask for
 them. None are in this PAX 3's SupportedAttributes.
 
-## Open Uncertainties
+### SupportedAttributes, read in full — nothing exists above `0x20`
+
+`0x18` on PAX 3 fw 2.0.4 reads `CE 86 BA DF 01 00 00 00`. As the 64-bit LE
+bitfield it is, that is exactly 21 attributes:
+
+```
+0x01 0x02 0x03 0x06 0x07 0x09 0x0A 0x0F 0x11 0x13 0x14
+0x15 0x17 0x18 0x19 0x1A 0x1B 0x1C 0x1E 0x1F 0x20
+```
+
+**Bits 33 through 63 are all clear.** Every address from `0x21` to `0x3F` —
+including `0x24` SessionControl, `0x28` Haptics, `0x29` LogRequest, `0x2A`
+PodData and `0x36` FindMyPax — is unsupported, and a sweep of all 63 addresses
+confirms none of them answers.
+
+So within everything StatusUpdate can address, there is nothing undocumented
+left: no hidden battery voltage, no session log, no find-my-device. The app
+already reads every attribute this firmware exposes this way.
+
+The honest limit on that claim is the one in "Attributes above 63 exist and
+cannot be swept" below. The official app addresses `0x41`, `0x4D`, `0x50`–`0x53`,
+`0x6D`–`0x70`, `0x78`, `0x88` and `0x8C`. A 64-bit bitfield cannot name any of
+them, so no sweep of any kind can rule them in or out — and SupportedAttributes,
+being the same 64 bits wide, cannot advertise them either. What is settled is
+everything reachable by a status request. What is unreachable stays unreachable.
+
+### HeaterRanges (`0x11`) decoded
+
+Twelve bytes, six little-endian 16-bit words, °C × 10 — the same scale as every
+other temperature in this protocol. Measured `E8 03 C6 07 3E 08 B6 08 2E 09 92 09`:
+
+| Word | Raw | °C | °F |
+|---|---|---|---|
+| 0 | 1000 | 100.0 | 212.0 |
+| 1 | 1990 | 199.0 | 390.2 |
+| 2 | 2110 | 211.0 | 411.8 |
+| 3 | 2230 | 223.0 | 433.4 |
+| 4 | 2350 | 235.0 | 455.0 |
+| 5 | 2450 | 245.0 | 473.0 |
+
+The encoding is settled; the meaning of the slots is not. What can be said:
+
+- It is **constant**. It did not move across rounds, across a draw, or between
+  two sessions at different set points, so it is a firmware table and not live
+  state. Nothing in the app needs to poll it.
+- Words 1–4 are spaced **exactly 12.0 °C apart**, which is a ladder of some
+  kind rather than six unrelated numbers.
+- Word 0 (100.0 °C) and word 5 (245.0 °C) plausibly bracket what the heater
+  will accept, which is far wider than the 175–215 °C the app and the official
+  app both offer.
+
+**That last point is not an invitation to widen the range.** Cannabis combusts
+around 230 °C; words 4 and 5 are at or above it. Whatever the firmware will
+accept, 215 °C stays the app's ceiling.
 
 ### There is no cell voltage on this device
 
-Measured, not assumed. The app's battery decode read every attribute the device
-says it supports, three times a round, for 28 minutes, and listed the bytes each
-one settled on. Every attribute is accounted for, and none of them can hold a
-single-cell voltage:
+Measured, not assumed. The app's battery decode swept all 63 addresses a status
+request can name, three reads each per round, and listed the bytes every one of
+them settled on. Twenty-one answered — exactly the set SupportedAttributes
+advertises, with nothing extra — and none of them can hold a single-cell
+voltage:
 
 | Attribute | Bytes | Value seen | Why it cannot be a voltage |
 |---|---|---|---|
@@ -513,6 +567,8 @@ or a byte between roughly 30 and 42 (tenths). It is neither.
 
 So the 25% steps are the firmware's, not the app's, and there is nowhere finer
 to read from. Anything claiming better resolution on a PAX 3 is interpolating.
+
+## Open Uncertainties
 
 1. **Maximum packet length**: ColorTheme proves plaintext longer than one block
    works in both directions — 34 bytes out, 64-byte reads in — so the earlier
