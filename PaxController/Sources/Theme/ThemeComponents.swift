@@ -858,7 +858,7 @@ struct ThemedModes: View {
             ForEach(PaxDynamicMode.allCases) { mode in
                 button(mode) {
                     Text(t.labelText(mode.compactLabel))
-                        .font(t.body(13, isActive(mode) ? .semibold : .regular))
+                        .font(t.body(11.5, isActive(mode) ? .semibold : .regular))
                         .lineLimit(1)
                         .foregroundStyle(isActive(mode) ? t.accent : t.muted)
                         .padding(.bottom, 5)

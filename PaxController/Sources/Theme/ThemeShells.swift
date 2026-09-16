@@ -45,23 +45,34 @@ final class SessionRecorder: ObservableObject {
         draws.removeAll { $0 < cutoff }
     }
 
-    /// The trace, normalised into the unit square: x is time across the window,
+    /// How much time the plot actually covers: what has been recorded, growing
+    /// to the full window. Fixing it at five minutes drew a plot that was
+    /// ninety-five percent empty for the first few minutes of every session,
+    /// which reads as a broken chart rather than as a short one.
+    var span: TimeInterval {
+        guard let first = samples.first, let last = samples.last else { return 60 }
+        return max(45, min(Self.window, last.at.timeIntervalSince(first.at)))
+    }
+
+    /// The trace, normalised into the unit square: x is time across the span,
     /// y is temperature across the hero span.
     var points: [CGPoint] {
         guard let last = samples.last else { return [] }
         let end = last.at
+        let width = span
         return samples.map { sample in
             let age = end.timeIntervalSince(sample.at)
-            let x = 1 - min(1, age / Self.window)
+            let x = 1 - min(1, age / width)
             return CGPoint(x: CGFloat(x), y: CGFloat(HeroSpan.fraction(of: sample.celsius)))
         }
     }
 
     func drawPositions() -> [CGFloat] {
         guard let last = samples.last else { return [] }
+        let width = span
         return draws.map { moment in
             let age = last.at.timeIntervalSince(moment)
-            return CGFloat(1 - min(1, max(0, age / Self.window)))
+            return CGFloat(1 - min(1, max(0, age / width)))
         }
     }
 
@@ -172,17 +183,16 @@ struct StackedShell: View {
         VStack(spacing: 0) {
             ThemedHeader(context: context, style: .stacked, showDeviceSheet: $showDeviceSheet)
             hero
+            // The one flexible gap sits under the hero, so the controls stay a
+            // single group at the foot instead of being pushed apart by it.
+            Spacer(minLength: 0)
             ThemedTarget(context: context, style: t.theme.targetKind)
                 .padding(.top, t.metric(.sectionGap))
             ThemedPresets(context: context, style: t.theme.presetKind)
                 .padding(.top, t.metric(.sectionGap) * 0.6)
-            // Two spacers, not one: a single spacer before the modes put every
-            // leftover point into one gap, which on the shorter heroes left a
-            // void a third of the screen tall.
-            Spacer(minLength: 0)
             ThemedModes(context: context, style: t.theme.modeKind)
-            Spacer(minLength: 0)
-                .frame(maxHeight: 24)
+                .padding(.top, t.metric(.sectionGap))
+                .padding(.bottom, 12)
         }
     }
 
@@ -243,7 +253,7 @@ struct ChartShell: View {
             }
             .padding(.horizontal, t.gutter)
             .padding(.top, 12)
-            .padding(.bottom, 18)
+            .padding(.bottom, 26)
 
             trace
             stats.padding(.top, 14)
@@ -251,6 +261,7 @@ struct ChartShell: View {
             Spacer(minLength: 0)
 
             ThemedDetentScale(context: context)
+                .padding(.top, 8)
             ThemedModes(context: context, style: t.theme.modeKind, showLabel: false)
                 .padding(.top, 4)
                 .padding(.bottom, 8)
@@ -373,8 +384,8 @@ struct FieldShell: View {
                 // bare field on a blank page looked broken at anything under
                 // half: 193 of a 180-225 range is 29 percent, which left two
                 // thirds of the screen empty and unexplained.
-                LinearGradient(colors: [t.color(.heroFill).opacity(0.14),
-                                        t.color(.heroFill).opacity(0.05)],
+                LinearGradient(colors: [t.color(.heroFill).opacity(0.30),
+                                        t.color(.heroFill).opacity(0.10)],
                                startPoint: .bottom, endPoint: .top)
                 LinearGradient(colors: [t.color(.heroFill), t.color(.heroFillEnd)],
                                startPoint: .bottom, endPoint: .top)

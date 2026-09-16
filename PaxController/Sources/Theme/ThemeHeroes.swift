@@ -632,7 +632,7 @@ struct GaugeHero: View {
                         .monospacedDigit()
                         .foregroundStyle(t.ink.opacity(0.85))
                         .rotationEffect(.degrees(-angle(for: value)))
-                        .offset(y: -(radius - 46))
+                        .offset(y: -(radius - 38))
                         .rotationEffect(.degrees(angle(for: value)))
                 }
 
@@ -677,7 +677,7 @@ struct GaugeHero: View {
     private func centreStack(size: CGFloat) -> some View {
         VStack(spacing: 0) {
             ThemedReadoutState(context: context, dotted: false)
-                .offset(y: -size * 0.17)
+                .offset(y: -size * 0.11)
             Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(viewModel.actualTempC.map { context.format($0, decimals: 1, symbol: false) } ?? "--")
@@ -690,7 +690,7 @@ struct GaugeHero: View {
                     .foregroundStyle(t.muted)
             }
             .foregroundStyle(t.ink)
-            .offset(y: size * 0.19)
+            .offset(y: size * 0.13)
             Spacer(minLength: 0)
         }
         .frame(height: size * 0.6)
