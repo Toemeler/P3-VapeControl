@@ -1,6 +1,6 @@
-# Compiles the app for the simulator and nothing else: no screenshots, no IPA,
-# no release, no commits. It exists so a branch can be told whether it builds
-# without publishing anything.
+# Compiles the app for the simulator and runs the unit tests: no screenshots,
+# no IPA, no release, no commits. It exists so a branch can be told whether it
+# builds and whether it still behaves, without publishing anything.
 #
 # The real Build workflow still owns releases; this one is deliberately cheap
 # and safe to run on every push.
@@ -11,6 +11,7 @@ on:
   push:
     paths:
       - "PaxController/**"
+      - "PaxWatch/**"
       - "PaxController.xcodeproj/**"
       - ".github/scripts/build_app.sh"
       - ".github/workflows/compile-check.yml"
@@ -26,7 +27,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build for the simulator
+    name: Build and test
     runs-on: macos-15
     timeout-minutes: 25
     steps:
@@ -44,3 +45,16 @@ jobs:
             iphonesimulator \
             com.p3vapecontrol.compilecheck \
             "P3 VapeControl"
+
+      # Nothing ever ran these, which makes a passing suite a guess rather than
+      # a fact. The PaxControllerTests scheme was already shared and correctly
+      # wired; it only needed calling. Plain xcodebuild, no formatter: a
+      # prettifier in the pipe is one more thing that can fail, and a pipeline
+      # that retries on failure would re-run a suite that genuinely broke.
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project PaxController.xcodeproj \
+            -scheme PaxControllerTests \
+            -destination "platform=iOS Simulator,name=iPhone 16,OS=latest" \
+            CODE_SIGNING_ALLOWED=NO
