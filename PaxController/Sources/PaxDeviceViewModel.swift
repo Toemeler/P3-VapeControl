@@ -138,7 +138,23 @@ final class PaxDeviceViewModel: ObservableObject {
     /// wrong shape for it: the reading moves in quarters and can sit on one
     /// value for the best part of an hour, so any window short enough to follow
     /// a change usually contains no change at all.
-    private var batterySteps: [(at: Date, level: Int)] = []
+    ///
+    /// For the same reason it outlives the connection. A change takes the best
+    /// part of an hour and the phone drops the link far more often than that,
+    /// so a log cleared on disconnect is a log that never accumulates anything
+    /// — the first version of this cleared on every disconnect and needed three
+    /// changes to say anything, which together meant it would have said nothing
+    /// for the rest of the app's life.
+    private var batterySteps: [BatteryStep] = [] {
+        didSet { saveBatterySteps() }
+    }
+
+    struct BatteryStep: Codable {
+        let at: Date
+        let level: Int
+    }
+
+    private static let batteryStepsKey = "batterySteps"
     /// Seconds until the oven reaches its set point, when it is climbing fast
     /// enough for the estimate to mean anything.
     @Published private(set) var secondsToReady: Int?
@@ -281,6 +297,7 @@ final class PaxDeviceViewModel: ObservableObject {
     init() {
         bluetooth.delegate = self
         rememberedDeviceName = Self.storedDeviceName
+        loadBatterySteps()
         // The simulator has no Bluetooth radio, so the screenshot workflow
         // launches with `-uiDemo YES` to fill in a plausible connected device.
         if demoMode {
@@ -570,6 +587,8 @@ final class PaxDeviceViewModel: ObservableObject {
     func forgetRememberedDevice() {
         UserDefaults.standard.removeObject(forKey: Self.deviceIDKey)
         UserDefaults.standard.removeObject(forKey: Self.deviceNameKey)
+        // The step log is about this battery, so it goes with the device.
+        batterySteps.removeAll()
         rememberedDeviceName = nil
         automationPaused = true
         userInitiatedDisconnect = true
@@ -1525,10 +1544,22 @@ final class PaxDeviceViewModel: ObservableObject {
     private func trackBattery(_ percent: Double) {
         let level = Int(percent.rounded())
         if batterySteps.last?.level != level {
-            batterySteps.append((at: Date(), level: level))
-            if batterySteps.count > 40 { batterySteps.removeFirst() }
+            batterySteps.append(BatteryStep(at: Date(), level: level))
+            if batterySteps.count > 60 { batterySteps.removeFirst() }
         }
         updateChargeEstimate()
+    }
+
+    private func saveBatterySteps() {
+        guard let data = try? JSONEncoder().encode(batterySteps) else { return }
+        UserDefaults.standard.set(data, forKey: Self.batteryStepsKey)
+    }
+
+    private func loadBatterySteps() {
+        guard let data = UserDefaults.standard.data(forKey: Self.batteryStepsKey),
+              let steps = try? JSONDecoder().decode([BatteryStep].self, from: data)
+        else { return }
+        batterySteps = steps
     }
 
     /// The finest step the battery reading has been seen to take.
@@ -1590,10 +1621,14 @@ final class PaxDeviceViewModel: ObservableObject {
             if secondsToFull != nil { secondsToFull = nil }
             return
         }
-        // Only the run of rising readings at the end: a step down from before
-        // the cable went in says nothing about how fast it fills.
-        var rising: [(at: Date, level: Int)] = []
-        for step in batterySteps.reversed() {
+        // Only the run of rising readings at the end, and only from the last few
+        // hours. A step down from before the cable went in says nothing about
+        // how fast it fills, and neither does one from a charge last week — the
+        // log persists now, so "the end of the list" is no longer the same
+        // thing as "since this charge started".
+        let cutoff = Date().addingTimeInterval(-6 * 3600)
+        var rising: [BatteryStep] = []
+        for step in batterySteps.reversed() where step.at >= cutoff {
             if let oldestKept = rising.first, step.level >= oldestKept.level { break }
             rising.insert(step, at: 0)
             if rising.count >= 6 { break }
@@ -2667,7 +2702,6 @@ final class PaxDeviceViewModel: ObservableObject {
         tempTrail.removeAll()
         secondsToReady = nil
         secondsToFull = nil
-        batterySteps.removeAll()
         shellColorIndex = nil
         ledBrightness = nil
         hapticAmplitude = nil

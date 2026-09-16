@@ -100,7 +100,7 @@ This key is hardcoded in all versions of the PAX mobile app and is not a secret 
 |-------|------|-----------|---------|
 | `0x01` | `ActualTemp` | Device → Host | 2 bytes LE `uint16`: temperature in °C × 10 |
 | `0x02` | `HeaterSetPoint` | Both | 2 bytes LE `uint16`: temperature in °C × 10 |
-| `0x03` | `Battery` | Device → Host | 1 byte: 0–100% |
+| `0x03` | `Battery` | Device → Host | 1 byte: percent, unscaled (`0x4B` = 75). PAX 3 fw 2.0.4 only ever emits multiples of 25 |
 | `0x04` | `Usage` | Device → Host | Unknown format |
 | `0x05` | `UsageLimit` | Both | Unknown |
 | `0x06` | `LockStatus` | Device → Host | 1 byte: `0` = unlocked, `1` = locked |
@@ -488,12 +488,41 @@ them. None are in this PAX 3's SupportedAttributes.
 
 ## Open Uncertainties
 
+### There is no cell voltage on this device
+
+Measured, not assumed. The app's battery decode read every attribute the device
+says it supports, three times a round, for 28 minutes, and listed the bytes each
+one settled on. Every attribute is accounted for, and none of them can hold a
+single-cell voltage:
+
+| Attribute | Bytes | Value seen | Why it cannot be a voltage |
+|---|---|---|---|
+| `0x01` `ActualTemp` | 2 | `90 01`, `D8 06` | 40.0 °C and 175.2 °C — it is the temperature |
+| `0x02` `HeaterSetPoint` | 2 | `3E 08` | 211.0 °C |
+| `0x1F` `CurrentTargetTemp` | 2 | `3E 08`, `D6 06` | 211.0 °C and 174.2 °C |
+| `0x03` `Battery` | 1 | `4B` | 75 decimal — the percentage itself, unscaled |
+| `0x11` `HeaterRanges` | 12 | constant | the temperature ladder |
+| `0x14` `ColorTheme` | 33 | constant | LED colours |
+| `0x17` `HapticMode` | 6 | constant | haptics |
+| `0x18` `SupportedAttributes` | 8 | constant | the bitfield |
+| `0x06` `0x0F` `0x13` `0x15` `0x1B` `0x1C` `0x1E` `0x20` | 1 each | constant or a mode ID | one byte, none in the 30–42 range a cell in tenths of a volt would occupy |
+
+`0x1A`, the last real candidate — unnamed even in PAX's own app — is **one byte
+holding `0x01`, constant**. A single-cell voltage needs two bytes (millivolts)
+or a byte between roughly 30 and 42 (tenths). It is neither.
+
+So the 25% steps are the firmware's, not the app's, and there is nowhere finer
+to read from. Anything claiming better resolution on a PAX 3 is interpolating.
+
 1. **Maximum packet length**: ColorTheme proves plaintext longer than one block
    works in both directions — 34 bytes out, 64-byte reads in — so the earlier
    "all packets are 16 bytes" note was an artefact of only ever having looked at
    short attributes.
 
-2. **ChargeStatus (0x07)**: The exact byte encoding is not publicly documented. The app ignores this value.
+2. **ChargeStatus (0x07)**: 1 byte. Measured on PAX 3 fw 2.0.4: takes both
+   `0x01` and `0x00`. The app reads non-zero as "on the charger". Which bit is
+   "charging" and which is "charged" is still unsettled — that needs a run that
+   reaches 100% on the dock.
 
 3. **HeaterRanges (0x11)**: Format unknown. Possibly encodes min/max allowed
    temperature bounds — if so, the probe will report an even byte count whose
