@@ -2326,7 +2326,7 @@ final class PaxDeviceViewModel: ObservableObject {
     /// arrivals, so a dropped reply would otherwise end it silently; this is the
     /// one timer left, and it exists only to notice that nothing is happening.
     private func nudgeTemperatureLoopIfStalled() {
-        guard connectionState.isConnected, appIsActive else { return }
+        guard connectionState.isConnected else { return }
         guard Date().timeIntervalSince(lastReadingAt) > 4 else { return }
         log("No reading for \(Int(Date().timeIntervalSince(lastReadingAt)))s — restarting the fast lane", level: .warn)
         scheduleNextTemperatureRequest()
@@ -2377,7 +2377,7 @@ final class PaxDeviceViewModel: ObservableObject {
     /// The timer that used to drive this could outrun the link, and did. This
     /// cannot: the next request is sent by the arrival of the last reply.
     private func scheduleNextTemperatureRequest() {
-        guard connectionState.isConnected, appIsActive else { return }
+        guard connectionState.isConnected else { return }
         temperatureLoop?.cancel()
         let idle = idleCadence
         temperatureLoop = Task { [weak self] in
@@ -2401,10 +2401,30 @@ final class PaxDeviceViewModel: ObservableObject {
     /// floor — effectively "as soon as the reply is in" — and it lengthens once
     /// there is nothing to watch, because the radio spends two batteries.
     private var idleCadence: TimeInterval {
+        // Backgrounded, the only reader is the Lock Screen card, and it is
+        // rate-limited by iOS anyway. The loop keeps turning — stopping it
+        // would leave the card frozen, which is the one place the app is
+        // supposed to keep working while closed — but slowly.
+        guard appIsActive else { return 3 }
         switch heatingState {
-        case .heating, .boosting, .cooling: return Self.temperatureFloor
-        case .ready:                        return 1.0
-        default:                            return 2.5
+        // Climbing towards the set point, and drawing on it. This is the whole
+        // reason the dial exists, so ask again the moment the answer is in.
+        case .heating, .boosting:
+            return Self.temperatureFloor
+        // Cooling can run for minutes after a draw. Fast, but not flat out:
+        // the radio costs two batteries, and nothing here changes by the
+        // tenth of a degree that full speed would catch.
+        case .cooling:
+            return 0.3
+        // Holding temperature. The number barely moves; what matters is
+        // noticing when it stops holding.
+        case .ready:
+            return 0.75
+        // Standby, oven off, or nothing reported yet: there is no temperature
+        // worth watching closely, and this is where a PAX spends most of its
+        // life.
+        default:
+            return 2.5
         }
     }
 
