@@ -26,6 +26,9 @@ struct TemperatureDial<Center: View>: View {
     let isCharging: Bool
     /// Drives the oven ring's swell during a draw.
     let heatingState: PaxHeatingState?
+    /// When the current draw began, so the ring's growth is measured against
+    /// the draw itself rather than against an animation's own duration.
+    let drawStartedAt: Date?
     private let center: Center
     @State private var isScrubbing = false
 
@@ -36,6 +39,7 @@ struct TemperatureDial<Center: View>: View {
          batteryLevel: Int? = nil,
          isCharging: Bool = false,
          heatingState: PaxHeatingState? = nil,
+         drawStartedAt: Date? = nil,
          onScrub: @escaping (Double) -> Void,
          onCommit: @escaping (Double) -> Void,
          @ViewBuilder center: () -> Center) {
@@ -46,6 +50,7 @@ struct TemperatureDial<Center: View>: View {
         self.batteryLevel = batteryLevel
         self.isCharging = isCharging
         self.heatingState = heatingState
+        self.drawStartedAt = drawStartedAt
         self.onScrub = onScrub
         self.onCommit = onCommit
         self.center = center()
@@ -62,8 +67,6 @@ struct TemperatureDial<Center: View>: View {
     /// 0 while the rings are absent, 1 once they have drawn themselves on.
     /// Every trim is multiplied by it, so one value stages the whole arrival.
     @State private var reveal: Double = 0
-    /// Runs once when the oven reaches temperature.
-    @State private var readySweep = false
     /// Drives the slow pulse of a nearly flat battery.
     @State private var lowBreath = false
     /// The last whole degree the finger crossed, so a detent fires per degree
@@ -86,7 +89,6 @@ struct TemperatureDial<Center: View>: View {
             batteryRing
             warmUp
             progress
-            readyHighlight
             presetTicks
             targetMarker
             center
@@ -104,10 +106,12 @@ struct TemperatureDial<Center: View>: View {
         .onChange(of: isLowBattery) { low in lowBreath = low }
         .onChange(of: heatingState) { state in
             guard state == .ready else { return }
-            // Reaching temperature is what the device is for. One sweep, once.
+            // The haptic stays: reaching temperature, and finishing a draw, are
+            // both worth feeling. The highlight that used to sweep the ring
+            // here does not — the oven returns to `ready` after every draw, so
+            // it fired on every exhale, and a flourish that happens constantly
+            // is not a flourish.
             arrived.notificationOccurred(.success)
-            readySweep = false
-            withAnimation(.easeInOut(duration: 1.05)) { readySweep = true }
         }
         .frame(width: side, height: side)
         .contentShape(Circle())
@@ -207,45 +211,45 @@ struct TemperatureDial<Center: View>: View {
         return level <= 15
     }
 
-    /// One highlight travelling the whole arc, the moment the oven arrives.
-    private var readyHighlight: some View {
-        Circle()
-            .trim(from: 0, to: CGFloat(sweepFraction) * 0.07)
-            .stroke(Color.white.opacity(readySweep ? 0 : 0.55),
-                    style: StrokeStyle(lineWidth: DS.Dial.stroke, lineCap: .round))
-            .rotationEffect(.degrees(DS.Dial.startAngle + (readySweep ? DS.Dial.sweep : 0)))
-            .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
-            .allowsHitTesting(false)
-    }
-
     // MARK: - Oven
 
-    /// The oven's own ring swells while you draw on it and settles back after.
-    private var progressStroke: CGFloat {
-        heatingState == .boosting ? DS.Dial.stroke + DS.Dial.inhaleSwell : DS.Dial.stroke
+    /// How thick the oven's ring is at this instant.
+    ///
+    /// It grows for as long as the draw lasts and never settles at a width:
+    /// an ease that finishes leaves the ring sitting still halfway through a
+    /// long pull, which reads as the app having lost interest. The curve is
+    /// logarithmic, so it is always climbing and never runs away — quick at
+    /// first, then slower, the way a long breath feels.
+    ///
+    /// The release is not animated. It ends the moment the draw does.
+    private func liveStroke(at now: Date) -> CGFloat {
+        guard heatingState == .boosting, let started = drawStartedAt else { return DS.Dial.stroke }
+        let elapsed = max(0, now.timeIntervalSince(started))
+        let growth = log1p(elapsed / DS.Dial.inhaleTimeConstant)
+        return DS.Dial.stroke + DS.Dial.inhaleGrowth * CGFloat(growth)
     }
 
     private var progress: some View {
-        Circle()
-            .trim(from: 0, to: CGFloat(sweepFraction * DS.Range.fraction(of: current ?? DS.Range.min)) * reveal)
-            .stroke(accent,
-                    style: StrokeStyle(lineWidth: progressStroke, lineCap: .round))
-            .rotationEffect(.degrees(DS.Dial.startAngle))
-            .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
-            // Linear, and just longer than the gap between readings, so the arc
-            // is still travelling towards one temperature when the next
-            // arrives: it moves continuously rather than stepping and settling.
-            .animation(.linear(duration: travel), value: current)
-            // Slow out over a draw, quicker back once it ends: the swell should
-            // feel like it is being pulled, and the release like letting go.
-            .animation(heatingState == .boosting
-                       ? .easeOut(duration: 3.2) : .easeInOut(duration: 0.7),
-                       value: progressStroke)
-            .animation(.easeOut(duration: 0.75), value: reveal)
-            // Brightens under the finger, so the ring reads as grabbed rather
-            // than as a picture being pointed at.
-            .shadow(color: accent.opacity(isScrubbing ? 0.55 : 0), radius: 10)
-            .animation(.easeOut(duration: 0.2), value: isScrubbing)
+        // A clock rather than an animation: the width is recomputed each frame
+        // from how long the draw has actually been going, and the schedule
+        // stops running the moment it ends.
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: heatingState != .boosting)) { timeline in
+            Circle()
+                .trim(from: 0, to: CGFloat(sweepFraction * DS.Range.fraction(of: current ?? DS.Range.min)) * reveal)
+                .stroke(accent,
+                        style: StrokeStyle(lineWidth: liveStroke(at: timeline.date), lineCap: .round))
+                .rotationEffect(.degrees(DS.Dial.startAngle))
+                .frame(width: DS.Dial.radius * 2, height: DS.Dial.radius * 2)
+                // Linear, and just longer than the gap between readings, so the arc
+                // is still travelling towards one temperature when the next
+                // arrives: it moves continuously rather than stepping and settling.
+                .animation(.linear(duration: travel), value: current)
+                .animation(.easeOut(duration: 0.75), value: reveal)
+                // Brightens under the finger, so the ring reads as grabbed rather
+                // than as a picture being pointed at.
+                .shadow(color: accent.opacity(isScrubbing ? 0.55 : 0), radius: 10)
+                .animation(.easeOut(duration: 0.2), value: isScrubbing)
+        }
     }
 
     /// The climb from cold to the bottom of the scale, on a ring of its own

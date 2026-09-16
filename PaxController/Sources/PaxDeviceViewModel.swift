@@ -138,6 +138,11 @@ final class PaxDeviceViewModel: ObservableObject {
     @Published private(set) var secondsToReady: Int?
     /// Seconds until the battery is full, while it is on the charger.
     @Published private(set) var secondsToFull: Int?
+    /// When the current draw began, and nil the moment it ends. The dial's ring
+    /// measures its growth against this rather than against an animation, so a
+    /// long pull keeps widening instead of settling at whatever width an ease
+    /// happened to finish on.
+    @Published private(set) var drawStartedAt: Date?
     /// The last time the PAX said anything. The waiting card counts up from it,
     /// so a glance says whether it has just stepped out of range or has been
     /// gone all afternoon.
@@ -791,14 +796,23 @@ final class PaxDeviceViewModel: ObservableObject {
         switch heatingState {
         case .heating, .ready, .boosting, .cooling:
             beginSession()
-            if heatingState == .boosting, previous != .boosting { recordDraw() }
+            if heatingState == .boosting {
+                if previous != .boosting {
+                    drawStartedAt = Date()
+                    recordDraw()
+                }
+            } else {
+                drawStartedAt = nil
+            }
             // Any sign of heat means the app is no longer the reason it is off,
             // whoever turned it back on.
             ovenPoweredOffByApp = false
         case .ovenOff:
+            drawStartedAt = nil
             finishSession(pendingEnding ?? .ovenOff)
             pendingEnding = nil
         case .standby:
+            drawStartedAt = nil
             // Standby is not an ending — the oven is warm and a draw brings it
             // straight back — but it is where a forgotten session dies, so the
             // idle timer keeps running through it.
@@ -2379,6 +2393,7 @@ final class PaxDeviceViewModel: ObservableObject {
         // duration that includes however long the phone was away.
         finishSession(.disconnected)
         pendingEnding = nil
+        drawStartedAt = nil
         ovenPoweredOffByApp = false
         tempTrail.removeAll()
         batteryTrail.removeAll()

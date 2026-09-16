@@ -12,8 +12,17 @@ struct SessionHistoryView: View {
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingClear = false
+    @State private var measure: SessionChartMeasure = .sessions
+
+    private var accent: Color { DS.Palette.accent }
 
     private var unit: TemperatureUnit { settings.temperatureUnit }
+
+    private var averageDraws: String {
+        let sessions = store.finished
+        guard !sessions.isEmpty else { return "0" }
+        return String(format: "%.1f", Double(store.totalDraws) / Double(sessions.count))
+    }
 
     var body: some View {
         List {
@@ -27,17 +36,48 @@ struct SessionHistoryView: View {
                 }
             } else {
                 Section {
-                    LabeledContent("Sessions", value: "\(store.finished.count)")
-                    LabeledContent("Draws", value: "\(store.totalDraws)")
-                    LabeledContent("Time heating", value: "\(store.totalHeatingMinutes) min")
+                    HStack(spacing: 12) {
+                        SessionStatTile(value: "\(store.finished.count)", label: "sessions")
+                        SessionStatTile(value: "\(store.totalDraws)", label: "draws")
+                        SessionStatTile(value: "\(store.totalHeatingMinutes)m", label: "heating")
+                        SessionStatTile(value: averageDraws, label: "draws each")
+                    }
+                    .padding(.vertical, 4)
                 } header: {
                     Text("All time")
+                }
+
+                Section {
+                    Picker("Measure", selection: $measure) {
+                        ForEach(SessionChartMeasure.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    DailyTotalsChart(days: store.dailyTotals(days: 14),
+                                     measure: measure,
+                                     accent: accent)
+                        .padding(.top, 4)
+                } header: {
+                    Text("Last 14 days")
+                } footer: {
+                    Text("One measure at a time, on one axis. Days with nothing on them are kept, because a quiet week is part of the shape.")
+                }
+
+                Section {
+                    TimeOfDayChart(bands: store.hourBands(), accent: accent)
+                } header: {
+                    Text("When")
                 }
             }
 
             ForEach(store.sessions) { session in
                 Section {
-                    SessionRow(session: session, unit: unit)
+                    NavigationLink {
+                        SessionDetailView(session: session, unit: unit)
+                    } label: {
+                        SessionRow(session: session, unit: unit)
+                    }
                 } header: {
                     HStack {
                         Text(session.startedAt, format: .dateTime.weekday().hour().minute())
@@ -149,5 +189,59 @@ private struct SessionCurve: View {
                     style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
         }
         .accessibilityHidden(true)
+    }
+}
+
+/// One session on its own, where there is room for the curve to be read rather
+/// than glanced at.
+private struct SessionDetailView: View {
+    let session: PaxSession
+    let unit: TemperatureUnit
+
+    var body: some View {
+        List {
+            Section {
+                HStack(spacing: 12) {
+                    SessionStatTile(value: session.durationText, label: "length")
+                    SessionStatTile(value: "\(session.draws)", label: session.draws == 1 ? "draw" : "draws")
+                    if let peak = session.peakTempC {
+                        SessionStatTile(value: unit.format(peak, decimals: 0), label: "peak")
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            if session.samples.count >= 2 {
+                Section {
+                    SessionCurveChart(session: session,
+                                      accent: DS.Palette.accent,
+                                      unit: unit)
+                } header: {
+                    Text("Temperature")
+                } footer: {
+                    Text("Recorded by this app while it was connected, a reading every few seconds. A flat stretch is a gap in the connection, not a gap in the heating.")
+                }
+            }
+
+            Section {
+                LabeledContent("Started", value: session.startedAt.formatted(date: .abbreviated, time: .shortened))
+                if let ended = session.endedAt {
+                    LabeledContent("Ended", value: ended.formatted(date: .omitted, time: .shortened))
+                }
+                if let set = session.setPointC {
+                    LabeledContent("Set to", value: unit.format(set, decimals: 0))
+                }
+                if let raw = session.modeRaw, let label = PaxProfile.modeLabel(raw) {
+                    LabeledContent("Mode", value: label)
+                }
+                if let ending = session.ending {
+                    LabeledContent("Ended by", value: ending.label)
+                }
+            } header: {
+                Text("Details")
+            }
+        }
+        .navigationTitle(session.startedAt.formatted(.dateTime.weekday().hour().minute()))
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

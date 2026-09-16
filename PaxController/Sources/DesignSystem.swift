@@ -27,7 +27,15 @@ enum DS {
         /// Charging always reads as substantial, whatever the level.
         static let batteryStrokeCharging: CGFloat = 11
         /// How much thicker the oven's ring swells over a draw.
-        static let inhaleSwell: CGFloat = 9
+        /// How far the oven's ring thickens over a draw. Not a target it
+        /// reaches and stops at — see `TemperatureDial.liveStroke`, which keeps
+        /// it climbing for as long as the draw lasts. This is the width of one
+        /// natural-log step, so the growth stays visible without running away:
+        /// about 7 pt after two seconds, 12 after five, 18 after fifteen.
+        static let inhaleGrowth: CGFloat = 7
+        /// The time constant of that climb. Smaller makes the first second
+        /// more dramatic.
+        static let inhaleTimeConstant: Double = 1.2
         /// Half the length of the radial target marker.
         static let markerReach: CGFloat = 13
         static let markerWidth: CGFloat = 4.5
