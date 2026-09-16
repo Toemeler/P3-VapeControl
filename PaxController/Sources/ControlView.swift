@@ -159,10 +159,10 @@ struct ControlView: View {
 
     private var connectionColor: Color {
         switch viewModel.connectionState {
-        case .ready:                                        return .green
+        case .ready:                                        return DS.Palette.accent
         case .scanning, .connecting, .waitingForDevice,
-             .discoveringServices, .awaitingSerial:         return .orange
-        case .error:                                        return .red
+             .discoveringServices, .awaitingSerial:         return DS.Palette.caution
+        case .error:                                        return DS.Palette.critical
         case .idle, .disconnecting:                         return .secondary
         }
     }
@@ -279,12 +279,17 @@ struct ControlView: View {
         return state.description.uppercased()
     }
 
+    /// The status word's colour, following the same ramp as the warm-up ring:
+    /// yellow on the way up, orange once it is there or being drawn on, light
+    /// blue coming back down or filling. Nothing here leaves the palette, and
+    /// the word itself is what names the state — the colour only has to say
+    /// which of the three it belongs to.
     private var heatingColor: Color {
-        if viewModel.isCharging == true { return DS.Palette.charge }
+        if viewModel.isCharging == true { return DS.Palette.info }
         switch viewModel.heatingState {
-        case .heating, .boosting:   return DS.Palette.accent
-        case .ready:                return .green
-        case .cooling:              return .blue
+        case .heating:              return DS.Palette.caution
+        case .boosting, .ready:     return DS.Palette.accent
+        case .cooling:              return DS.Palette.info
         case .standby, .ovenOff,
              .tempSetMode, .none:   return .secondary
         }

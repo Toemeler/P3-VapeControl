@@ -113,13 +113,18 @@ struct LogRow: View {
         .padding(.vertical, 1)
     }
 
+    /// Six levels out of a four-colour palette, and they still have to be told
+    /// apart at a glance in a scrolling packet log. Outgoing and incoming take
+    /// the two colours furthest apart — accent and info, orange against light
+    /// blue — which also reads as a direction rather than as two arbitrary
+    /// hues. The radio's own chatter recedes; ordinary lines are just text.
     private var rowColor: Color {
         switch entry.level {
-        case .error:  return .red
-        case .warn:   return .orange
-        case .tx:     return .blue
-        case .rx:     return .green
-        case .ble:    return .purple
+        case .error:  return DS.Palette.critical
+        case .warn:   return DS.Palette.caution
+        case .tx:     return DS.Palette.accent
+        case .rx:     return DS.Palette.info
+        case .ble:    return .secondary
         case .info:   return .primary
         }
     }
