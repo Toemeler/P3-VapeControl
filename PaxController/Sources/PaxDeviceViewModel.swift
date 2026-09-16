@@ -142,6 +142,9 @@ final class PaxDeviceViewModel: ObservableObject {
     /// the link.
     private var temperatureLoop: Task<Void, Never>?
     private var lastStateRequestAt: Date = .distantPast
+    /// Requests sent and not yet answered. Bounded by `fastLaneWindow`, which
+    /// is what stops this becoming the runaway poll it replaced.
+    private var outstandingFastRequests = 0
     /// When a reading last arrived, so a stalled loop can be noticed.
     private var lastReadingAt: Date = .distantPast
     /// The last ChargeStatus byte, so a change is logged once rather than on
@@ -2097,6 +2100,7 @@ final class PaxDeviceViewModel: ObservableObject {
                 recordTemperature(celsius)
             }
             lastReadingAt = Date()
+            outstandingFastRequests = max(0, outstandingFastRequests - 1)
             enforceAutoOff()
             // The reply is what asks the next question.
             scheduleNextTemperatureRequest()
@@ -2146,8 +2150,6 @@ final class PaxDeviceViewModel: ObservableObject {
             dynamicMode = packet.dynamicMode
         case .currentTargetTemp:
             currentTargetTempC = packet.temperatureCelsius
-            lastReadingAt = Date()
-            scheduleNextTemperatureRequest()
         case .displayName:
             applyDisplayNameReport(packet)
         case .supportedAttribs:
@@ -2426,6 +2428,7 @@ final class PaxDeviceViewModel: ObservableObject {
         temperatureTimer?.cancel()
         temperatureTimer = nil
         lastStateRequestAt = .distantPast
+        outstandingFastRequests = 0
         BluetoothManager.linkStats.reset()
         scheduleNextTemperatureRequest()
     }
@@ -2437,6 +2440,7 @@ final class PaxDeviceViewModel: ObservableObject {
         guard connectionState.isConnected else { return }
         guard Date().timeIntervalSince(lastReadingAt) > 4 else { return }
         log("No reading for \(Int(Date().timeIntervalSince(lastReadingAt)))s — restarting the fast lane", level: .warn)
+        outstandingFastRequests = 0
         scheduleNextTemperatureRequest()
     }
 
@@ -2469,10 +2473,10 @@ final class PaxDeviceViewModel: ObservableObject {
         case .heating, .boosting, .cooling:
             let measured = BluetoothManager.linkStats.snapshot
             guard measured.isMeaningful, measured.medianGapMs > 0 else { return 0.5 }
-            // Two replies per round trip on a busy link — a notification and a
-            // read — so the gap between temperature readings is about twice the
-            // gap between replies.
-            return min(1.0, max(Self.temperatureFloor, measured.medianGapMs * 2 / 1000))
+            // The measured gap between replies is the gap between readings:
+            // with the window filled, a temperature comes back every reply, and
+            // the state request carries one too.
+            return min(1.0, max(Self.temperatureFloor, measured.medianGapMs / 1000))
         case .ready:
             return 1.5
         default:
@@ -2480,12 +2484,45 @@ final class PaxDeviceViewModel: ObservableObject {
         }
     }
 
-    /// How the fast lane actually runs: ask, wait for the answer, ask again.
+    /// How many requests the fast lane keeps in the air at once.
     ///
-    /// The timer that used to drive this could outrun the link, and did. This
-    /// cannot: the next request is sent by the arrival of the last reply.
+    /// Measured on a PAX 3: a round trip takes 226 ms, but the device streams
+    /// replies 120 ms apart when several are asked for together, and the
+    /// fastest round trip seen was 21 ms. So 226 ms is not what the link costs
+    /// — it is mostly the app waiting, about 106 ms per reading spent on a
+    /// question that could already have been asked.
+    ///
+    /// Two outstanding requests cover that wait: the second is already on its
+    /// way while the first is being answered, and readings arrive at the rate
+    /// the device produces them rather than at the rate a round trip allows.
+    ///
+    /// It is a window rather than a free-for-all, which is what keeps this from
+    /// being the bug it looks like. The timers that caused readings to arrive
+    /// four seconds apart had no idea how far behind they were; this cannot get
+    /// more than two ahead, so a device that slows down is followed down.
+    private var fastLaneWindow: Int {
+        guard appIsActive else { return 1 }
+        switch heatingState {
+        case .heating, .boosting: return 2
+        default:                  return 1
+        }
+    }
+
+    /// Fills the window, or waits out the cadence when there is nothing worth
+    /// hurrying for.
     private func scheduleNextTemperatureRequest() {
         guard connectionState.isConnected else { return }
+
+        if fastLaneWindow > 1 {
+            temperatureLoop?.cancel()
+            temperatureLoop = nil
+            while outstandingFastRequests < fastLaneWindow {
+                sendFastLaneRequest()
+            }
+            return
+        }
+
+        guard outstandingFastRequests == 0 else { return }
         temperatureLoop?.cancel()
         let idle = idleCadence
         temperatureLoop = Task { [weak self] in
@@ -2493,15 +2530,24 @@ final class PaxDeviceViewModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: UInt64(idle * 1_000_000_000))
             }
             guard let self, !Task.isCancelled, self.connectionState.isConnected else { return }
-            // The state and the working target take their turn in the same
-            // loop rather than from a second timer, so the two can never add up
-            // to more than the link carries.
-            if Date().timeIntervalSince(self.lastStateRequestAt) >= Self.stateTick {
-                self.lastStateRequestAt = Date()
-                self.requestOvenState()
-            } else {
-                self.requestTemperature()
-            }
+            self.sendFastLaneRequest()
+        }
+    }
+
+    /// One request, always carrying the temperature.
+    ///
+    /// When the oven's state and working target are due they ride along in the
+    /// same packet rather than taking a turn of their own: a request costs a
+    /// write and each attribute costs a reply, so three in one packet is one
+    /// write instead of three, and the temperature does not lose its place in
+    /// the queue to them.
+    private func sendFastLaneRequest() {
+        outstandingFastRequests += 1
+        if Date().timeIntervalSince(lastStateRequestAt) >= Self.stateTick {
+            lastStateRequestAt = Date()
+            requestOvenState()
+        } else {
+            requestTemperature()
         }
     }
 
@@ -2545,11 +2591,14 @@ final class PaxDeviceViewModel: ObservableObject {
         }
     }
 
+    /// The oven's state and working target, with the temperature alongside
+    /// them. Three attributes, one write, three replies — and every fast-lane
+    /// request yields exactly one temperature, which is what the window counts.
     private func requestOvenState() {
         guard connectionState.isConnected else { return }
         enqueue {
             try self.sendPacket(PaxPacket.statusRequest(
-                attributes: [.heatingState, .currentTargetTemp]))
+                attributes: [.actualTemp, .heatingState, .currentTargetTemp]))
         }
     }
 

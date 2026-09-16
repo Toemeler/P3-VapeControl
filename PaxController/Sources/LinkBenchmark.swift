@@ -53,10 +53,19 @@ final class LinkBenchmark: ObservableObject {
             let perSecond = 1000 / max(1, roundTripMedianMs)
             if burstIsCheaper {
                 return String(format: """
-                    A round trip costs %.0f ms, so asking one attribute at a time tops out near %.1f readings a second. \
-                    In a burst the replies arrive %.0f ms apart — %.1f times cheaper — so the fast lane should ask for \
-                    the temperature, the oven state and the working target in one request instead of taking turns.
-                    """, roundTripMedianMs, perSecond, burstMedianGapMs, roundTripMedianMs / max(1, burstMedianGapMs))
+                    A round trip costs %.0f ms and the fastest one seen was %.0f ms, but replies in a burst arrive \
+                    %.0f ms apart. So %.0f ms is not what the link costs — it is mostly waiting, about %.0f ms per \
+                    reading spent on a question that could already have been asked.
+
+                    Two things follow. Keep more than one request in the air, so a reading arrives every %.0f ms \
+                    instead of every %.0f ms — %.1f a second rather than %.1f. And put the oven state and the \
+                    working target in the same packet as the temperature, since a request costs a write and each \
+                    attribute costs a reply.
+                    """,
+                    roundTripMedianMs, roundTripBestMs, burstMedianGapMs, roundTripMedianMs,
+                    roundTripMedianMs - burstMedianGapMs,
+                    burstMedianGapMs, roundTripMedianMs,
+                    1000 / max(1, burstMedianGapMs), perSecond)
             }
             return String(format: """
                 A round trip costs %.0f ms, which is about %.1f readings a second, and replies in a burst arrive \
