@@ -643,6 +643,9 @@ struct DeviceSheet: View {
             NavigationLink("Diagnostics") {
                 DebugConsoleView().environmentObject(viewModel)
             }
+            NavigationLink("Battery decode") {
+                BatteryDecodeView().environmentObject(viewModel)
+            }
             #if PAX_LAB
             NavigationLink {
                 PaxLabView().environmentObject(viewModel)

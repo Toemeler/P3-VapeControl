@@ -450,6 +450,17 @@ extension PaxPacket {
         return Int(payload[0])
     }
 
+    /// ChargeStatus (0x07) is a bitfield, not a boolean. The official app reads
+    /// two flags out of it — charging, and charge complete — though its own
+    /// decode is careless enough (`toString(2)`, which drops leading zeros)
+    /// that which bit is which cannot be taken from it. So both readings are
+    /// offered and the raw byte is kept: the device settles it, by being put on
+    /// the charger empty and then left until it is full.
+    var chargeFlags: (raw: UInt8, anySet: Bool)? {
+        guard let byte = payload.first else { return nil }
+        return (byte, byte != 0)
+    }
+
     var heatingState: PaxHeatingState? {
         guard payload.count >= 1 else { return nil }
         return PaxHeatingState(rawValue: payload[0])

@@ -138,6 +138,9 @@ final class PaxDeviceViewModel: ObservableObject {
     @Published private(set) var secondsToReady: Int?
     /// Seconds until the battery is full, while it is on the charger.
     @Published private(set) var secondsToFull: Int?
+    /// The last ChargeStatus byte, so a change is logged once rather than on
+    /// every poll.
+    private var lastChargeByte: UInt8?
     /// When the current draw began, and nil the moment it ends. The dial's ring
     /// measures its growth against this rather than against an animation, so a
     /// long pull keeps widening instead of settling at whatever width an ease
@@ -1836,6 +1839,16 @@ final class PaxDeviceViewModel: ObservableObject {
             level: .info)
     }
 
+    /// Asks for attributes by number. Read-only — a StatusUpdate request is
+    /// the same thing the poll sends — and public so the battery decode can
+    /// drive its own rounds without reaching into the queue.
+    func requestRawAttributes(_ attributes: [UInt8]) {
+        guard canSendCommands else { return }
+        enqueue {
+            try self.sendPacket(PaxPacket.statusRequest(rawAttributes: attributes))
+        }
+    }
+
     func clearLog() { debugLog.removeAll() }
 
     // MARK: - App Intents
@@ -1941,6 +1954,7 @@ final class PaxDeviceViewModel: ObservableObject {
             let typeHex = String(packet.type.rawValue, radix: 16, uppercase: true)
             log("RX 0x\(typeHex) [\(packet.type)] plain=\(plaintext.hexString)", level: .rx)
             if probeInProgress { recordProbeSample(type: packet.type.rawValue, payload: packet.payload) }
+            BatteryDecoder.shared.note(attribute: packet.type.rawValue, payload: packet.payload)
             #if PAX_LAB
             PaxLab.shared.record(type: packet.type.rawValue, payload: packet.payload)
             #endif
@@ -1952,6 +1966,9 @@ final class PaxDeviceViewModel: ObservableObject {
             #if PAX_LAB
             PaxLab.shared.record(type: t, payload: Data(plaintext.dropFirst()))
             #endif
+            // An attribute with no name is exactly where an undocumented
+            // voltage would be, so the decoder sees these too.
+            BatteryDecoder.shared.note(attribute: t, payload: Data(plaintext.dropFirst()))
             if probeInProgress {
                 recordProbeSample(type: t, payload: Data(plaintext.dropFirst()))
                 log("RX 0x\(tHex) unnamed — probe sample \(plaintext.hexString)", level: .rx)
@@ -1984,6 +2001,15 @@ final class PaxDeviceViewModel: ObservableObject {
             if let level = packet.batteryLevel { trackBattery(Double(level)) }
             log("Battery: \(packet.batteryLevel.map { "\($0)%" } ?? "nil")", level: .info)
         case .chargeStatus:
+            // Logged raw as well as interpreted: the byte carries two flags and
+            // the app currently only knows that a non-zero one means something
+            // is happening on the dock. Seeing the actual values across a full
+            // charge is what will separate "charging" from "charged".
+            if let flags = packet.chargeFlags, flags.raw != lastChargeByte {
+                lastChargeByte = flags.raw
+                log("ChargeStatus raw: 0x\(String(format: "%02X", flags.raw)) at \(batteryLevel.map { "\($0)%" } ?? "unknown")",
+                    level: .rx)
+            }
             let charging = (packet.payload.count >= 1 && packet.payload[packet.payload.startIndex] != 0)
             if charging != isCharging {
                 isCharging = charging
