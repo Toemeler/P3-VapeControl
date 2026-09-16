@@ -104,15 +104,19 @@ final class BatteryDecoder: ObservableObject {
         return Array(supported.union(extras)).sorted()
     }
 
-    /// How often a round starts. A voltage does not need watching faster than
-    /// this, and the app is still polling the temperature on the same link.
-    private static let roundInterval: TimeInterval = 20
+    /// How often a round starts, on top of however long the round itself took.
+    /// A voltage does not need watching faster than this, and the app is still
+    /// polling the temperature on the same link.
+    private static let roundInterval: TimeInterval = 10
+    /// Attributes per request. One StatusUpdate can name many, and each one
+    /// named costs a reply.
+    private static let batchWidth = 8
     /// Three reads of every attribute, far enough apart to arrive as separate
     /// replies. Whatever all three agree on is payload; the rest is buffer.
     private static let readsPerRound = 3
-    /// How long the replies to one pass have to stop arriving before the next
-    /// pass is sent.
-    private static let quietPeriod: TimeInterval = 2.0
+    /// How long the replies to one batch have to stop arriving before the next
+    /// batch is sent.
+    private static let quietPeriod: TimeInterval = 1.5
     /// An absolute ceiling on that wait, because the interesting case is a
     /// device that answers only *some* of what it was asked: without a ceiling,
     /// a pass waits forever for a reply that is never coming.
@@ -197,21 +201,32 @@ final class BatteryDecoder: ObservableObject {
         for _ in 0..<Self.readsPerRound {
             guard running, !Task.isCancelled else { break }
             // In batches, because the device answers each attribute separately
-            // and a request naming eight produces eight replies.
-            for batch in stride(from: 0, to: list.count, by: 8) {
-                viewModel.requestRawAttributes(Array(list[batch..<min(list.count, batch + 8)]))
+            // and a request naming eight produces eight replies — and one batch
+            // at a time, waiting for its answers before the next goes out.
+            //
+            // That wait is not politeness, it is flow control. Commands are
+            // written without response and nothing checks whether the radio can
+            // take another, so four batch writes in a row is four writes into a
+            // queue that holds fewer, and the rest are dropped in silence. An
+            // earlier run of this decode collected 33 rounds in which exactly
+            // one attribute ever answered, which is what that looks like from
+            // the outside.
+            for batch in stride(from: 0, to: list.count, by: Self.batchWidth) {
+                guard running, !Task.isCancelled else { break }
+                let slice = Array(list[batch..<min(list.count, batch + Self.batchWidth)])
+                viewModel.requestRawAttributes(slice)
+                await drain()
             }
-            // Then wait for this pass to be answered before asking again,
-            // rather than sending all three on a timer and hoping. Asking for N
-            // attributes produces N replies at whatever rate the link manages,
-            // which takes far longer than it took to ask.
-            await drain()
         }
         closeRound()
     }
 
     /// Wait until the replies this round asked for stop arriving, or until the
     /// ceiling, whichever comes first.
+    ///
+    /// "The replies this round asked for" is doing the work: the app's own
+    /// temperature poll never stops, so waiting for the *link* to go quiet is
+    /// waiting for something that never happens.
     private func drain() async {
         let deadline = Date().addingTimeInterval(Self.maxPassWait)
         var quietFor = 0.0
