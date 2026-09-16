@@ -22,7 +22,7 @@ struct ScannedDevice: Identifiable, Equatable {
 
 @MainActor
 protocol BluetoothManagerDelegate: AnyObject {
-    func bluetoothDidUpdatePower(available: Bool)
+    func bluetoothDidUpdateRadio(_ state: PaxRadioState)
     func bluetoothDidDiscover(device: ScannedDevice)
     func bluetoothDidConnect()
     func bluetoothDidFailToConnect(error: String)
@@ -289,8 +289,9 @@ final class BluetoothManager: NSObject {
 
 extension BluetoothManager: CBCentralManagerDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        let radio = PaxRadioState(central.state)
         Task { @MainActor in
-            let available = central.state == .poweredOn
+            let available = radio == .ready
             // Everything CoreBluetooth vended dies with the radio: the
             // peripheral objects are invalid and every pending connect is
             // dropped. Holding on to one is what makes an auto-connect after a
@@ -298,7 +299,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
             // nothing is waiting, and the app then sits at "Waiting for PAX…"
             // for ever.
             if !available { invalidate() }
-            delegate?.bluetoothDidUpdatePower(available: available)
+            delegate?.bluetoothDidUpdateRadio(radio)
             if available {
                 delegate?.bluetoothReadyForAutoConnect()
             }
@@ -617,6 +618,60 @@ func formatProperties(_ props: CBCharacteristicProperties) -> String {
     if props.contains(.indicate)             { parts.append("indicate") }
     if props.contains(.broadcast)            { parts.append("broadcast") }
     return parts.joined(separator: ",")
+}
+
+/// Why the radio is or is not usable, kept apart from "available: Bool".
+///
+/// These are four different situations with four different things for the
+/// person to do, and the app used to collapse them all into "not powered on"
+/// and then say nothing at all: a user who declined the Bluetooth prompt saw
+/// "Looking for your PAX", for ever, with no hint that the app had been denied
+/// the radio. Telling someone to check their PAX is awake when the real problem
+/// is a permission is worse than saying nothing.
+enum PaxRadioState: Equatable {
+    case ready
+    case off
+    case unauthorized
+    case unsupported
+    /// Still starting up. Normal for the first moment after launch.
+    case unknown
+
+    init(_ state: CBManagerState) {
+        switch state {
+        case .poweredOn:     self = .ready
+        case .poweredOff:    self = .off
+        case .unauthorized:  self = .unauthorized
+        case .unsupported:   self = .unsupported
+        default:             self = .unknown
+        }
+    }
+
+    /// What to say on screen, or nil when there is nothing wrong to report.
+    var headline: String? {
+        switch self {
+        case .ready, .unknown: return nil
+        case .off:             return "Bluetooth is off"
+        case .unauthorized:    return "Bluetooth access denied"
+        case .unsupported:     return "No Bluetooth on this device"
+        }
+    }
+
+    /// And what the person can actually do about it.
+    var detail: String? {
+        switch self {
+        case .ready, .unknown:
+            return nil
+        case .off:
+            return "Turn Bluetooth on in Control Centre or Settings, and the app will find your PAX on its own."
+        case .unauthorized:
+            return "Allow Bluetooth for this app in Settings › Privacy & Security › Bluetooth. Without it the app cannot see your PAX at all."
+        case .unsupported:
+            return "This device has no Bluetooth Low Energy radio, so there is nothing for the app to connect to."
+        }
+    }
+
+    /// Whether the app is waiting on the person rather than on the device.
+    var needsAttention: Bool { headline != nil }
 }
 
 extension Data {

@@ -433,9 +433,11 @@ struct ControlView: View {
     private var emptyDiscovery: some View {
         VStack(spacing: 0) {
             Spacer()
-            Image(systemName: "thermometer.medium")
+            Image(systemName: viewModel.radioState.needsAttention
+                  ? "exclamationmark.triangle.fill" : "thermometer.medium")
                 .font(.system(size: 42, weight: .light))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(viewModel.radioState.needsAttention
+                                 ? DS.Palette.caution : Color.secondary)
                 .frame(width: 84, height: 84)
                 .background(DS.Palette.fill, in: Circle())
 
@@ -535,6 +537,7 @@ struct ControlView: View {
     }
 
     private var statusDetail: String {
+        if let blocked = viewModel.radioState.detail { return blocked }
         if case .error(let message) = viewModel.connectionState { return message }
         if viewModel.automationPaused {
             return "Disconnected. Tap Connect to look for your PAX again."

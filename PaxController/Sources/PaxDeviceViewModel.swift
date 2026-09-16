@@ -112,6 +112,10 @@ final class PaxDeviceViewModel: ObservableObject {
     // MARK: LED capability, discovered from the device
     /// Attribute IDs the device reported via SupportedAttributes (0x18).
     @Published private(set) var supportedAttributes: Set<UInt8> = []
+    /// Why the radio is unusable, when it is. Published because a denied
+    /// permission is not a transient condition the app can scan its way out
+    /// of — it has to be said on screen.
+    @Published private(set) var radioState: PaxRadioState = .unknown
     /// The theme the device last reported, used as the template for a write so
     /// each mode's animation and frequency are preserved rather than invented.
     @Published private(set) var deviceColorTheme: PaxColorTheme?
@@ -1100,6 +1104,9 @@ final class PaxDeviceViewModel: ObservableObject {
     /// Headline shown on the Lock Screen card and in the in-app banner.
     var statusHeadline: String {
         guard connectionState.isConnected else {
+            // Before anything about scanning: if the app has been denied the
+            // radio, "Waiting for PAX…" is a lie it would tell for ever.
+            if let blocked = radioState.headline { return blocked }
             switch connectionState {
             case .connecting, .discoveringServices, .awaitingSerial:
                 return "Connecting…"
@@ -2659,12 +2666,14 @@ final class PaxDeviceViewModel: ObservableObject {
 
 extension PaxDeviceViewModel: BluetoothManagerDelegate {
 
-    func bluetoothDidUpdatePower(available: Bool) {
-        log("Bluetooth power: \(available ? "ON" : "OFF")", level: .ble)
+    func bluetoothDidUpdateRadio(_ state: PaxRadioState) {
+        log("Bluetooth radio: \(state)", level: .ble)
         // The simulator reports the radio as unavailable immediately, which
-        // would wipe the fixture straight after init.
+        // would wipe the fixture straight after init — and would now also put
+        // "No Bluetooth on this device" across every screenshot.
         guard !demoMode else { return }
-        if !available {
+        radioState = state
+        if state != .ready {
             // iOS drops every pending connect with the radio, so the reconnect
             // that was armed is gone; power-on re-arms it from scratch.
             isScanning = false
