@@ -62,6 +62,15 @@ final class BatteryDecoder: ObservableObject {
         let payloadLength: Int
         let distinctValues: Int
         let changed: Bool
+        /// The distinct payloads themselves, in hex, newest last, and the
+        /// battery level each was seen at.
+        ///
+        /// Counting how many values an attribute took is enough to rule it out
+        /// as a constant; it is not enough to work out what it means. A short
+        /// attribute that took two values across a charge — ChargeStatus, say —
+        /// is decoded by *reading* those two values next to the battery, which
+        /// a count cannot give and a shared report should.
+        let observed: [String]
         var id: UInt8 { attribute }
     }
 
@@ -296,9 +305,27 @@ final class BatteryDecoder: ObservableObject {
                 name: PaxMessageType(rawValue: attribute).map { "\($0)" } ?? "unnamed",
                 payloadLength: entries.map(\.agreed.count).min() ?? 0,
                 distinctValues: payloads.count,
-                changed: payloads.count > 1)
+                changed: payloads.count > 1,
+                observed: Self.observedValues(of: entries))
         }
         candidates = findCandidates()
+    }
+
+    /// Each distinct payload once, in the order it first appeared, with the
+    /// battery level and dock state it was first seen at. Long payloads are
+    /// skipped: a 22-byte HeatingParams in a list is noise, and the ones worth
+    /// reading by eye are the short flag bytes.
+    private static func observedValues(of entries: [Round]) -> [String] {
+        guard let width = entries.map(\.agreed.count).max(), width <= 4 else { return [] }
+        var seen: Set<Data> = []
+        var out: [String] = []
+        for entry in entries where !seen.contains(entry.agreed) {
+            seen.insert(entry.agreed)
+            out.append("\(entry.agreed.hexString) at \(entry.battery)%"
+                       + (entry.charging ? " on the dock" : ""))
+            if out.count >= 8 { break }
+        }
+        return out
     }
 
     /// Every number in every payload, tested against the shape of a cell
@@ -400,6 +427,9 @@ final class BatteryDecoder: ObservableObject {
             lines.append("  \(hex) \(summary.name): \(summary.payloadLength) byte(s), "
                          + "\(summary.distinctValues) distinct value(s)"
                          + (summary.changed ? ", changed" : ", constant"))
+            for value in summary.observed {
+                lines.append("      \(value)")
+            }
         }
         return lines.joined(separator: "\n")
     }
@@ -470,16 +500,22 @@ struct BatteryDecodeView: View {
             if !decoder.summaries.isEmpty {
                 Section {
                     ForEach(decoder.summaries) { summary in
-                        LabeledContent(
-                            String(format: "0x%02X %@", summary.attribute, summary.name),
-                            value: "\(summary.payloadLength)B · \(summary.distinctValues)"
-                                + (summary.changed ? " ✓" : ""))
-                            .font(.caption.monospacedDigit())
+                        VStack(alignment: .leading, spacing: 2) {
+                            LabeledContent(
+                                String(format: "0x%02X %@", summary.attribute, summary.name),
+                                value: "\(summary.payloadLength)B · \(summary.distinctValues)"
+                                    + (summary.changed ? " ✓" : ""))
+                            ForEach(summary.observed, id: \.self) { value in
+                                Text(value)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .font(.caption.monospacedDigit())
                     }
                 } header: {
                     Text("Everything that answered")
                 } footer: {
-                    Text("Bytes the reads agreed on, and how many distinct values each has taken. A tick means it has changed at least once — a constant cannot be a voltage.")
+                    Text("Bytes the reads agreed on, and how many distinct values each has taken. A tick means it has changed at least once — a constant cannot be a voltage. Short attributes list the values themselves next to the battery level they were seen at, which is what a flag byte has to be read against to mean anything.")
                 }
             }
 
