@@ -72,11 +72,28 @@ final class BatteryDecoder: ObservableObject {
     @Published private(set) var candidates: [Candidate] = []
     @Published private(set) var summaries: [AttributeSummary] = []
     @Published private(set) var note: String?
+    /// What the last round actually collected. Visible because a round that
+    /// gathers nothing is the difference between "the device has no voltage"
+    /// and "this tool is broken", and the first version could not tell them
+    /// apart.
+    @Published private(set) var lastRoundReplies = 0
+    @Published private(set) var lastRoundAttributes = 0
 
-    /// Every attribute a status request can reach. Reading one the device does
-    /// not implement costs nothing — it simply never answers, and silence is
-    /// recorded as silence.
-    private static let watched: [UInt8] = Array(1...63)
+    /// Attributes worth asking for: the ones the device said it implements,
+    /// plus a few it does not advertise but might still answer — `0x1A` above
+    /// all, which is unnamed even in PAX's own app and is the likeliest place
+    /// for something undocumented to be.
+    ///
+    /// Not all sixty-three. Asking for every address three times is 189 replies
+    /// against a link that carries a handful a second, which is more than a
+    /// round can collect — the first version did exactly that and threw away
+    /// nearly everything it asked for.
+    private var watched: [UInt8] {
+        let supported = PaxDeviceViewModel.shared.supportedAttributes
+        let extras: Set<UInt8> = [0x1A, 0x04, 0x05, 0x12, 0x24, 0x29, 0x2A]
+        guard !supported.isEmpty else { return Array(extras).sorted() }
+        return Array(supported.union(extras)).sorted()
+    }
 
     /// Slow on purpose. The app is still polling the temperature twice a second
     /// on the same link, and a voltage does not need watching faster than this.
@@ -85,9 +102,16 @@ final class BatteryDecoder: ObservableObject {
     /// replies. Whatever all three agree on is payload; the rest is buffer.
     private static let readsPerRound = 3
     private static let readSpacing: TimeInterval = 1.2
+    /// How long the replies have to stop arriving before a round is considered
+    /// finished.
+    private static let quietPeriod: TimeInterval = 3.0
 
     private var history: [UInt8: [Round]] = [:]
     private var inFlight: [UInt8: [Data]] = [:]
+    /// Counted so a round can tell when the device has stopped answering — and
+    /// so a run that collects nothing says so instead of looking like a device
+    /// with nothing to say.
+    private var repliesThisRound = 0
     private var task: Task<Void, Never>?
 
     var elapsed: TimeInterval {
@@ -133,15 +157,37 @@ final class BatteryDecoder: ObservableObject {
         let viewModel = PaxDeviceViewModel.shared
         guard viewModel.canSendCommands else { return }
         inFlight = [:]
+        repliesThisRound = 0
+        let list = watched
+
         for _ in 0..<Self.readsPerRound {
             guard running, !Task.isCancelled else { return }
-            // In batches, because one request cannot name more than it can fit
-            // and the device answers each attribute separately anyway.
-            for batch in stride(from: 0, to: Self.watched.count, by: 8) {
-                let slice = Array(Self.watched[batch..<min(Self.watched.count, batch + 8)])
+            // In batches, because the device answers each attribute separately
+            // and a request naming eight produces eight replies.
+            for batch in stride(from: 0, to: list.count, by: 8) {
+                let slice = Array(list[batch..<min(list.count, batch + 8)])
                 viewModel.requestRawAttributes(slice)
             }
             try? await Task.sleep(nanoseconds: UInt64(Self.readSpacing * 1_000_000_000))
+        }
+
+        // Then wait for the answers, rather than closing the round on the
+        // schedule that sent the questions. Asking for N attributes three times
+        // is 3N replies arriving at whatever rate the link manages, which is
+        // far longer than it took to ask — the first version closed the round
+        // immediately and discarded almost everything it had requested.
+        var quietFor = 0.0
+        var lastCount = -1
+        while running, !Task.isCancelled, quietFor < Self.quietPeriod {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            if repliesThisRound == lastCount {
+                quietFor += 0.3
+            } else {
+                lastCount = repliesThisRound
+                quietFor = 0
+            }
+            // A ceiling, so a device that answers nothing does not hang here.
+            if quietFor >= Self.quietPeriod { break }
         }
         closeRound()
     }
@@ -150,6 +196,7 @@ final class BatteryDecoder: ObservableObject {
     func note(attribute: UInt8, payload: Data) {
         guard running else { return }
         inFlight[attribute, default: []].append(payload)
+        repliesThisRound += 1
     }
 
     private func closeRound() {
@@ -164,6 +211,8 @@ final class BatteryDecoder: ObservableObject {
             history[attribute, default: []].append(
                 Round(at: now, battery: battery, charging: charging, agreed: agreed))
         }
+        lastRoundReplies = repliesThisRound
+        lastRoundAttributes = inFlight.count
         inFlight = [:]
         rounds += 1
         if !batterySeen.contains(battery) { batterySeen.append(battery) }
@@ -283,6 +332,7 @@ final class BatteryDecoder: ObservableObject {
         lines.append("PAX battery decode")
         lines.append("\(rounds) rounds over \(Int(elapsed / 60)) min")
         lines.append("battery values seen: \(batterySeen.map(String.init).joined(separator: ", "))")
+        lines.append("last round collected: \(lastRoundReplies) replies across \(lastRoundAttributes) attributes")
         lines.append("")
         if candidates.isEmpty {
             lines.append("No value in the range of a single cell was found.")
@@ -324,6 +374,8 @@ struct BatteryDecodeView: View {
                 if decoder.running {
                     LabeledContent("Running", value: elapsedText)
                     LabeledContent("Rounds", value: "\(decoder.rounds)")
+                    LabeledContent("Last round",
+                                   value: "\(decoder.lastRoundReplies) replies · \(decoder.lastRoundAttributes) attributes")
                     LabeledContent("Battery seen", value: batteryText)
                     Button("Stop", role: .destructive) { decoder.stop() }
                 } else {
