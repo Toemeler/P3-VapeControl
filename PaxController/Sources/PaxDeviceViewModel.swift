@@ -176,6 +176,9 @@ final class PaxDeviceViewModel: ObservableObject {
     /// True once the device has answered the capability query, which is what
     /// separates "we do not know yet" from "this firmware cannot do it".
     private var capabilitiesKnown = false
+    /// How many times the capability bitfield has been asked for on this
+    /// connection.
+    private var capabilityAttempt = 0
     /// Coalesces colour-wheel drags into a single write.
     private var ledWriteDebounce: Task<Void, Never>?
     /// Same, for the brightness slider.
@@ -649,14 +652,6 @@ final class PaxDeviceViewModel: ObservableObject {
     }
 
     private func sendLedColorToDevice() {
-        // While the probe is running, the heating parameters must be the only
-        // thing changing. The app drives the PAX's own LEDs, so a colour write
-        // landing mid-measurement would be indistinguishable from the device
-        // reacting to the bit — and the LED is what the user is watching.
-        guard !bitProbeRunning else {
-            log("Holding the LED write back while the bit probe runs", level: .info)
-            return
-        }
         let color = settings.ledColor
         guard deviceLedColorSupported else {
             // Tapping a colour in the moment between connecting and the
@@ -1274,20 +1269,39 @@ final class PaxDeviceViewModel: ObservableObject {
     /// we learn the payload shape instead of guessing at it. Deliberately not
     /// part of the 3 s poll.
     func requestCapabilities() {
+        capabilityAttempt = 0
+        askForCapabilities()
+    }
+
+    /// How many times to ask before deciding the silence means something. The
+    /// first ask goes out at the busiest moment of a connection, behind seven
+    /// other attributes, and one dropped reply used to cost the whole session
+    /// its oven controls.
+    private static let capabilityAttempts = 3
+
+    private func askForCapabilities() {
+        capabilityAttempt += 1
+        let first = capabilityAttempt == 1
         enqueue {
-            let attrs: [PaxMessageType] = [
-                .supportedAttribs, .colorTheme, .shellColor,
-                .brightness, .hapticMode, .uiMode, .lowSoCMode, .heatingParams,
-            ]
+            // The first ask gathers everything worth having at connect. A retry
+            // asks for the bitfield on its own: whatever swallowed the reply, a
+            // packet expecting eight of them is the least likely to get through.
+            let attrs: [PaxMessageType] = first
+                ? [.supportedAttribs, .colorTheme, .shellColor,
+                   .brightness, .hapticMode, .uiMode, .lowSoCMode, .heatingParams]
+                : [.supportedAttribs]
             try self.sendPacket(PaxPacket.statusRequest(attributes: attrs))
-            self.log("Asked the device which attributes it supports, and for its current settings", level: .tx)
+            self.log(first
+                     ? "Asked the device which attributes it supports, and for its current settings"
+                     : "Asking again which attributes the device supports (try \(self.capabilityAttempt))",
+                     level: .tx)
         }
         // Not every firmware implements SupportedAttributes. Without a deadline
         // a device that simply never answers would leave the colour queued for
         // ever, which is worse than the blind write it replaced.
         capabilityTimeout?.cancel()
         capabilityTimeout = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
             guard !Task.isCancelled else { return }
             self?.capabilityQueryDidTimeOut()
         }
@@ -1295,9 +1309,15 @@ final class PaxDeviceViewModel: ObservableObject {
 
     private func capabilityQueryDidTimeOut() {
         guard !capabilitiesKnown, connectionState.isConnected else { return }
+        guard capabilityAttempt >= Self.capabilityAttempts else {
+            log("No capability reply after 2.5 s — asking again rather than assuming the answer is no",
+                level: .warn)
+            askForCapabilities()
+            return
+        }
         capabilityQueryUnanswered = true
         capabilitiesKnown = true
-        log("No capability reply after 2 s — this firmware may not implement SupportedAttributes (0x18). Falling back to an unverified ColorTheme write.",
+        log("No capability reply after \(Self.capabilityAttempts) tries — this firmware may not implement SupportedAttributes (0x18). Nothing is disabled on the strength of that: an unanswered question is not a no.",
             level: .warn)
         pushSavedColorIfReady()
     }
@@ -1360,11 +1380,9 @@ final class PaxDeviceViewModel: ObservableObject {
         // the write below starts from the new mode's own preset, carrying the
         // lip choice along rather than losing it.
         //
-        // Only once the probe has found this device's heater bit. Before that
-        // an automatic write is how the oven got switched off with nothing on
-        // screen to say why, so an unmeasured device still gets the byte alone,
-        // exactly as before.
-        guard settings.heaterOptionBit != nil else { return }
+        // Safe to do unprompted now that the heater bit is known rather than
+        // guessed: the block carries it set, so a mode change cannot be what
+        // switches the oven off.
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 400_000_000)
             self?.applyLipSettings(reason: "with the \(mode.label) parameters")
@@ -1380,11 +1398,18 @@ final class PaxDeviceViewModel: ObservableObject {
         connectionState.isConnected && paxServiceConfirmed
     }
 
-    /// Whether the device implements HeatingParams (0x19) at all. Until the
-    /// capability reply lands nothing is known, so the control stays disabled
-    /// rather than offering a write that would go nowhere.
+    /// Whether the device implements HeatingParams (0x19) at all.
+    ///
+    /// The bitfield settles it when there is one. An *empty* bitfield means the
+    /// device has not answered the capability query yet, which is not the same
+    /// as answering no — treating it as one is what used to make every oven
+    /// control on this screen vanish for a whole connection because a single
+    /// reply went missing. Offering a write the device turns out to ignore
+    /// costs nothing; withholding one it would have honoured costs the feature.
     var canSetLipDetection: Bool {
-        canSendCommands && supportedAttributes.contains(PaxMessageType.heatingParams.rawValue)
+        guard canSendCommands else { return false }
+        return supportedAttributes.isEmpty
+            || supportedAttributes.contains(PaxMessageType.heatingParams.rawValue)
     }
 
     var lipDetectionEnabled: Bool { settings.lipDetectionEnabled }
@@ -1424,14 +1449,20 @@ final class PaxDeviceViewModel: ObservableObject {
                            note: "\(reason), from the \(mode.label) preset")
     }
 
-    /// Whichever bit this device keeps the heater in. The measurement wins over
-    /// the official app's naming, because on this hardware the naming is what
-    /// was wrong; with no measurement, the naming is all there is.
-    private var heaterBit: PaxHeatingParams.Options {
-        settings.heaterOptionBit.map {
-            PaxHeatingParams.Options(rawValue: 1 << UInt16($0))
-        } ?? .heater
-    }
+    /// Which option bit is the heater.
+    ///
+    /// The official app's own naming says bit 2. It is wrong on this hardware:
+    /// every measurement taken on a PAX 3 came back bit 0 — the bit its source
+    /// calls `boost` and groups with the lip sensor — and clearing it is the
+    /// only thing that ever stopped the oven. The measurement wins over the
+    /// naming, so it is written down here as what it turned out to be: a fact
+    /// about the hardware rather than a question to put to the user.
+    ///
+    /// Being wrong about it on some other firmware costs nothing. Clearing
+    /// `boost` where the heater lives elsewhere turns off the boost on a draw
+    /// and nothing more, and the next write puts it back. There is no failure
+    /// here worth making someone run a measurement to avoid.
+    private static let heaterBit = PaxHeatingParams.Options.boost
 
     /// One block, composed the same way for every write: start from what the
     /// device reported if it ever has and otherwise the preset for the mode it
@@ -1443,13 +1474,13 @@ final class PaxDeviceViewModel: ObservableObject {
         params.options.formUnion(PaxHeatingParams.Options.lipDetection)
         params.options.subtract(lipBitsToClear)
         if ovenOn {
-            params.options.insert(heaterBit)
+            params.options.insert(Self.heaterBit)
             // Bit 2 as well: on a firmware that really does keep the heater
             // where the official app says, this is the bit that matters, and
             // setting both can only ever mean "on".
             params.options.insert(.heater)
         } else {
-            params.options.remove(heaterBit)
+            params.options.remove(Self.heaterBit)
         }
         return params
     }
@@ -1574,7 +1605,11 @@ final class PaxDeviceViewModel: ObservableObject {
                    draws: sessionDraws,
                    drawMarks: drawMarks,
                    lastDrawAt: lastDrawAt,
-                   autoOffEnabled: settings.autoOffEnabled,
+                   // The fuse at the ring's leading edge is a countdown to the
+                   // oven going off. If the app could not switch it off, there
+                   // is nothing to count down to and the ring should not say
+                   // there is.
+                   autoOffEnabled: settings.autoOffEnabled && canPowerOven,
                    autoOffMinutes: settings.autoOffMinutes,
                    chargeStartedAt: chargeStartedAt,
                    chargeMarks: chargeMarks)
@@ -1743,12 +1778,14 @@ final class PaxDeviceViewModel: ObservableObject {
 
     // MARK: - Turning the oven off
 
-    /// Switching the oven off needs to know which bit is the heater, and
-    /// guessing at that is how the oven got stopped by accident in the first
-    /// place. Until the probe has run on this device, the button is not offered.
-    var canPowerOven: Bool {
-        canSetLipDetection && settings.heaterOptionBit != nil
-    }
+    /// Whether the app can switch this oven off.
+    ///
+    /// It used to also require a measurement the user had to go and run, which
+    /// meant the button, the idle timer and the dose limit were all withheld
+    /// until they did — and withheld again on any connection where one capability
+    /// reply went missing. Which bit is the heater is a constant now, so all
+    /// that is left to ask is whether the device takes the attribute at all.
+    var canPowerOven: Bool { canSetLipDetection }
 
     /// Whether the app is the reason the oven is off. Cleared as soon as the
     /// device shows any sign of heating again, including from its own button —
@@ -1759,15 +1796,18 @@ final class PaxDeviceViewModel: ObservableObject {
     /// phone. Writes the current heating block with the heater bit cleared, and
     /// puts it back to turn it on again.
     func setOvenEnabled(_ on: Bool, reason: String = "from the app") {
-        guard canPowerOven else {
-            log("Cannot switch the oven \(on ? "on" : "off"): this device's heater bit has not been measured yet", level: .warn)
-            return
-        }
-        ovenPoweredOffByApp = !on
+        guard canSendCommands else { return }
         heatingParamsStoppedOven = false
+        ovenPoweredOffByApp = !on
+        // Whatever asked for this gets the credit when the session is written
+        // down — the timer, the dose limit, or the button — and the session
+        // ends when the oven actually goes off rather than when the write goes
+        // out. Closing it here recorded every automatic switch-off as a manual
+        // one: the real reason was still sitting in `pendingEnding` while the
+        // session it belonged to had already been written down.
+        if !on, pendingEnding == nil { pendingEnding = .manual }
         writeHeatingParams(composedHeatingParams(ovenOn: on),
                            note: "oven \(on ? "on" : "off") \(reason)")
-        if !on { finishSession(.manual) }
     }
 
 
@@ -1785,131 +1825,17 @@ final class PaxDeviceViewModel: ObservableObject {
         writeHeatingParams(params, note: "restoring the stock \(mode.label) preset")
     }
 
-    /// Which lip bits a write should clear: the ones whose switch is off, never
-    /// the heater. The official app's naming says the heater is bit 2 and that
-    /// all three lip bits are safe to clear; this PAX says otherwise, and the
-    /// probe is what settles it.
+    /// Which lip bits a write should clear: the ones whose switch is off.
+    ///
+    /// The official app groups three bits under the lip sensor and treats all
+    /// three as safe to clear. The first of them is this hardware's heater, so
+    /// only the other two are ever offered and only they are ever cleared —
+    /// which is why nothing here has to be held back any more.
     private var lipBitsToClear: PaxHeatingParams.Options {
         var bits: PaxHeatingParams.Options = []
         if !settings.lipCoolingEnabled  { bits.insert(.noLipCooling) }
         if !settings.lipShutdownEnabled { bits.insert(.noLipShutdown) }
-        // Never the heater, whichever bit this device keeps it in. The official
-        // app groups bit 0 with these two; on a PAX 3 that bit is the heater,
-        // and clearing it is what stopped the oven.
-        if let bit = settings.heaterOptionBit {
-            bits.remove(PaxHeatingParams.Options(rawValue: 1 << UInt16(bit)))
-        }
         return bits
-    }
-
-    // MARK: - Option bit probe
-
-    struct HeatingBitResult: Identifiable {
-        let bit: Int
-        let stoppedOven: Bool
-        /// What the oven said it was doing when the five seconds were up. Worth
-        /// keeping beside the verdict: "stopped" and "went to standby" are
-        /// different answers, and only one of them is about the heater.
-        let state: String
-        var id: Int { bit }
-        var label: String {
-            "bit \(bit) \(PaxHeatingParams.Options.name(ofBit: bit)) — "
-                + (stoppedOven ? "stops the oven" : "kept running") + " (\(state))"
-        }
-    }
-
-    @Published private(set) var bitProbeRunning = false
-    @Published private(set) var bitProbeStep: String?
-    @Published private(set) var bitProbeResults: [HeatingBitResult] = []
-    private var bitProbeTask: Task<Void, Never>?
-
-    /// The probe needs the oven running, because "the oven stopped" is the
-    /// whole measurement. There is no point starting it against a cold device.
-    var canProbeHeatingBits: Bool {
-        guard canSetLipDetection, !bitProbeRunning else { return false }
-        switch heatingState {
-        case .heating, .ready, .boosting, .cooling: return true
-        default: return false
-        }
-    }
-
-    /// Clears one option bit at a time and watches what the oven does, putting
-    /// the stock block back after each. HeatingParams never answers a read, so
-    /// this is the only readback there is: the device cannot say what it holds,
-    /// but it can say whether it is still heating.
-    ///
-    /// Only bits the stock preset sets are tried. Clearing a bit that is
-    /// already clear would prove nothing, and setting one that the preset
-    /// leaves off — the two ramp bits — would be changing how the oven heats
-    /// rather than asking it a question.
-    func probeHeatingOptionBits() {
-        guard canProbeHeatingBits else { return }
-        let mode = dynamicMode ?? .standard
-        let stock = PaxHeatingParams.stock(for: mode)
-        let bits = (0..<8).filter { stock.options.contains(PaxHeatingParams.Options(rawValue: 1 << UInt16($0))) }
-        bitProbeResults = []
-        bitProbeRunning = true
-        heatingParamsStoppedOven = false
-        ledWriteDebounce?.cancel()
-        log("Bit probe: \(mode.label) stock options are 0x\(String(format: "%02X", stock.options.rawValue)); clearing bits \(bits.map(String.init).joined(separator: ", ")) one at a time",
-            level: .info)
-        bitProbeTask = Task { [weak self] in
-            for bit in bits {
-                guard let self, !Task.isCancelled, self.connectionState.isConnected else { break }
-                self.bitProbeStep = "Clearing bit \(bit) (\(PaxHeatingParams.Options.name(ofBit: bit)))"
-                var probed = stock
-                probed.options.remove(PaxHeatingParams.Options(rawValue: 1 << UInt16(bit)))
-                self.writeHeatingParams(probed, note: "probe: bit \(bit) cleared")
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                guard !Task.isCancelled else { break }
-                let stopped = self.heatingState == .ovenOff
-                let state = self.heatingState.map(\.description) ?? "no reading"
-                self.bitProbeResults.append(HeatingBitResult(bit: bit, stoppedOven: stopped, state: state))
-                self.log("Bit probe: bit \(bit) (\(PaxHeatingParams.Options.name(ofBit: bit))) cleared → \(state)",
-                         level: stopped ? .warn : .info)
-                // Put it back before moving on, whatever happened, so the next
-                // measurement starts from the same place and the device is
-                // never left a bit down.
-                self.bitProbeStep = "Restoring after bit \(bit)"
-                self.writeHeatingParams(stock, note: "probe: restoring after bit \(bit)")
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-            }
-            guard let self else { return }
-            self.finishBitProbe()
-        }
-    }
-
-    func cancelBitProbe() {
-        bitProbeTask?.cancel()
-        bitProbeTask = nil
-        bitProbeRunning = false
-        bitProbeStep = nil
-        if settings.pushColorToDevice { scheduleLedWrite() }
-        // Whatever it was in the middle of, leave the device on stock.
-        restoreStockHeatingParams()
-    }
-
-    private func finishBitProbe() {
-        bitProbeRunning = false
-        bitProbeStep = nil
-        bitProbeTask = nil
-        // The LEDs were left alone throughout; put the chosen theme back now.
-        if settings.pushColorToDevice { scheduleLedWrite() }
-        let stoppers = bitProbeResults.filter(\.stoppedOven).map(\.bit)
-        if stoppers.count == 1, let bit = stoppers.first {
-            settings.heaterOptionBit = bit
-            log("Bit probe: bit \(bit) is this firmware's heater enable — it is the only one that stopped the oven. Lip detection will leave it alone from now on.",
-                level: .info)
-        } else if stoppers.isEmpty {
-            settings.heaterOptionBit = nil
-            log("Bit probe: no single bit stopped the oven. Either the oven was not running throughout, or the heater is not in this word at all.",
-                level: .warn)
-        } else {
-            settings.heaterOptionBit = nil
-            log("Bit probe: \(stoppers.count) bits stopped the oven (\(stoppers.map(String.init).joined(separator: ", "))). That is not a heater enable — run it again with the oven left running the whole time.",
-                level: .warn)
-        }
-        restoreStockHeatingParams()
     }
 
     /// One place that actually puts a block on the wire, so every write is
@@ -2204,11 +2130,9 @@ final class PaxDeviceViewModel: ObservableObject {
             log("LED attribute(s) available: \(colorSupported.map { "\($0)" }.joined(separator: ", "))", level: .info)
         }
         pushSavedColorIfReady()
-        // Same gate as the mode change: the parameters are the device's to
-        // keep, and it does not keep this one, so a switch left off has to be
-        // re-sent. Only once the heater bit has been measured on this device —
-        // an automatic write without that is what stopped the oven.
-        if settings.heaterOptionBit != nil, !settings.lipDetectionEnabled,
+        // Same as the mode change: the parameters are the device's to keep, and
+        // it does not keep this one, so a switch left off has to be re-sent.
+        if !settings.lipDetectionEnabled,
            supported.contains(PaxMessageType.heatingParams.rawValue) {
             Task { [weak self] in
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -2687,6 +2611,7 @@ final class PaxDeviceViewModel: ObservableObject {
         pendingLedWrite = nil
         pushColorOnceDiscovered = false
         capabilitiesKnown = false
+        capabilityAttempt = 0
         capabilityQueryUnanswered = false
         ledWriteDebounce?.cancel()
         ledWriteDebounce = nil

@@ -129,12 +129,11 @@ struct ControlView: View {
         .frame(height: DS.Metric.topBarHeight)
     }
 
-    /// Switches the oven off, and on again.
+    /// Switches the oven off, and on again. The PAX's own app cannot do this.
     ///
-    /// The PAX's own app cannot do this; nothing could, until the heater bit
-    /// was measured on the device. It appears only once that measurement
-    /// exists, because without it the write would be a guess at which bit stops
-    /// the oven - and the wrong guess stops it anyway, by accident.
+    /// It used to appear only after you had gone and measured which option bit
+    /// this firmware keeps the heater in. That measurement came back the same
+    /// every time, so it is a constant now and the button is simply here.
     @ViewBuilder
     private var powerButton: some View {
         if viewModel.canPowerOven {

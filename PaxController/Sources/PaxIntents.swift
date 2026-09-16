@@ -17,8 +17,8 @@ enum PaxIntentBridge {
     static var setTemperature: ((Int) -> Void)?
     static var setDynamicMode: ((UInt8) -> Void)?
     /// Switches the oven off, or back on. Nil in the extension, and nil in the
-    /// app until a device has had its heater bit measured — which is why the
-    /// intent reports what happened rather than assuming it worked.
+    /// app while nothing is connected — which is why the intent reports what
+    /// happened rather than assuming it worked.
     static var setOvenEnabled: ((Bool) -> Bool)?
     /// Applies a saved profile by name, returning what it matched.
     static var applyProfile: ((String) -> String?)?
@@ -113,7 +113,7 @@ struct SetPaxModeIntent: AppIntent {
 struct SetPaxOvenIntent: AppIntent {
     static var title: LocalizedStringResource = "Turn the PAX oven on or off"
     static var description = IntentDescription(
-        "Switches the PAX's heater. Needs the heater bit to have been measured on the device first, in Settings.")
+        "Switches the PAX's heater, which its own app cannot do.")
     static var openAppWhenRun: Bool = false
 
     @Parameter(title: "On", default: false)
@@ -129,7 +129,7 @@ struct SetPaxOvenIntent: AppIntent {
         }
         let worked = handler(on)
         guard worked else {
-            return .result(dialog: "Run \u{201C}Find the heater bit\u{201D} in the app's settings first — without it, switching the oven is a guess")
+            return .result(dialog: "The PAX did not take that — it may not be connected")
         }
         // Built rather than written inline: a ternary of two string literals
         // infers String, which is not what `dialog:` wants.

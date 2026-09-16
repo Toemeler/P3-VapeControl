@@ -31,7 +31,6 @@ final class AppSettings: ObservableObject {
         static let schedule        = "temperatureSchedule"
         static let scheduleOn      = "temperatureScheduleEnabled"
         static let historyOn       = "sessionHistoryEnabled"
-        static let heaterBit       = "heaterOptionBit"
     }
 
     /// Drives `DS.Palette.accent`, so it re-themes the dial, chips and buttons.
@@ -113,17 +112,6 @@ final class AppSettings: ObservableObject {
     /// Lip detection as one idea, for the places that only care whether the
     /// sensor drives the oven at all.
     var lipDetectionEnabled: Bool { lipCoolingEnabled && lipShutdownEnabled }
-
-    /// Which bit of HeatingParams' options word this device uses for the
-    /// heater, found by the probe. The official app's naming says bit 2; this
-    /// PAX 3 stops its oven when one of the three "lip" bits is cleared, so the
-    /// naming does not hold here and the measurement wins. Nil until measured.
-    @Published var heaterOptionBit: Int? {
-        didSet {
-            if let bit = heaterOptionBit { defaults.set(bit, forKey: Key.heaterBit) }
-            else { defaults.removeObject(forKey: Key.heaterBit) }
-        }
-    }
 
     // MARK: - The oven, on the app's terms
 
@@ -215,7 +203,6 @@ final class AppSettings: ObservableObject {
         // history with a hole where the interesting part was.
         sessionHistoryEnabled = defaults.object(forKey: Key.historyOn) as? Bool ?? true
         profiles            = Self.read([PaxProfile].self, from: defaults, forKey: Key.profiles) ?? PaxProfile.starters
-        heaterOptionBit     = defaults.object(forKey: Key.heaterBit) as? Int
         // On by default: the four states carry the palette below, which is
         // what makes the PAX show what it is doing rather than one flat colour.
         perModeLedColors    = defaults.object(forKey: Key.perModeColors) as? Bool ?? true

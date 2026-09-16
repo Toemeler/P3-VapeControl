@@ -158,8 +158,8 @@ struct DeviceSheet: View {
     }
 
     /// The oven's behaviour on the app's terms rather than the firmware's. All
-    /// of it needs the heater bit, because all of it ends in switching the oven
-    /// off, and doing that without the measurement is a guess.
+    /// of it ends in switching the oven off, which the app knows how to do on
+    /// this hardware without being told and without being asked.
     @ViewBuilder
     private var ovenRulesSection: some View {
         Section {
@@ -188,7 +188,7 @@ struct DeviceSheet: View {
 
     private var ovenRulesNote: String {
         guard viewModel.canPowerOven else {
-            return "Switching the oven off needs the heater bit, which is measured below. Without it the app would be guessing at which bit stops the oven, and the wrong guess stops it anyway."
+            return "Connect to the PAX to set this."
         }
         return "The device has a version of the idle timer built in, fixed at three minutes from the last draw and tied to the lip sensor. This one is yours: it counts from the last draw the app saw, works with the lip sensor off, and the dose limit counts draws, which nothing on the device does at all."
     }
@@ -231,42 +231,10 @@ struct DeviceSheet: View {
         } message: {
             Text(confirmLipDetectionMessage)
         }
-
-        Section {
-            if viewModel.bitProbeRunning {
-                HStack {
-                    ProgressView()
-                    Text(viewModel.bitProbeStep ?? "Working")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Button("Stop", role: .destructive) { viewModel.cancelBitProbe() }
-            } else {
-                Button("Find the heater bit") { viewModel.probeHeatingOptionBits() }
-                    .disabled(!viewModel.canProbeHeatingBits)
-            }
-            ForEach(viewModel.bitProbeResults) { result in
-                Label(result.label,
-                      systemImage: result.stoppedOven ? "flame.slash" : "flame")
-                    .font(.footnote)
-                    .foregroundStyle(result.stoppedOven ? Color.orange : Color.secondary)
-            }
-        } header: {
-            Text("Heating parameter bits")
-        } footer: {
-            Text(bitProbeNote)
-        }
     }
 
-    /// What the confirmation says, which depends on whether this device has
-    /// been measured. Unmeasured, the honest warning is that the oven is
-    /// expected to stop; measured, it is that the heater bit is held back.
     private var confirmLipDetectionMessage: String {
-        guard let bit = settings.heaterOptionBit else {
-            return "This rewrites the whole heating algorithm, not one setting, and on this PAX it has stopped the oven \u{2014} the heater bit has not been identified yet. "
-                + "Run \u{201C}Find the heater bit\u{201D} first. If the oven does stop, restore the factory settings and switch the PAX off and on again."
-        }
-        return "This rewrites the whole heating algorithm, not one setting. Bit \(bit), the heater on this PAX, is held out of the write, so the oven should keep running. "
+        "This rewrites the whole heating algorithm, not one setting. The heater is left switched on in the block that goes out, so the oven should keep running. "
             + "If it does not, restore the factory settings below."
     }
 
@@ -291,32 +259,11 @@ struct DeviceSheet: View {
                 ? "This PAX does not report the heating parameters attribute, so lip detection cannot be changed from here."
                 : "Connect to the PAX to change this."
         }
-        let head = "The lip sensor does two things, and they are worth wanting separately. "
+        return "The lip sensor does two things, and they are worth wanting separately. "
             + "Cooling drops the temperature when it stops sensing your lips, which is what gets in the way of a water-pipe adapter. "
-            + "Switching off is what stops a forgotten oven running a few minutes after the last draw — leave it on unless you have a reason not to. "
-        guard let bit = settings.heaterOptionBit else {
-            return head
-                + "Neither has been written yet on this PAX: the bits the official app groups with them include one that is this device\u{2019}s heater, "
-                + "and clearing it stops the oven. Run \u{201C}Find the heater bit\u{201D} below first."
-        }
-        return head
-            + "Bit \(bit) is this PAX\u{2019}s heater and is held out of every write. "
-            + "Both are re-sent after a mode change and on every connection, since the device does not keep them, and the PAX never reports the attribute back — so these show what was last sent, not a reading."
-    }
-
-    private var bitProbeNote: String {
-        if let bit = settings.heaterOptionBit {
-            return "Measured on this PAX: bit \(bit) is the heater. Lip detection leaves it alone, so the switch above should no longer stop the oven."
-        }
-        if viewModel.bitProbeRunning {
-            return "Clearing one option bit at a time and watching whether the oven stops, putting the factory block back after each. About a minute. Leave the PAX heating and do not put it down."
-        }
-        guard viewModel.canSetLipDetection else {
-            return "Connect to the PAX to run this."
-        }
-        return viewModel.canProbeHeatingBits
-            ? "The PAX never reports its heating parameters back, so the oven itself is the only readback there is: clear one option bit, see whether the oven stops. That identifies which bit this firmware uses for the heater, which is the bit lip detection has to leave alone. Start the oven first and leave it running."
-            : "Start the oven and leave it heating, then run this. “The oven stopped” is the measurement, so there is nothing to measure against a cold PAX."
+            + "Switching off is what stops a forgotten oven running a few minutes after the last draw \u{2014} leave it on unless you have a reason not to. "
+            + "The third bit the official app groups with these two is this hardware\u{2019}s heater, so it is not offered here and never cleared. "
+            + "Both are re-sent after a mode change and on every connection, since the device does not keep them, and the PAX never reports the attribute back \u{2014} so these show what was last sent, not a reading."
     }
 
     // MARK: - LED color
