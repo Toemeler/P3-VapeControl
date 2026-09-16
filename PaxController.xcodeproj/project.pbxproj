@@ -228,6 +228,7 @@
 				AE000003 /* Resources */,
 				AE000004 /* LiveActivity */,
 				AE000010 /* Tests */,
+				AE000020 /* PaxWatch */,
 				AC000002 /* Products */,
 			);
 			path = PaxController;
