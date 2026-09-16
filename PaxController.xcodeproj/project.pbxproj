@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA000120 /* PaxWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000120 /* PaxWatchApp.swift */; };
+		AA000121 /* WatchLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000121 /* WatchLink.swift */; };
+		AA000122 /* WatchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000122 /* WatchRootView.swift */; };
+		AA000123 /* PaxSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000106 /* PaxSharedState.swift */; };
+		AA000124 /* LedColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000040 /* LedColor.swift */; };
+		AA000125 /* PhoneLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000125 /* PhoneLink.swift */; };
+		AA000126 /* PaxWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AC000005 /* PaxWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA000106 /* PaxSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000106 /* PaxSharedState.swift */; };
 		AA000107 /* PaxSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000106 /* PaxSharedState.swift */; };
 		AA000108 /* PaxStatusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000107 /* PaxStatusWidget.swift */; };
@@ -63,6 +70,13 @@
 			remoteGlobalIDString = AF000002;
 			remoteInfo = PaxLiveActivityExtension;
 		};
+		AL000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AI000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AF000004;
+			remoteInfo = PaxWatch;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -77,11 +91,28 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AJ000002 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				AA000126 /* PaxWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		AB000001 /* PaxControllerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxControllerApp.swift; sourceTree = "<group>"; };
 		AB000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AB000120 /* PaxWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxWatchApp.swift; sourceTree = "<group>"; };
+		AB000121 /* WatchLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLink.swift; sourceTree = "<group>"; };
+		AB000122 /* WatchRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRootView.swift; sourceTree = "<group>"; };
+		AB000123 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AB000125 /* PhoneLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneLink.swift; sourceTree = "<group>"; };
+		AC000005 /* PaxWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PaxWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB000106 /* PaxSharedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxSharedState.swift; sourceTree = "<group>"; };
 		AB000107 /* PaxStatusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxStatusWidget.swift; sourceTree = "<group>"; };
 		AB000108 /* PaxController.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PaxController.entitlements; sourceTree = "<group>"; };
@@ -128,6 +159,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AD000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AD000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -167,9 +205,21 @@
 				AC000001 /* PaxController.app */,
 				AC000003 /* PaxLiveActivityExtension.appex */,
 				AC000004 /* PaxControllerTests.xctest */,
+				AC000005 /* PaxWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
+		};
+		AE000020 /* PaxWatch */ = {
+			isa = PBXGroup;
+			children = (
+				AB000120 /* PaxWatchApp.swift */,
+				AB000121 /* WatchLink.swift */,
+				AB000122 /* WatchRootView.swift */,
+				AB000123 /* Info.plist */,
+			);
+			path = PaxWatch;
+			sourceTree = SOURCE_ROOT;
 		};
 		AE000001 /* PaxController */ = {
 			isa = PBXGroup;
@@ -207,6 +257,7 @@
 				AB000104 /* SessionHistoryView.swift */,
 				AB000105 /* ProfilesView.swift */,
 				AB000106 /* PaxSharedState.swift */,
+				AB000125 /* PhoneLink.swift */,
 				AB000045 /* PaxIntents.swift */,
 				AB000046 /* PaxAppShortcuts.swift */,
 				AB000047 /* ReadyNotifier.swift */,
@@ -255,11 +306,13 @@
 				AD000001 /* Frameworks */,
 				AH000001 /* Resources */,
 				AJ000001 /* Embed Foundation Extensions */,
+				AJ000002 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				AK000001 /* PBXTargetDependency */,
+				AK000002 /* PBXTargetDependency */,
 			);
 			name = PaxController;
 			productName = PaxController;
@@ -299,6 +352,22 @@
 			productReference = AC000004 /* PaxControllerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		AF000004 /* PaxWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BA000005 /* Build configuration list for PBXNativeTarget "PaxWatch" */;
+			buildPhases = (
+				AG000004 /* Sources */,
+				AD000004 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PaxWatch;
+			productName = PaxWatch;
+			productReference = AC000005 /* PaxWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -316,6 +385,9 @@
 						CreatedOnToolsVersion = 15.0;
 					};
 					AF000003 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					AF000004 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
@@ -336,6 +408,7 @@
 				AF000001 /* PaxController */,
 				AF000002 /* PaxLiveActivityExtension */,
 				AF000003 /* PaxControllerTests */,
+				AF000004 /* PaxWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -358,6 +431,18 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AG000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000120 /* PaxWatchApp.swift in Sources */,
+				AA000121 /* WatchLink.swift in Sources */,
+				AA000122 /* WatchRootView.swift in Sources */,
+				AA000123 /* PaxSharedState.swift in Sources */,
+				AA000124 /* LedColor.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AG000003 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -383,6 +468,7 @@
 				AA000104 /* SessionHistoryView.swift in Sources */,
 				AA000105 /* ProfilesView.swift in Sources */,
 				AA000106 /* PaxSharedState.swift in Sources */,
+				AA000125 /* PhoneLink.swift in Sources */,
 				AA000004 /* BluetoothManager.swift in Sources */,
 				AA000007 /* DebugConsoleView.swift in Sources */,
 				AA000010 /* PaxDeviceViewModel.swift in Sources */,
@@ -431,6 +517,11 @@
 			isa = PBXTargetDependency;
 			target = AF000002 /* PaxLiveActivityExtension */;
 			targetProxy = AL000001 /* PBXContainerItemProxy */;
+		};
+		AK000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AF000004 /* PaxWatch */;
+			targetProxy = AL000002 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -685,6 +776,62 @@
 			};
 			name = Release;
 		};
+		BC000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PaxWatch/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PAX;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_ID)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID).watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 9.0;
+			};
+			name = Debug;
+		};
+		BC000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PaxWatch/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PAX;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_ID)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID).watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 9.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -720,6 +867,15 @@
 			buildConfigurations = (
 				BC000005 /* Debug */,
 				BC000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BA000005 /* Build configuration list for PBXNativeTarget "PaxWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC000007 /* Debug */,
+				BC000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

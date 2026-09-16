@@ -1201,6 +1201,7 @@ final class PaxDeviceViewModel: ObservableObject {
         lastSnapshot = comparable
         PaxSharedStore.write(snapshot)
         PaxSharedStore.reloadWidgets()
+        PhoneLink.shared.push(snapshot, profiles: settings.profiles.map(\.name))
     }
 
     private var lastSnapshot: PaxSnapshot?
