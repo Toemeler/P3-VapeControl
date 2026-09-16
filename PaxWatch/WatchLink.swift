@@ -2,27 +2,6 @@ import Combine
 import Foundation
 import WatchConnectivity
 
-/// What the watch and the phone say to each other.
-///
-/// Deliberately small. The phone pushes its snapshot whenever something
-/// changes, and the watch sends one of a handful of commands back. Nothing here
-/// knows about Bluetooth, packets or heating parameters — the phone is the only
-/// thing that talks to the device, and the watch is a remote for it.
-enum PaxWatchMessage {
-    static let commandKey = "command"
-    static let valueKey = "value"
-    static let snapshotKey = "snapshot"
-
-    enum Command: String {
-        case requestState
-        case setTemperature
-        case stepTemperature
-        case ovenOn
-        case ovenOff
-        case applyProfile
-    }
-}
-
 /// The watch's end of the link.
 @MainActor
 final class WatchLink: NSObject, ObservableObject {
