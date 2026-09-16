@@ -17,6 +17,7 @@
 		AA000106 /* PaxSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000106 /* PaxSharedState.swift */; };
 		AA000107 /* PaxSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000106 /* PaxSharedState.swift */; };
 		AA000108 /* PaxStatusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000107 /* PaxStatusWidget.swift */; };
+		AA000132 /* LinkStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000132 /* LinkStats.swift */; };
 		AA000131 /* BatteryDecode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000131 /* BatteryDecode.swift */; };
 		AA000130 /* SessionCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000130 /* SessionCharts.swift */; };
 		AA000104 /* SessionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000104 /* SessionHistoryView.swift */; };
@@ -112,6 +113,7 @@
 		AB000107 /* PaxStatusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaxStatusWidget.swift; sourceTree = "<group>"; };
 		AB000108 /* PaxController.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PaxController.entitlements; sourceTree = "<group>"; };
 		AB000109 /* PaxLiveActivity.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PaxLiveActivity.entitlements; sourceTree = "<group>"; };
+		AB000132 /* LinkStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkStats.swift; sourceTree = "<group>"; };
 		AB000131 /* BatteryDecode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryDecode.swift; sourceTree = "<group>"; };
 		AB000130 /* SessionCharts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionCharts.swift; sourceTree = "<group>"; };
 		AB000104 /* SessionHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionHistoryView.swift; sourceTree = "<group>"; };
@@ -248,6 +250,7 @@
 				AB000104 /* SessionHistoryView.swift */,
 				AB000130 /* SessionCharts.swift */,
 				AB000131 /* BatteryDecode.swift */,
+				AB000132 /* LinkStats.swift */,
 				AB000105 /* ProfilesView.swift */,
 				AB000106 /* PaxSharedState.swift */,
 				AB000125 /* PhoneLink.swift */,
@@ -454,6 +457,7 @@
 				AA000104 /* SessionHistoryView.swift in Sources */,
 				AA000130 /* SessionCharts.swift in Sources */,
 				AA000131 /* BatteryDecode.swift in Sources */,
+				AA000132 /* LinkStats.swift in Sources */,
 				AA000105 /* ProfilesView.swift in Sources */,
 				AA000106 /* PaxSharedState.swift in Sources */,
 				AA000125 /* PhoneLink.swift in Sources */,

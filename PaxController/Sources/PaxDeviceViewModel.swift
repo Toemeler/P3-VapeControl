@@ -138,6 +138,12 @@ final class PaxDeviceViewModel: ObservableObject {
     @Published private(set) var secondsToReady: Int?
     /// Seconds until the battery is full, while it is on the charger.
     @Published private(set) var secondsToFull: Int?
+    /// The fast lane. One request outstanding at a time, so it cannot outrun
+    /// the link.
+    private var temperatureLoop: Task<Void, Never>?
+    private var lastStateRequestAt: Date = .distantPast
+    /// When a reading last arrived, so a stalled loop can be noticed.
+    private var lastReadingAt: Date = .distantPast
     /// The last ChargeStatus byte, so a change is logged once rather than on
     /// every poll.
     private var lastChargeByte: UInt8?
@@ -219,8 +225,6 @@ final class PaxDeviceViewModel: ObservableObject {
     private var pollTimer: AnyCancellable?
     /// The faster, smaller poll behind the dial's movement.
     private var temperatureTimer: AnyCancellable?
-    private var sinceTemperatureRequest: TimeInterval = 0
-    private var sinceStateRequest: TimeInterval = 0
     /// Whether anyone is looking. Polling four times a second at a dial nobody
     /// can see is two batteries spent on nothing.
     private var appIsActive = true
@@ -441,7 +445,9 @@ final class PaxDeviceViewModel: ObservableObject {
     /// Foreground and background, from the scene phase.
     func setActive(_ active: Bool) {
         appIsActive = active
-        if active { sinceTemperatureRequest = temperatureCadence }
+        // Coming back to the foreground, ask straight away rather than waiting
+        // out whatever the background cadence had left to run.
+        if active { scheduleNextTemperatureRequest() }
     }
 
     func resumeDiscoveryIfIdle() {
@@ -1990,7 +1996,10 @@ final class PaxDeviceViewModel: ObservableObject {
                 trackTemperature(celsius)
                 recordTemperature(celsius)
             }
+            lastReadingAt = Date()
             enforceAutoOff()
+            // The reply is what asks the next question.
+            scheduleNextTemperatureRequest()
         case .heaterSetPoint:
             targetTempC = packet.temperatureCelsius
             if let t = packet.temperatureCelsius {
@@ -2029,6 +2038,8 @@ final class PaxDeviceViewModel: ObservableObject {
             dynamicMode = packet.dynamicMode
         case .currentTargetTemp:
             currentTargetTempC = packet.temperatureCelsius
+            lastReadingAt = Date()
+            scheduleNextTemperatureRequest()
         case .displayName:
             applyDisplayNameReport(packet)
         case .supportedAttribs:
@@ -2300,51 +2311,100 @@ final class PaxDeviceViewModel: ObservableObject {
                 self.unansweredPolls += 1
                 self.failOverIfSilent()
                 self.requestFullStatus()
+                self.nudgeTemperatureLoopIfStalled()
             }
+        // The fast lane is a loop rather than a timer, started once here and
+        // kept turning by its own replies.
         temperatureTimer?.cancel()
-        sinceTemperatureRequest = 0
-        sinceStateRequest = 0
-        // Ticks at the fastest rate the dial ever needs; each tick decides
-        // whether this is a moment worth asking about.
-        temperatureTimer = Timer.publish(every: Self.temperatureTick, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                self?.temperatureTickFired()
-            }
+        temperatureTimer = nil
+        lastStateRequestAt = .distantPast
+        BluetoothManager.linkStats.reset()
+        scheduleNextTemperatureRequest()
     }
 
-    /// The shortest gap between temperature readings. Twice a second leaves
-    /// the link about half idle, which is what keeps the readings arriving on
-    /// time rather than in a burst.
-    private static let temperatureTick: TimeInterval = 0.5
-    /// How often the oven's state and working target are asked for. They change
-    /// in steps rather than continuously, so they do not need the fast lane.
-    private static let stateTick: TimeInterval = 2
+    /// Restarts the fast lane if a reply never came. The loop is driven by
+    /// arrivals, so a dropped reply would otherwise end it silently; this is the
+    /// one timer left, and it exists only to notice that nothing is happening.
+    private func nudgeTemperatureLoopIfStalled() {
+        guard connectionState.isConnected, appIsActive else { return }
+        guard Date().timeIntervalSince(lastReadingAt) > 4 else { return }
+        log("No reading for \(Int(Date().timeIntervalSince(lastReadingAt)))s — restarting the fast lane", level: .warn)
+        scheduleNextTemperatureRequest()
+    }
 
-    /// How often to actually ask, by what the oven is doing. An oven climbing
-    /// towards its set point earns every reading; one sitting in standby does
-    /// not, and the radio runs down two batteries rather than one.
+    /// The floor on how often the oven is asked for its temperature while it is
+    /// working — not the rate, the *floor*. The rate is whatever the link turns
+    /// out to sustain, because the next request goes out when the last reply
+    /// lands rather than on a schedule.
+    ///
+    /// A previous version set the rate from one afternoon's measurement written
+    /// into a constant: two readings a second, on the reasoning that the device
+    /// answered about eight attributes a second and the polls should fit inside
+    /// half of that. It fixed the symptom it was written for — three timers
+    /// between them asking for more than the link could carry, so replies
+    /// arrived in bursts seconds apart — but it made the guess into the ceiling.
+    /// A closed loop cannot over-ask by construction: there is never more than
+    /// one request outstanding, so it runs at exactly the rate the link allows
+    /// and no faster.
+    private static let temperatureFloor: TimeInterval = 0.06
+    /// How often the oven's state and working target are asked for. They change
+    /// in steps rather than continuously, so they ride the slow lane, and they
+    /// take a turn in the loop rather than competing with it from a timer.
+    private static let stateTick: TimeInterval = 1.5
+
+    /// The gap the loop is currently leaving between readings. The dial
+    /// interpolates over it, so it wants the real figure rather than a nominal
+    /// one.
     var temperatureCadence: TimeInterval {
         guard appIsActive else { return 3 }
         switch heatingState {
-        case .heating, .boosting, .cooling: return Self.temperatureTick
-        case .ready:                        return 1.5
-        default:                            return 3
+        case .heating, .boosting, .cooling:
+            let measured = BluetoothManager.linkStats.snapshot
+            guard measured.isMeaningful, measured.medianGapMs > 0 else { return 0.5 }
+            // Two replies per round trip on a busy link — a notification and a
+            // read — so the gap between temperature readings is about twice the
+            // gap between replies.
+            return min(1.0, max(Self.temperatureFloor, measured.medianGapMs * 2 / 1000))
+        case .ready:
+            return 1.5
+        default:
+            return 3
         }
     }
 
-    private func temperatureTickFired() {
-        sinceTemperatureRequest += Self.temperatureTick
-        sinceStateRequest += Self.temperatureTick
+    /// How the fast lane actually runs: ask, wait for the answer, ask again.
+    ///
+    /// The timer that used to drive this could outrun the link, and did. This
+    /// cannot: the next request is sent by the arrival of the last reply.
+    private func scheduleNextTemperatureRequest() {
+        guard connectionState.isConnected, appIsActive else { return }
+        temperatureLoop?.cancel()
+        let idle = idleCadence
+        temperatureLoop = Task { [weak self] in
+            if idle > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(idle * 1_000_000_000))
+            }
+            guard let self, !Task.isCancelled, self.connectionState.isConnected else { return }
+            // The state and the working target take their turn in the same
+            // loop rather than from a second timer, so the two can never add up
+            // to more than the link carries.
+            if Date().timeIntervalSince(self.lastStateRequestAt) >= Self.stateTick {
+                self.lastStateRequestAt = Date()
+                self.requestOvenState()
+            } else {
+                self.requestTemperature()
+            }
+        }
+    }
 
-        if sinceStateRequest >= Self.stateTick - 0.01 {
-            sinceStateRequest = 0
-            requestOvenState()
-        } else if sinceTemperatureRequest >= temperatureCadence - 0.01 {
-            // Never both in the same tick: two attributes at once is a quarter
-            // of a second of link time, and the next tick is half a second away.
-            sinceTemperatureRequest = 0
-            requestTemperature()
+    /// What to wait before asking again. While the oven is working this is the
+    /// floor — effectively "as soon as the reply is in" — and it lengthens once
+    /// there is nothing to watch, because the radio spends two batteries.
+    private var idleCadence: TimeInterval {
+        switch heatingState {
+        case .heating, .boosting, .cooling: return Self.temperatureFloor
+        case .ready:                        return 1.0
+        default:                            return 2.5
         }
     }
 
@@ -2381,6 +2441,8 @@ final class PaxDeviceViewModel: ObservableObject {
         pollTimer = nil
         temperatureTimer?.cancel()
         temperatureTimer = nil
+        temperatureLoop?.cancel()
+        temperatureLoop = nil
     }
 
     private func resetDeviceState() {

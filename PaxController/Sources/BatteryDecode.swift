@@ -380,6 +380,28 @@ struct BatteryDecodeView: View {
                 }
             }
 
+            Section {
+                let link = BluetoothManager.linkStats.snapshot
+                if link.isMeaningful {
+                    LabeledContent("Readings a second",
+                                   value: String(format: "%.1f", link.repliesPerSecond))
+                    LabeledContent("Typical gap",
+                                   value: String(format: "%.0f ms", link.medianGapMs))
+                    LabeledContent("Best gap",
+                                   value: String(format: "%.0f ms", link.fastestGapMs))
+                    LabeledContent("Notify to bytes",
+                                   value: String(format: "%.0f ms", link.medianTurnaroundMs))
+                } else {
+                    Text("Not enough traffic yet.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Link speed")
+            } footer: {
+                Text("Measured, not assumed. Every attribute costs a notification and then a read, so the gap between replies is what decides how fast the dial can move — and the poll now runs at whatever this turns out to be rather than at a rate written into the app.")
+            }
+
             if decoder.rounds > 0 {
                 Section {
                     ShareLink(item: decoder.report) {

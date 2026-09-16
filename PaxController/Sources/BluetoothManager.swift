@@ -62,6 +62,15 @@ protocol BluetoothManagerDelegate: AnyObject {
 
 @MainActor
 final class BluetoothManager: NSObject {
+    /// Serial, and not the main queue: see the central manager's construction.
+    nonisolated static let bleQueue = DispatchQueue(label: "de.paxcontroller.ble",
+                                                    qos: .userInitiated)
+
+    /// How the link is actually performing, written from the Bluetooth queue
+    /// and read from anywhere. Not a guess at what BLE ought to manage — a
+    /// count of what this phone and this device are doing.
+    nonisolated static let linkStats = LinkStats()
+
     weak var delegate: BluetoothManagerDelegate?
 
     private var centralManager: CBCentralManager!
@@ -97,8 +106,17 @@ final class BluetoothManager: NSObject {
         // connected while backgrounded / the phone is locked. It cannot
         // survive the user force-quitting the app; that stops all background
         // BLE activity for every app, with no API to opt back in.
+        // A queue of its own rather than the main one.
+        //
+        // With `queue: nil` every CoreBluetooth callback lands on the main
+        // queue, where it waits behind whatever SwiftUI is doing — and the app
+        // animates a dial at 60 fps while the oven is running, which is exactly
+        // when readings matter most. Each attribute costs a notification and
+        // then a read, so anything that delays the turnaround is paid twice per
+        // reading. Here the transport runs on its own serial queue and only the
+        // parsed result hops to the main actor.
         centralManager = CBCentralManager(
-            delegate: self, queue: nil,
+            delegate: self, queue: Self.bleQueue,
             options: [CBCentralManagerOptionRestoreIdentifierKey: "PaxControllerCentral"])
     }
 
@@ -480,6 +498,23 @@ extension BluetoothManager: CBPeripheralDelegate {
         let uuid   = characteristic.uuid
         let value  = characteristic.value
         let serviceUUID = characteristic.service?.uuid
+
+        // The notify characteristic only ever says "there is something to
+        // read". Answering it is the hot half of every reading, so it happens
+        // here, on the Bluetooth queue, rather than after a hop to the main
+        // actor: the read goes out in the same callback that learned about it.
+        if uuid == PaxUUIDs.notifyCharUUID, errMsg == nil {
+            if let readCharacteristic = peripheral.services?
+                .first(where: { $0.uuid == PaxUUIDs.serviceUUID })?
+                .characteristics?
+                .first(where: { $0.uuid == PaxUUIDs.readCharUUID }) {
+                Self.linkStats.noteNotification()
+                peripheral.readValue(for: readCharacteristic)
+            }
+            return
+        }
+        if uuid == PaxUUIDs.readCharUUID, errMsg == nil { Self.linkStats.noteReply() }
+
         Task { @MainActor in
             if let e = errMsg {
                 delegate?.bluetoothDidError(e, characteristic: uuid)
@@ -500,14 +535,7 @@ extension BluetoothManager: CBPeripheralDelegate {
             delegate?.bluetoothLabReadValue(service: serviceUUID ?? CBUUID(string: "0000"),
                                             characteristic: uuid, data: data)
             #endif
-            if uuid == PaxUUIDs.notifyCharUUID {
-                // The notify value is just a "data ready" indicator (commonly 1 byte
-                // that mirrors the first byte of the queued read). Never parse it —
-                // only use it to trigger a read of the data characteristic.
-                handleNotification()
-            } else {
-                delegate?.bluetoothDidRead(characteristic: uuid, data: data)
-            }
+            delegate?.bluetoothDidRead(characteristic: uuid, data: data)
         }
     }
 
