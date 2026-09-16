@@ -3,8 +3,6 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var viewModel = PaxDeviceViewModel.shared
     @StateObject private var settings = AppSettings.shared
-    @StateObject private var themes = ThemeStore.shared
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @State private var showDeviceSheet = false
 
@@ -18,16 +16,12 @@ struct ContentView: View {
         ControlView(showDeviceSheet: $showDeviceSheet)
             .environmentObject(viewModel)
             .environmentObject(settings)
-            .environmentObject(themes)
             .sheet(isPresented: $showDeviceSheet) {
                 DeviceSheet()
                     .environmentObject(viewModel)
                     .environmentObject(settings)
-                    .environmentObject(themes)
             }
-            // The whole app follows the theme's accent, not just the screen:
-            // switches, pickers and links in the sheet pick this up too.
-            .tint(themes.tokens(scheme: colorScheme, ledAccent: settings.ledColor.color).accent)
+            .tint(DS.Palette.accent)
             .onAppear {
                 if launchScreen == "device" { showDeviceSheet = true }
             }

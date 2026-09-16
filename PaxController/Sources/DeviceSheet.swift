@@ -6,9 +6,7 @@ import SwiftUI
 struct DeviceSheet: View {
     @EnvironmentObject var viewModel: PaxDeviceViewModel
     @EnvironmentObject var settings: AppSettings
-    @EnvironmentObject var themes: ThemeStore
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     @State private var customColor: Color = LedColor.orange.color
     /// Held apart from `viewModel.displayName` so the 3 s poll cannot rewrite
     /// the field under the user's cursor mid-rename.
@@ -24,7 +22,6 @@ struct DeviceSheet: View {
         NavigationStack {
             List {
                 statusSection
-                appearanceSection
                 ledColorSection
                 ledModeSection
                 alertsSection
@@ -65,32 +62,6 @@ struct DeviceSheet: View {
     }
 
     // MARK: - Sections
-
-    /// The theme picks the whole screen, not just its colours, so it sits above
-    /// the LED palette rather than inside it.
-    private var appearanceSection: some View {
-        Section {
-            NavigationLink {
-                ThemePickerView()
-                    .environmentObject(themes)
-                    .environmentObject(settings)
-            } label: {
-                HStack(spacing: 12) {
-                    ThemeSwatch(theme: themes.active, scheme: colorScheme)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Theme")
-                        Text(themes.active.name)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        } header: {
-            Text("Appearance")
-        } footer: {
-            Text("Eleven themes ship with the app, and each one changes the layout as well as the palette. Themes can also be imported, exported and edited as plain JSON.")
-        }
-    }
 
     @ViewBuilder
     private var statusSection: some View {
