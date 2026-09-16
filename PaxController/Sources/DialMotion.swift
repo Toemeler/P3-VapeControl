@@ -455,6 +455,11 @@ final class DialEngine {
             lungTarget = Double(DS.Dial.inhaleSwellMax)
                 * DialCurve.saturating(drawElapsed, halfLife: DS.Dial.inhaleHalfLife)
         }
+        // Asymmetric on purpose: filling is a pull and should answer at once,
+        // letting go is a release and should land.
+        let filling = lungTarget > lung.value
+        lung.response = filling ? DS.Dial.inhaleAttack : DS.Dial.inhaleRelease
+        lung.damping = filling ? 0.95 : 0.72
         lung.advance(towards: lungTarget, dt: dt)
 
         let bloomTarget = lungTarget > 0

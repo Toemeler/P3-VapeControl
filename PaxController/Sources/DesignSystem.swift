@@ -37,8 +37,17 @@ enum DS {
         /// always still climbing while the draw lasts.
         static let inhaleSwellMax: CGFloat = 9.5
         /// Seconds to the half-way point of that climb. Smaller makes the
-        /// first second more dramatic.
-        static let inhaleHalfLife: Double = 2
+        /// first second more dramatic — and it has to be, because the app
+        /// cannot know a draw has started until the device says so. The oven
+        /// state now rides in with the temperature, but still only every
+        /// `stateTick`, so the ring joins a breath already underway and has to
+        /// catch up to it rather than start alongside it.
+        static let inhaleHalfLife: Double = 1.1
+        /// The swell is quick to fill and slower to let go, and it only
+        /// overshoots on the way home: a bounce at the top of an inhale would
+        /// read as the ring wobbling, while one at the end reads as release.
+        static let inhaleAttack: Double = 0.32
+        static let inhaleRelease: Double = 0.55
         /// The width keeps its bounds; the bloom around it is what carries a
         /// long pull, and it grows on a much slower clock.
         static let bloomHalfLife: Double = 6
