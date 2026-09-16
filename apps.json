@@ -9,7 +9,7 @@
   "apps": [
     {
       "name": "PAX Controller",
-      "bundleIdentifier": "de.marcomeissner.PaxController",
+      "bundleIdentifier": "io.github.toemeler.PaxController",
       "developerName": "Toemeler",
       "subtitle": "Bluetooth control for the PAX 3",
       "localizedDescription": "Monitor and control a PAX 3 vaporizer over Bluetooth: battery level, heating state, live temperature readout and four oven presets (180/193/204/215 C).\n\nIndependent tool, not affiliated with or endorsed by PAX Labs. Based on P3-VapeControl by selfmeister.",

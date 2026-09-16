@@ -27,7 +27,7 @@ cp -R "$APP" "$WORK/Payload/"
 # A Watch app cannot survive sideloading, so it does not travel in this IPA.
 #
 # SideStore and AltStore re-sign the iOS app under a per-account bundle id --
-# "de.marcomeissner.PaxController.9YHLT3UZJ6" rather than the id it was built
+# "io.github.toemeler.PaxController.9YHLT3UZJ6" rather than the id it was built
 # with -- because free provisioning has to keep one person's copy distinct from
 # another's. Nothing rewrites WKCompanionAppBundleIdentifier inside the embedded
 # Watch app, which still names the original, so iOS rejects the whole install:

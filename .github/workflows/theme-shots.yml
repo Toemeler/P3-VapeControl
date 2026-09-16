@@ -52,7 +52,7 @@ jobs:
         run: |
           set -o pipefail
           .github/scripts/build_app.sh Release iphonesimulator \
-            de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee simbuild.log
+            io.github.toemeler.PaxController "PAX Controller" 2>&1 | tee simbuild.log
           mkdir -p build/release
           mv build/Release-iphonesimulator/PaxController.app build/release/
           git checkout -- PaxController/Resources/Info.plist
@@ -121,7 +121,7 @@ jobs:
           python3 .github/scripts/capture_screens.py \
             "${{ steps.boot.outputs.udid }}" \
             build/release/PaxController.app \
-            de.marcomeissner.PaxController \
+            io.github.toemeler.PaxController \
             theme-shots $SPECS
           # Half resolution: enough to judge type, spacing and colour, a
           # quarter of the bytes on a branch that only exists to be looked at.

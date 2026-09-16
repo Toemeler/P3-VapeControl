@@ -107,7 +107,7 @@ jobs:
           # Release configuration: the screenshots should show exactly what a
           # normal install looks like.
           .github/scripts/build_app.sh Release iphonesimulator \
-            de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee simbuild.log
+            io.github.toemeler.PaxController "PAX Controller" 2>&1 | tee simbuild.log
           mkdir -p build/release && mv build/Release-iphonesimulator/PaxController.app build/release/
           git checkout -- PaxController/Resources/Info.plist
 
@@ -224,7 +224,7 @@ jobs:
           set -euo pipefail
           rm -rf screenshots
           python3 .github/scripts/capture_screens.py \
-            "$UDID" build/release/PaxController.app de.marcomeissner.PaxController \
+            "$UDID" build/release/PaxController.app io.github.toemeler.PaxController \
             screenshots control:control device:device
           ls -lh screenshots
 
@@ -364,7 +364,7 @@ jobs:
         run: |
           set -o pipefail
           .github/scripts/build_app.sh Release iphoneos \
-            de.marcomeissner.PaxController "PAX Controller" 2>&1 | tee build.log
+            io.github.toemeler.PaxController "PAX Controller" 2>&1 | tee build.log
           mkdir -p build/release && mv build/Release-iphoneos/PaxController.app build/release/
 
       - name: Package the IPA
@@ -389,7 +389,7 @@ jobs:
           set -o pipefail
           rm -rf build/Release-iphoneos
           .github/scripts/build_app.sh Release iphoneos \
-            de.marcomeissner.PaxControllerLab "PAX Lab" \
+            io.github.toemeler.PaxControllerLab "PAX Lab" \
             SWIFT_ACTIVE_COMPILATION_CONDITIONS=PAX_LAB 2>&1 | tee lab-build.log
           .github/scripts/package_ipa.sh \
             build/Release-iphoneos/PaxController.app PaxControllerLab.ipa

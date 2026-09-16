@@ -52,7 +52,7 @@ struct PaxSnapshot: Codable, Equatable {
 enum PaxSharedStore {
     /// Matches the group in both targets' entitlements. A build signed without
     /// it simply gets nil here, which every reader is written to handle.
-    static let appGroup = "group.de.marcomeissner.PaxController"
+    static let appGroup = "group.io.github.toemeler.PaxController"
     private static let key = "paxSnapshot"
 
     static var defaults: UserDefaults? {

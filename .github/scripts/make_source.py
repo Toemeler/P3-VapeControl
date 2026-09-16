@@ -62,7 +62,7 @@ def main(out_dir):
 
     app = {
         "name": "PAX Controller",
-        "bundleIdentifier": "de.marcomeissner.PaxController",
+        "bundleIdentifier": "io.github.toemeler.PaxController",
         "developerName": owner,
         "subtitle": "Bluetooth control for the PAX 3",
         "localizedDescription": DESCRIPTION,
