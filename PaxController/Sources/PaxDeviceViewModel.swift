@@ -1961,6 +1961,7 @@ final class PaxDeviceViewModel: ObservableObject {
             log("RX 0x\(typeHex) [\(packet.type)] plain=\(plaintext.hexString)", level: .rx)
             if probeInProgress { recordProbeSample(type: packet.type.rawValue, payload: packet.payload) }
             BatteryDecoder.shared.note(attribute: packet.type.rawValue, payload: packet.payload)
+            LinkBenchmark.shared.note(attribute: packet.type.rawValue)
             #if PAX_LAB
             PaxLab.shared.record(type: packet.type.rawValue, payload: packet.payload)
             #endif

@@ -312,6 +312,7 @@ import SwiftUI
 /// The decode run, and what it has found so far.
 struct BatteryDecodeView: View {
     @ObservedObject private var decoder = BatteryDecoder.shared
+    @ObservedObject private var benchmark = LinkBenchmark.shared
     @EnvironmentObject private var viewModel: PaxDeviceViewModel
     @State private var now = Date()
 
@@ -381,6 +382,41 @@ struct BatteryDecodeView: View {
             }
 
             Section {
+                if benchmark.running {
+                    HStack {
+                        ProgressView()
+                        Text(benchmark.progress)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Stop", role: .destructive) { benchmark.stop() }
+                } else {
+                    Button("Measure the fastest possible timing") { benchmark.start() }
+                        .disabled(!viewModel.canSendCommands)
+                }
+                if let result = benchmark.result {
+                    LabeledContent("Round trip",
+                                   value: String(format: "%.0f ms · %.1f/s",
+                                                 result.roundTripMedianMs,
+                                                 1000 / max(1, result.roundTripMedianMs)))
+                    LabeledContent("In a burst",
+                                   value: String(format: "%.0f ms · %.1f/s",
+                                                 result.burstMedianGapMs,
+                                                 1000 / max(1, result.burstMedianGapMs)))
+                    Text(result.recommendation)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    ShareLink(item: benchmark.report) {
+                        Label("Share the benchmark", systemImage: "square.and.arrow.up")
+                    }
+                }
+            } header: {
+                Text("How fast can it go")
+            } footer: {
+                Text("Two ways of asking, timed against each other. One attribute at a time measures a round trip, which is what the app's fast lane does. Eight at once measures whether the device streams replies back to back — if it does, asking for several at a time is free speed, and the app should. Reads only, about a minute.")
+            }
+
+            Section {
                 let link = BluetoothManager.linkStats.snapshot
                 if link.isMeaningful {
                     LabeledContent("Readings a second",
@@ -410,7 +446,7 @@ struct BatteryDecodeView: View {
                 }
             }
         }
-        .navigationTitle("Battery")
+        .navigationTitle("Link and battery")
         .navigationBarTitleDisplayMode(.inline)
         .onReceive(tick) { now = $0 }
     }
